@@ -114,12 +114,12 @@ impl ARM {
                 Instruction::ROR(dec) => exec_shift(bus, dec, &mut self.gpr)?,
                 Instruction::BIC(dec) => exec_bic(bus, dec, &mut self.gpr)?,
                 Instruction::MVN(dec) => exec_mvn(bus, dec, &mut self.gpr)?,
-                // Instruction::MUL => exec_mul(bus, dec, &mut self.gpr, &self.cpsr)?,
-                // Instruction::MLA => exec_mla(bus, dec, &mut self.gpr, &self.cpsr)?,
-                // Instruction::UMULL => exec_umull(bus, dec, &mut self.gpr, &self.cpsr)?,
-                // Instruction::UMLAL => exec_umlal(bus, dec, &mut self.gpr, &self.cpsr)?,
-                // Instruction::SMULL => exec_smull(bus, dec, &mut self.gpr, &self.cpsr)?,
-                // Instruction::SMLAL => exec_smlal(bus, dec, &mut self.gpr, &self.cpsr)?,
+                Instruction::MUL(dec) => exec_mul(bus, dec, &mut self.gpr, &self.cpsr)?,
+                Instruction::MLA(dec) => exec_mla(bus, dec, &mut self.gpr, &self.cpsr)?,
+                Instruction::UMULL(dec) => exec_umull(bus, dec, &mut self.gpr, &self.cpsr)?,
+                Instruction::UMLAL(dec) => exec_umlal(bus, dec, &mut self.gpr, &self.cpsr)?,
+                Instruction::SMULL(dec) => exec_smull(bus, dec, &mut self.gpr, &self.cpsr)?,
+                Instruction::SMLAL(dec) => exec_smlal(bus, dec, &mut self.gpr, &self.cpsr)?,
                 // Instruction::LDR => exec_ldr(bus, dec, &mut self.gpr)?,
                 // Instruction::STR => exec_str(bus, dec, &mut self.gpr)?,
                 // Instruction::LDRB => exec_ldrb(bus, dec, &mut self.gpr)?,
@@ -638,7 +638,6 @@ mod test {
         assert_eq!(arm.get_gpr(1), 0xFF55_55AA);
     }
 
-    /*
     #[test]
     // mul r1, r2, r3
     fn mul_r1_r2_r3() {
@@ -726,6 +725,7 @@ mod test {
         assert_eq!(arm.get_gpr(2), 0xFFFF_FFFF);
     }
 
+    /*
     #[test]
     // ldr pc, =0x8000_0000
     fn ldr_pc_eq0x8000_0000() {

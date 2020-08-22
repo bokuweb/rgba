@@ -9,7 +9,7 @@ use super::super::types::{Shift, Word};
 pub enum InstructionType {
     // Undefined,
     // ProgramStatusRegister,
-    // Multiple,
+    Multiple,
     // Memory,
     // ExtraMemory,
     DataProcessing,
@@ -41,12 +41,12 @@ pub enum Instruction {
     ROR(DataProcessing),
     BIC(DataProcessing),
     MVN(DataProcessing),
-    // MUL,
-    // MLA,
-    // UMULL,
-    // UMLAL,
-    // SMULL,
-    // SMLAL,
+    MUL(Multiple),
+    MLA(Multiple),
+    UMULL(Multiple),
+    UMLAL(Multiple),
+    SMULL(Multiple),
+    SMLAL(Multiple),
     // STR,
     // LDR,
     // LDRB,
@@ -346,18 +346,18 @@ impl Raw for ExtraMemoryDecoder {
 //     }
 // }
 
-// fn decode_multiple(raw: Word) -> Instruction {
-//     let cmd = (raw & 0x01E0_0000) >> 21;
-//     match cmd {
-//         0b0000 => Instruction::MUL,
-//         0b0001 => Instruction::MLA,
-//         0b0100 => Instruction::UMULL,
-//         0b0101 => Instruction::UMLAL,
-//         0b0110 => Instruction::SMULL,
-//         0b0111 => Instruction::SMLAL,
-//         _ => unimplemented!(),
-//     }
-// }
+fn decode_multiple(raw: Word) -> Instruction {
+    let cmd = (raw & 0x01E0_0000) >> 21;
+    match cmd {
+        0b0000 => Instruction::MUL(Multiple(raw)),
+        0b0001 => Instruction::MLA(Multiple(raw)),
+        0b0100 => Instruction::UMULL(Multiple(raw)),
+        0b0101 => Instruction::UMLAL(Multiple(raw)),
+        0b0110 => Instruction::SMULL(Multiple(raw)),
+        0b0111 => Instruction::SMLAL(Multiple(raw)),
+        _ => unimplemented!(),
+    }
+}
 
 // fn decode_program_status_register(raw: Word) -> Instruction {
 //     match raw {
@@ -449,8 +449,8 @@ pub fn decode(raw: Word) -> Instruction {
         //     InstructionType::ProgramStatusRegister
         // }
         v if (v & 0x0E00_0000) == 0x0A00_0000 => InstructionType::Branch,
-        // v if (v & 0x0FC0_00F0) == 0x0000_0090 => InstructionType::Multiple,
-        // v if (v & 0x0F80_00F0) == 0x0080_0090 => InstructionType::Multiple,
+        v if (v & 0x0FC0_00F0) == 0x0000_0090 => InstructionType::Multiple,
+        v if (v & 0x0F80_00F0) == 0x0080_0090 => InstructionType::Multiple,
         // v if (v & 0x0E00_0010) == 0x0600_0010 => InstructionType::Undefined,
         // v if (v & 0x0E40_0F90) == 0x0000_0090 => InstructionType::ExtraMemory,
         // v if (v & 0x0E40_0090) == 0x0040_0090 => InstructionType::ExtraMemory,
@@ -464,7 +464,7 @@ pub fn decode(raw: Word) -> Instruction {
     match instruction_type {
         //  InstructionType::Undefined => Instruction::Undefined,
         //  InstructionType::ProgramStatusRegister => decode_program_status_register(raw),
-        //  InstructionType::Multiple => decode_multiple(raw),
+        InstructionType::Multiple => decode_multiple(raw),
         //  InstructionType::Memory => decode_memory(raw),
         //  InstructionType::ExtraMemory => decode_extra_memory(raw),
         InstructionType::DataProcessing => decode_data_processing(raw),
