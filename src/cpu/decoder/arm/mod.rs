@@ -13,7 +13,7 @@ pub enum InstructionType {
     // Memory,
     // ExtraMemory,
     DataProcessing,
-    // Branch,
+    Branch,
     // MultiLoadAndStore,
 }
 
@@ -55,8 +55,8 @@ pub enum Instruction {
     // LDRH,
     // LDRSB,
     // LDRSH,
-    // B,
-    // BL,
+    B(Branch),
+    BL(Branch),
     // LDM,
     // STM,
     // Undefined,
@@ -428,14 +428,14 @@ fn decode_data_processing(raw: Word) -> Instruction {
 //     }
 // }
 
-// fn decode_branch(raw: Word) -> Instruction {
-//     let with_link = raw & 0x0100_0000 != 0;
-//     if with_link {
-//         Instruction::BL
-//     } else {
-//         Instruction::B
-//     }
-// }
+fn decode_branch(raw: Word) -> Instruction {
+    let with_link = raw & 0x0100_0000 != 0;
+    if with_link {
+        Instruction::BL(Branch(raw))
+    } else {
+        Instruction::B(Branch(raw))
+    }
+}
 
 pub fn decode(raw: Word) -> Instruction {
     // let cond = raw & COND_FIELD;
@@ -448,8 +448,7 @@ pub fn decode(raw: Word) -> Instruction {
         // v if (v & 0x0180_0000) == 0x0100_0000 && (v & 0x0010_0000) == 0x0 => {
         //     InstructionType::ProgramStatusRegister
         // }
-
-        // v if (v & 0x0E00_0000) == 0x0A00_0000 => InstructionType::Branch,
+        v if (v & 0x0E00_0000) == 0x0A00_0000 => InstructionType::Branch,
         // v if (v & 0x0FC0_00F0) == 0x0000_0090 => InstructionType::Multiple,
         // v if (v & 0x0F80_00F0) == 0x0080_0090 => InstructionType::Multiple,
         // v if (v & 0x0E00_0010) == 0x0600_0010 => InstructionType::Undefined,
@@ -469,7 +468,7 @@ pub fn decode(raw: Word) -> Instruction {
         //  InstructionType::Memory => decode_memory(raw),
         //  InstructionType::ExtraMemory => decode_extra_memory(raw),
         InstructionType::DataProcessing => decode_data_processing(raw),
-        //  InstructionType::Branch => decode_branch(raw),
+        InstructionType::Branch => decode_branch(raw),
         //  InstructionType::MultiLoadAndStore => decode_multi_load_and_store(raw),
         // v if (v & 0x0F00_0000) == 0x0F00_0000 => Instruction::SWI,
         _ => panic!("unsupported instruction"),

@@ -114,25 +114,25 @@ impl ARM {
                 Instruction::ROR(dec) => exec_shift(bus, dec, &mut self.gpr)?,
                 Instruction::BIC(dec) => exec_bic(bus, dec, &mut self.gpr)?,
                 Instruction::MVN(dec) => exec_mvn(bus, dec, &mut self.gpr)?,
-                // Opcode::MUL => exec_mul(bus, dec, &mut self.gpr, &self.cpsr)?,
-                // Opcode::MLA => exec_mla(bus, dec, &mut self.gpr, &self.cpsr)?,
-                // Opcode::UMULL => exec_umull(bus, dec, &mut self.gpr, &self.cpsr)?,
-                // Opcode::UMLAL => exec_umlal(bus, dec, &mut self.gpr, &self.cpsr)?,
-                // Opcode::SMULL => exec_smull(bus, dec, &mut self.gpr, &self.cpsr)?,
-                // Opcode::SMLAL => exec_smlal(bus, dec, &mut self.gpr, &self.cpsr)?,
-                // Opcode::LDR => exec_ldr(bus, dec, &mut self.gpr)?,
-                // Opcode::STR => exec_str(bus, dec, &mut self.gpr)?,
-                // Opcode::LDRB => exec_ldrb(bus, dec, &mut self.gpr)?,
-                // Opcode::STRB => exec_strb(bus, dec, &mut self.gpr)?,
-                // Opcode::STRH => exec_strh(bus, dec, &mut self.gpr)?,
-                // Opcode::LDRH => exec_ldrh(bus, dec, &mut self.gpr)?,
-                // Opcode::LDRSB => exec_ldrsb(bus, dec, &mut self.gpr)?,
-                // Opcode::LDRSH => exec_ldrsh(bus, dec, &mut self.gpr)?,
-                // Opcode::B => exec_b(dec, &mut self.gpr)?,
-                // Opcode::BL => exec_bl(dec, &mut self.gpr)?,
-                // Opcode::LDM => exec_ldm(bus, dec, &mut self.gpr)?,
-                // Opcode::STM => exec_stm(bus, dec, &mut self.gpr)?,
-                // Opcode::MSR => exec_msr(bus, dec, &mut self.gpr)?,
+                // Instruction::MUL => exec_mul(bus, dec, &mut self.gpr, &self.cpsr)?,
+                // Instruction::MLA => exec_mla(bus, dec, &mut self.gpr, &self.cpsr)?,
+                // Instruction::UMULL => exec_umull(bus, dec, &mut self.gpr, &self.cpsr)?,
+                // Instruction::UMLAL => exec_umlal(bus, dec, &mut self.gpr, &self.cpsr)?,
+                // Instruction::SMULL => exec_smull(bus, dec, &mut self.gpr, &self.cpsr)?,
+                // Instruction::SMLAL => exec_smlal(bus, dec, &mut self.gpr, &self.cpsr)?,
+                // Instruction::LDR => exec_ldr(bus, dec, &mut self.gpr)?,
+                // Instruction::STR => exec_str(bus, dec, &mut self.gpr)?,
+                // Instruction::LDRB => exec_ldrb(bus, dec, &mut self.gpr)?,
+                // Instruction::STRB => exec_strb(bus, dec, &mut self.gpr)?,
+                // Instruction::STRH => exec_strh(bus, dec, &mut self.gpr)?,
+                // Instruction::LDRH => exec_ldrh(bus, dec, &mut self.gpr)?,
+                // Instruction::LDRSB => exec_ldrsb(bus, dec, &mut self.gpr)?,
+                // Instruction::LDRSH => exec_ldrsh(bus, dec, &mut self.gpr)?,
+                Instruction::B(dec) => exec_b(dec, &mut self.gpr)?,
+                Instruction::BL(dec) => exec_bl(dec, &mut self.gpr)?,
+                // Instruction::LDM => exec_ldm(bus, dec, &mut self.gpr)?,
+                // Instruction::STM => exec_stm(bus, dec, &mut self.gpr)?,
+                // Instruction::MSR => exec_msr(bus, dec, &mut self.gpr)?,
                 //arm::Opcode::Undefined => unimplemented!(),
                 //arm::Opcode::NOP => unimplemented!(),
                 //// arm::Opcode::SWI => unimplemented!(),
@@ -162,8 +162,8 @@ impl ARM {
                 // debug!("fetch addr = 0x{:x}", self.gpr[PC] - (PC_OFFSET * 4) as u32);
                 let fetched = bus.read_word(self.gpr[PC] - (PC_OFFSET * 4) as u32);
                 // debug!("fetched code = {:x}", fetched);
-                let decoder = decode(fetched);
-                self.execute(decoder, bus)
+                let instruction = decode(fetched);
+                self.execute(instruction, bus)
             }
             // TODO: Thumb mode
             _ => unimplemented!(),
@@ -873,6 +873,7 @@ mod test {
         arm.run_immediately(&mut bus);
         assert_eq!(arm.get_gpr(1), 0xFFFF_FFFE);
     }
+    */
 
     #[test]
     // b pc-2
@@ -897,6 +898,7 @@ mod test {
         assert_eq!(arm.get_gpr(LR), 0x0000_0004);
     }
 
+    /*
     #[test]
     // ldm r0!, {r4-r11}
     // Load 8 words from the source
