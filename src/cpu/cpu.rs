@@ -124,10 +124,10 @@ impl ARM {
                 // Instruction::STR => exec_str(bus, dec, &mut self.gpr)?,
                 // Instruction::LDRB => exec_ldrb(bus, dec, &mut self.gpr)?,
                 // Instruction::STRB => exec_strb(bus, dec, &mut self.gpr)?,
-                // Instruction::STRH => exec_strh(bus, dec, &mut self.gpr)?,
-                // Instruction::LDRH => exec_ldrh(bus, dec, &mut self.gpr)?,
-                // Instruction::LDRSB => exec_ldrsb(bus, dec, &mut self.gpr)?,
-                // Instruction::LDRSH => exec_ldrsh(bus, dec, &mut self.gpr)?,
+                Instruction::STRH(dec) => exec_strh(bus, dec, &mut self.gpr)?,
+                Instruction::LDRH(dec) => exec_ldrh(bus, dec, &mut self.gpr)?,
+                Instruction::LDRSB(dec) => exec_ldrsb(bus, dec, &mut self.gpr)?,
+                Instruction::LDRSH(dec) => exec_ldrsh(bus, dec, &mut self.gpr)?,
                 Instruction::B(dec) => exec_b(dec, &mut self.gpr)?,
                 Instruction::BL(dec) => exec_bl(dec, &mut self.gpr)?,
                 // Instruction::LDM => exec_ldm(bus, dec, &mut self.gpr)?,
@@ -808,6 +808,7 @@ mod test {
         arm.run_immediately(&mut bus);
         assert_eq!(bus.get_mem(0x200), 0x0000_00AA);
     }
+    */
 
     #[test]
     // strh r1, [r2]
@@ -873,7 +874,6 @@ mod test {
         arm.run_immediately(&mut bus);
         assert_eq!(arm.get_gpr(1), 0xFFFF_FFFE);
     }
-    */
 
     #[test]
     // b pc-2

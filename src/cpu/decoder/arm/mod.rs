@@ -11,7 +11,7 @@ pub enum InstructionType {
     // ProgramStatusRegister,
     Multiple,
     // Memory,
-    // ExtraMemory,
+    ExtraMemory,
     DataProcessing,
     Branch,
     // MultiLoadAndStore,
@@ -51,10 +51,10 @@ pub enum Instruction {
     // LDR,
     // LDRB,
     // STRB,
-    // STRH,
-    // LDRH,
-    // LDRSB,
-    // LDRSH,
+    STRH(ExtraMemory),
+    LDRH(ExtraMemory),
+    LDRSB(ExtraMemory),
+    LDRSH(ExtraMemory),
     B(Branch),
     BL(Branch),
     // LDM,
@@ -375,17 +375,17 @@ fn decode_multiple(raw: Word) -> Instruction {
 //     }
 // }
 //
-// fn decode_extra_memory(raw: Word) -> Instruction {
-//     let op2 = (raw >> 5) & 0b11;
-//     let l = is_load(raw);
-//     match op2 {
-//         0b01 if !l => Instruction::STRH,
-//         0b01 if l => Instruction::LDRH,
-//         0b10 if l => Instruction::LDRSB,
-//         0b11 if l => Instruction::LDRSH,
-//         _ => panic!("undefined instruction detected"),
-//     }
-// }
+fn decode_extra_memory(raw: Word) -> Instruction {
+    let op2 = (raw >> 5) & 0b11;
+    let l = is_load(raw);
+    match op2 {
+        0b01 if !l => Instruction::STRH(ExtraMemory(raw)),
+        0b01 if l => Instruction::LDRH(ExtraMemory(raw)),
+        0b10 if l => Instruction::LDRSB(ExtraMemory(raw)),
+        0b11 if l => Instruction::LDRSH(ExtraMemory(raw)),
+        _ => panic!("undefined instruction detected"),
+    }
+}
 
 fn decode_data_processing(raw: Word) -> Instruction {
     let cmd = (raw & 0x01E0_0000) >> 21;
@@ -452,8 +452,8 @@ pub fn decode(raw: Word) -> Instruction {
         v if (v & 0x0FC0_00F0) == 0x0000_0090 => InstructionType::Multiple,
         v if (v & 0x0F80_00F0) == 0x0080_0090 => InstructionType::Multiple,
         // v if (v & 0x0E00_0010) == 0x0600_0010 => InstructionType::Undefined,
-        // v if (v & 0x0E40_0F90) == 0x0000_0090 => InstructionType::ExtraMemory,
-        // v if (v & 0x0E40_0090) == 0x0040_0090 => InstructionType::ExtraMemory,
+        v if (v & 0x0E40_0F90) == 0x0000_0090 => InstructionType::ExtraMemory,
+        v if (v & 0x0E40_0090) == 0x0040_0090 => InstructionType::ExtraMemory,
         // v if (v & 0x0C00_0000) == 0x0400_0000 => InstructionType::Memory,
         v if (v & 0x0C00_0000) == 0x0000_0000 => InstructionType::DataProcessing,
         // v if (v & 0x0E00_0000) == 0x0800_0000 => InstructionType::MultiLoadAndStore, // LDM and STM,
@@ -466,7 +466,7 @@ pub fn decode(raw: Word) -> Instruction {
         //  InstructionType::ProgramStatusRegister => decode_program_status_register(raw),
         InstructionType::Multiple => decode_multiple(raw),
         //  InstructionType::Memory => decode_memory(raw),
-        //  InstructionType::ExtraMemory => decode_extra_memory(raw),
+        InstructionType::ExtraMemory => decode_extra_memory(raw),
         InstructionType::DataProcessing => decode_data_processing(raw),
         InstructionType::Branch => decode_branch(raw),
         //  InstructionType::MultiLoadAndStore => decode_multi_load_and_store(raw),
