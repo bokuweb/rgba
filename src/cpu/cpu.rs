@@ -3,6 +3,7 @@ use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::{decode, Instruction};
 use crate::cpu::instructions::arm::{
     block_data_transfer::*, branch::*, data::*, extra_memory::*, memory::*, multiple::*,
+    psr_transfer::*,
 };
 use crate::cpu::instructions::PipelineStatus;
 use crate::cpu::registers::psr::PSR;
@@ -132,6 +133,7 @@ impl ARM {
                 Instruction::BL(dec) => exec_bl(dec, &mut self.gpr)?,
                 Instruction::LDM(dec) => exec_ldm(bus, dec, &mut self.gpr)?,
                 Instruction::STM(dec) => exec_stm(bus, dec, &mut self.gpr)?,
+                Instruction::MRS(dec) => exec_mrs(dec, &mut self.gpr, self.cpsr, self.spsr)?,
                 // Instruction::MSR => exec_msr(bus, dec, &mut self.gpr)?,
                 Instruction::Undefined => unimplemented!(),
                 //arm::Opcode::NOP => unimplemented!(),

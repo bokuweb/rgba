@@ -4,6 +4,7 @@ mod data_processing;
 mod extra_memory;
 mod memory;
 mod multiple;
+mod psr_transfer;
 
 pub use block_data_transfer::*;
 pub use branch::*;
@@ -11,6 +12,7 @@ pub use data_processing::*;
 pub use extra_memory::*;
 pub use memory::*;
 pub use multiple::*;
+pub use psr_transfer::*;
 
 use super::super::constants::COND_FIELD;
 use super::super::types::{Shift, Word};
@@ -18,7 +20,7 @@ use super::super::types::{Shift, Word};
 #[derive(Debug, PartialEq, Clone)]
 pub enum InstructionType {
     Undefined,
-    // ProgramStatusRegister,
+    PsrTransfer,
     Multiple,
     Memory,
     ExtraMemory,
@@ -71,8 +73,8 @@ pub enum Instruction {
     STM(BlockDataTransfer),
     Undefined,
     // // SWI,
-    // MSR,
-    // MRS,
+    MSR(PsrTransfer),
+    MRS(PsrTransfer),
     // NOP,
 } //
 
@@ -116,12 +118,12 @@ fn decode_multiple(raw: Word) -> Instruction {
     }
 }
 
-// fn decode_program_status_register(raw: Word) -> Instruction {
-//     match raw {
-//         v if (v & 0x00b0_f000) == 0x0020_f000 => Instruction::MSR,
-//         _ => Instruction::MRS,
-//     }
-// }
+fn decode_psr_transfer(raw: Word) -> Instruction {
+    match raw {
+        v if (v & 0x00b0_f000) == 0x0020_f000 => Instruction::MSR(PsrTransfer(raw)),
+        _ => Instruction::MRS(PsrTransfer(raw)),
+    }
+}
 
 fn decode_memory(raw: Word) -> Instruction {
     match raw {
@@ -205,9 +207,9 @@ pub fn decode(raw: Word) -> Instruction {
     // };
 
     let instruction_type = match raw {
-        // v if (v & 0x0180_0000) == 0x0100_0000 && (v & 0x0010_0000) == 0x0 => {
-        //     InstructionType::ProgramStatusRegister
-        // }
+        v if (v & 0x0180_0000) == 0x0100_0000 && (v & 0x0010_0000) == 0x0 => {
+            InstructionType::PsrTransfer
+        }
         v if (v & 0x0E00_0000) == 0x0A00_0000 => InstructionType::Branch,
         v if (v & 0x0FC0_00F0) == 0x0000_0090 => InstructionType::Multiple,
         v if (v & 0x0F80_00F0) == 0x0080_0090 => InstructionType::Multiple,
@@ -223,7 +225,7 @@ pub fn decode(raw: Word) -> Instruction {
 
     match instruction_type {
         InstructionType::Undefined => Instruction::Undefined,
-        //  InstructionType::ProgramStatusRegister => decode_program_status_register(raw),
+        InstructionType::PsrTransfer => decode_psr_transfer(raw),
         InstructionType::Multiple => decode_multiple(raw),
         InstructionType::Memory => decode_memory(raw),
         InstructionType::ExtraMemory => decode_extra_memory(raw),

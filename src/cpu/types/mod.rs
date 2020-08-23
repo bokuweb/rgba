@@ -17,7 +17,7 @@ impl Into<Shift> for u32 {
             0b01 => Shift::LSR,
             0b10 => Shift::ASR,
             0b11 => Shift::ROR,
-            _ => panic!("shfit value should be 0b00~0b11. {} is illegal value", self),
+            _ => panic!("shift value should be 0b00~0b11. {} is illegal value", self),
         }
     }
 }

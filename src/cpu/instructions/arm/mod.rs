@@ -1,9 +1,8 @@
-pub(crate) mod memory;
-pub(crate) mod extra_memory;
-pub(crate) mod branch;
-pub(crate) mod data;
-pub(crate) mod multiple;
-pub(crate) mod block_data_transfer;
-pub(crate) mod program_status_register;
-
-mod shift;
+pub mod block_data_transfer;
+pub mod branch;
+pub mod data;
+pub mod extra_memory;
+pub mod memory;
+pub mod multiple;
+pub mod psr_transfer;
+pub mod shift;
