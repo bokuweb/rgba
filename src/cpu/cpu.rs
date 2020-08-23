@@ -1,8 +1,8 @@
 use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
-use crate::cpu::decoder::arm::{decode, Decoder, Instruction};
+use crate::cpu::decoder::arm::{decode, Instruction};
 use crate::cpu::instructions::arm::{
-    branch::*, data::*, extra_memory::*, memory::*, multi_load_and_store::*, multiple::*,
+    block_data_transfer::*, branch::*, data::*, extra_memory::*, memory::*, multiple::*,
 };
 use crate::cpu::instructions::PipelineStatus;
 use crate::cpu::registers::psr::PSR;
@@ -130,8 +130,8 @@ impl ARM {
                 Instruction::LDRSH(dec) => exec_ldrsh(bus, dec, &mut self.gpr)?,
                 Instruction::B(dec) => exec_b(dec, &mut self.gpr)?,
                 Instruction::BL(dec) => exec_bl(dec, &mut self.gpr)?,
-                // Instruction::LDM => exec_ldm(bus, dec, &mut self.gpr)?,
-                // Instruction::STM => exec_stm(bus, dec, &mut self.gpr)?,
+                Instruction::LDM(dec) => exec_ldm(bus, dec, &mut self.gpr)?,
+                Instruction::STM(dec) => exec_stm(bus, dec, &mut self.gpr)?,
                 // Instruction::MSR => exec_msr(bus, dec, &mut self.gpr)?,
                 Instruction::Undefined => unimplemented!(),
                 //arm::Opcode::NOP => unimplemented!(),
@@ -896,7 +896,6 @@ mod test {
         assert_eq!(arm.get_gpr(LR), 0x0000_0004);
     }
 
-    /*
     #[test]
     // ldm r0!, {r4-r11}
     // Load 8 words from the source
@@ -947,5 +946,4 @@ mod test {
         assert_eq!(bus.get_mem(0x0000_0118), 0xA000_0006);
         assert_eq!(bus.get_mem(0x0000_011c), 0xA000_0007);
     }
-    */
 }
