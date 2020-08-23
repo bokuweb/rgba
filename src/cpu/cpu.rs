@@ -120,10 +120,10 @@ impl ARM {
                 Instruction::UMLAL(dec) => exec_umlal(bus, dec, &mut self.gpr, &self.cpsr)?,
                 Instruction::SMULL(dec) => exec_smull(bus, dec, &mut self.gpr, &self.cpsr)?,
                 Instruction::SMLAL(dec) => exec_smlal(bus, dec, &mut self.gpr, &self.cpsr)?,
-                // Instruction::LDR => exec_ldr(bus, dec, &mut self.gpr)?,
-                // Instruction::STR => exec_str(bus, dec, &mut self.gpr)?,
-                // Instruction::LDRB => exec_ldrb(bus, dec, &mut self.gpr)?,
-                // Instruction::STRB => exec_strb(bus, dec, &mut self.gpr)?,
+                Instruction::LDR(dec) => exec_ldr(bus, dec, &mut self.gpr)?,
+                Instruction::STR(dec) => exec_str(bus, dec, &mut self.gpr)?,
+                Instruction::LDRB(dec) => exec_ldrb(bus, dec, &mut self.gpr)?,
+                Instruction::STRB(dec) => exec_strb(bus, dec, &mut self.gpr)?,
                 Instruction::STRH(dec) => exec_strh(bus, dec, &mut self.gpr)?,
                 Instruction::LDRH(dec) => exec_ldrh(bus, dec, &mut self.gpr)?,
                 Instruction::LDRSB(dec) => exec_ldrsb(bus, dec, &mut self.gpr)?,
@@ -133,7 +133,7 @@ impl ARM {
                 // Instruction::LDM => exec_ldm(bus, dec, &mut self.gpr)?,
                 // Instruction::STM => exec_stm(bus, dec, &mut self.gpr)?,
                 // Instruction::MSR => exec_msr(bus, dec, &mut self.gpr)?,
-                //arm::Opcode::Undefined => unimplemented!(),
+                Instruction::Undefined => unimplemented!(),
                 //arm::Opcode::NOP => unimplemented!(),
                 //// arm::Opcode::SWI => unimplemented!(),
                 // ArmOpcode::Unknown => self.execute_unknown(dec),
@@ -725,7 +725,6 @@ mod test {
         assert_eq!(arm.get_gpr(2), 0xFFFF_FFFF);
     }
 
-    /*
     #[test]
     // ldr pc, =0x8000_0000
     fn ldr_pc_eq0x8000_0000() {
@@ -808,7 +807,6 @@ mod test {
         arm.run_immediately(&mut bus);
         assert_eq!(bus.get_mem(0x200), 0x0000_00AA);
     }
-    */
 
     #[test]
     // strh r1, [r2]
