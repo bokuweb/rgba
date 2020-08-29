@@ -119,4 +119,10 @@ pub fn run() {
     arm.tick(&mut bus);
     arm.tick(&mut bus);
     arm.tick(&mut bus);
+    arm.tick(&mut bus);
+    arm.tick(&mut bus);
+    arm.tick(&mut bus);
+    arm.tick(&mut bus);
+    arm.tick(&mut bus);
+    arm.tick(&mut bus);
 }

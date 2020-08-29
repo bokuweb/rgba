@@ -2,11 +2,11 @@ use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::{decode, Instruction};
 use crate::cpu::instructions::arm::{
-    block_data_transfer::*, branch::*, data::*, extra_memory::*, memory::*, multiple::*,
-    psr_transfer::*,
+    block_data_transfer::*, branch::*, branch_and_exchange::*, data::*, extra_memory::*, memory::*,
+    multiple::*, psr_transfer::*,
 };
 use crate::cpu::instructions::PipelineStatus;
-use crate::cpu::registers::psr::PSR;
+use crate::cpu::registers::psr::{CpuState, PSR};
 use crate::cpu::types::*;
 
 pub const INITIAL_PIPELINE_WAIT: u8 = 2;
@@ -21,12 +21,6 @@ enum CpuMode {
     System,
     Supervisor,
     FIQ,
-}
-
-#[derive(Debug, PartialEq)]
-enum CpuState {
-    ARM,
-    Thumb,
 }
 
 pub struct ARM {
@@ -91,7 +85,7 @@ impl ARM {
     where
         T: BusAccessor,
     {
-        /// debug!("execute {:?}", dec.opcode());
+        debug!("execute {:?}", &instruction);
         let pipeline_status = {
             match instruction {
                 Instruction::AND(dec) => exec_and(bus, dec, &mut self.gpr)?,
@@ -131,12 +125,15 @@ impl ARM {
                 Instruction::LDRSH(dec) => exec_ldrsh(bus, dec, &mut self.gpr)?,
                 Instruction::B(dec) => exec_b(dec, &mut self.gpr)?,
                 Instruction::BL(dec) => exec_bl(dec, &mut self.gpr)?,
+                Instruction::BX(dec) => exec_bx(dec, &mut self.cpsr, &mut self.gpr)?,
                 Instruction::LDM(dec) => exec_ldm(bus, dec, &mut self.gpr)?,
                 Instruction::STM(dec) => exec_stm(bus, dec, &mut self.gpr)?,
                 Instruction::MRS(dec) => {
                     exec_mrs(dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr)?
                 }
-                // Instruction::MSR => exec_msr(bus, dec, &mut self.gpr)?,
+                Instruction::MSR(dec) => {
+                    exec_msr(dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr)?
+                }
                 Instruction::Undefined => unimplemented!(),
                 //arm::Opcode::NOP => unimplemented!(),
                 //// arm::Opcode::SWI => unimplemented!(),
@@ -169,8 +166,10 @@ impl ARM {
                 let instruction = decode(fetched);
                 self.execute(instruction, bus)
             }
-            // TODO: Thumb mode
-            _ => unimplemented!(),
+            CpuState::Thumb => {
+                dbg!("thumb!!");
+                return Ok(())
+            }
         }
     }
 

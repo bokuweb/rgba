@@ -1,7 +1,7 @@
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum State {
-    ARM = 0,
-    THUMB,
+pub enum CpuState {
+    ARM,
+    Thumb,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -55,6 +55,13 @@ impl PSR {
 
     pub fn set(&mut self, value: u32) {
         self.0 = value
+    }
+
+    pub fn set_cpu_state(&mut self, state: CpuState) {
+        match state {
+            CpuState::ARM => self.set_T(true),
+            CpuState::Thumb => self.set_T(false),
+        }
     }
 
     pub fn get_mode(&self) -> Mode {
