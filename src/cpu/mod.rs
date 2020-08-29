@@ -52,6 +52,7 @@ impl BusAccessor for CpuBus {
         }
     }
     fn write_byte(&mut self, addr: u32, data: u8) {
+        info!("write byte addr = 0x{:x} data = 0x{:x}", addr, data);
         match addr {
             // 0x0000_0000...0x0007_FFFF => self.rom.borrow().read_word(addr),
             _ => panic!("TODO: "),
@@ -59,8 +60,15 @@ impl BusAccessor for CpuBus {
     }
 
     fn write_word(&mut self, addr: u32, data: u32) {
+        info!("write word addr = 0x{:x} data = 0x{:x}", addr, data);
         match addr {
-            0x0000_0000..=0x0007_FFFF => self.rom.read_word(addr),
+            0x0000_0000..=0x0007_FFFF => {
+                self.rom.read_word(addr);
+            }
+            // I/O Register
+            0x0400_0000..=0x0400_03FE => {
+                debug!("I/O register is not implemented yet.");
+            }
             _ => panic!("TODO: "),
         };
     }

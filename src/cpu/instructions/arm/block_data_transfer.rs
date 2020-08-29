@@ -13,9 +13,9 @@ use crate::cpu::types::*;
 // S = Restore force user bit. S specifies if banked register access should occur when in privileged modes [or if R15 and 26 bit and user mode, if the PSR should be written while PC is updated]
 // W = 1: Auto Index
 // L = 0: Store / 1: Load
-fn exec_multi_memory_processing<F, T>(
+fn exec_block_data_transfer<F, T>(
     gpr: &mut [u32; 16],
-    dec: Box<dyn Decoder>,
+    dec: BlockDataTransfer,
     bus: &mut T,
     load_or_store: F,
 ) -> Result<PipelineStatus, ()>
@@ -23,27 +23,27 @@ where
     F: Fn(&mut [u32; 16], u32, u32, &mut T),
     T: BusAccessor,
 {
-    let mut base: i64 = gpr[dec.get_Rn()] as i64;
-    let register_map = dec.raw() & 0xFFFF;
-    let offset: i64 = if dec.is_plus_offset() { 4 } else { -4 };
+    let mut base: i64 = gpr[dec.get_Rn() as usize] as i64;
+    let register_list = dec.get_register_list();
+    let offset: i64 = if dec.get_U() { 4 } else { -4 };
     for i in 0..0x10 {
-        if register_map & (1 << i) != 0 {
-            if dec.is_pre_indexed() {
+        if register_list & (1 << i) != 0 {
+            if dec.get_P() {
                 base = base.wrapping_add(offset);
             }
             load_or_store(gpr, base as u32, i, bus);
-            if !dec.is_pre_indexed() {
+            if !dec.get_P() {
                 base = base.wrapping_add(offset);
             }
         }
     }
     // TODO: Handle S flag.
-    if dec.is_write_back() {
-        gpr[dec.get_Rn()] = base as u32;
+    if dec.get_W() {
+        gpr[dec.get_Rn() as usize] = base as u32;
     }
 
     // If PC is loaded
-    if register_map & 0x8000 != 0 && dec.is_load() {
+    if register_list & 0x8000 != 0 && dec.get_L() {
         Ok(PipelineStatus::Flush)
     } else {
         Ok(PipelineStatus::Continue)
@@ -52,26 +52,26 @@ where
 
 pub fn exec_ldm<T>(
     bus: &mut T,
-    dec: Box<dyn Decoder>,
+    dec: BlockDataTransfer,
     gpr: &mut [Word; 16],
 ) -> Result<PipelineStatus, ()>
 where
     T: BusAccessor,
 {
-    exec_multi_memory_processing(gpr, dec, bus, |gpr, base, i, bus| {
+    exec_block_data_transfer(gpr, dec, bus, |gpr, base, i, bus| {
         gpr[i as usize] = bus.read_word(base) as Word;
     })
 }
 
 pub fn exec_stm<T>(
     bus: &mut T,
-    dec: Box<dyn Decoder>,
+    dec: BlockDataTransfer,
     gpr: &mut [Word; 16],
 ) -> Result<PipelineStatus, ()>
 where
     T: BusAccessor,
 {
-    exec_multi_memory_processing(gpr, dec, bus, |gpr, base, i, bus| {
+    exec_block_data_transfer(gpr, dec, bus, |gpr, base, i, bus| {
         bus.write_word(base, gpr[i as usize] as Word);
     })
 }
