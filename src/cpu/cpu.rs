@@ -133,7 +133,9 @@ impl ARM {
                 Instruction::BL(dec) => exec_bl(dec, &mut self.gpr)?,
                 Instruction::LDM(dec) => exec_ldm(bus, dec, &mut self.gpr)?,
                 Instruction::STM(dec) => exec_stm(bus, dec, &mut self.gpr)?,
-                Instruction::MRS(dec) => exec_mrs(dec, &mut self.gpr, self.cpsr, self.spsr)?,
+                Instruction::MRS(dec) => {
+                    exec_mrs(dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr)?
+                }
                 // Instruction::MSR => exec_msr(bus, dec, &mut self.gpr)?,
                 Instruction::Undefined => unimplemented!(),
                 //arm::Opcode::NOP => unimplemented!(),

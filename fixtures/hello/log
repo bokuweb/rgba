@@ -1,0 +1,182 @@
+B ea000006
+core.ts:551 MOV e3a0f302
+core.ts:962 B ea00002e
+core.ts:962 B ea000006
+core.ts:551 MOV e3a00301
+core.ts:868 STR e5800208
+core.ts:551 MOV e3a00012
+core.ts:603 (16) ["12", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "3007f00", "0", "80000f0"] "false" "false" "false" "false" "false" "false"
+core.ts:604 MSR e129f000
+core.ts:613 (16) ["12", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "3007f00", "0", "80000f0"] "false" "false" "false" "false" "false" "false"
+core.ts:856 LDR e59fd0b8
+core.ts:551 MOV e3a0001f
+core.ts:603 (16) ["1f", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "3007fa0", "0", "80000fc"] "0" "0" "0" "0" "0" "0"
+core.ts:604 MSR e129f000
+core.ts:613 (16) ["1f", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "0", "3007fa0", "0", "80000fc"] "0" "0" "0" "0" "0" "0"
+core.ts:856 LDR e59fd0b0
+core.ts:481 ADD e28f0001
+core.ts:589 BX e12fff10
+core.ts:168 switchExecMode 1
+core.ts:1208 T LDR(3) 482b
+core.ts:1160 T LSL(1) 140
+core.ts:1413 T B(1) -2df5
+core.ts:1185 T MOV(1) 2140
+core.ts:1160 T LSL(1) 309
+core.ts:1160 T LSL(1) 1c8
+core.ts:1427 T BL(X) -1000
+core.ts:1454 T BL(1) -1000
+core.ts:1427 T BL(X) -7d5
+core.ts:1464 T BL(2) -7d5
+core.ts:1185 T MOV(1) 2203
+core.ts:1122 T ADD(3) 1889
+core.ts:1069 T BIC 4391
+core.ts:1413 T B(1) -2ffd
+core.ts:1185 T MOV(1) 2200
+core.ts:1396 T STMIA -3ffc
+core.ts:1200 T SUB(2) 3904
+core.ts:1413 T B(1) -2e04
+core.ts:1106 T BX 4770
+core.ts:168 switchExecMode 1
+core.ts:1208 T LDR(3) 4823
+core.ts:1208 T LDR(3) 4924
+core.ts:1127 T SUB(3) 1a09
+core.ts:1427 T BL(X) -1000
+core.ts:1454 T BL(1) -1000
+core.ts:1427 T BL(X) -7da
+core.ts:1464 T BL(2) -7da
+core.ts:168 switchExecMode 1
+core.ts:1208 T LDR(3) 4823
+core.ts:1208 T LDR(3) 4923
+core.ts:1127 T SUB(3) 1a09
+core.ts:1427 T BL(X) -1000
+core.ts:1454 T BL(1) -1000
+core.ts:1427 T BL(X) -7df
+core.ts:1464 T BL(2) -7df
+core.ts:168 switchExecMode 1
+core.ts:1208 T LDR(3) 4922
+core.ts:1208 T LDR(3) 4a23
+core.ts:1208 T LDR(3) 4c23
+core.ts:1427 T BL(X) -1000
+core.ts:1454 T BL(1) -1000
+core.ts:1427 T BL(X) -7da
+core.ts:1464 T BL(2) -7da
+core.ts:1127 T SUB(3) 1aa3
+core.ts:1185 T MOV(1) 2003
+core.ts:1122 T ADD(3) 181b
+core.ts:1069 T BIC 4383
+core.ts:1413 T B(1) -2ffd
+core.ts:1391 T LDMIA -36ff
+core.ts:1396 T STMIA -3dff
+core.ts:1200 T SUB(2) 3b04
+core.ts:1413 T B(1) -2e05
+core.ts:1106 T BX 4770
+core.ts:168 switchExecMode 1
+core.ts:1208 T LDR(3) 4923
+core.ts:1208 T LDR(3) 4a23
+core.ts:1208 T LDR(3) 4c24
+core.ts:1427 T BL(X) -1000
+core.ts:1454 T BL(1) -1000
+core.ts:1427 T BL(X) -7df
+core.ts:1464 T BL(2) -7df
+core.ts:168 switchExecMode 1
+core.ts:1208 T LDR(3) 4a23
+core.ts:1208 T LDR(3) 4924
+core.ts:1127 T SUB(3) 1a53
+core.ts:1413 T B(1) -2ffe
+core.ts:1208 T LDR(3) 4923
+core.ts:1208 T LDR(3) 4a23
+core.ts:1208 T LDR(3) 4c24
+core.ts:1427 T BL(X) -1000
+core.ts:1454 T BL(1) -1000
+core.ts:1427 T BL(X) -7eb
+core.ts:1464 T BL(2) -7eb
+core.ts:168 switchExecMode 1
+core.ts:1208 T LDR(3) 4923
+core.ts:1208 T LDR(3) 4824
+core.ts:1294 T STR(1) 6008
+core.ts:1208 T LDR(3) 4b24
+core.ts:1427 T BL(X) -1000
+core.ts:1454 T BL(1) -1000
+core.ts:1427 T BL(X) -7f2
+core.ts:1464 T BL(2) -7f2
+core.ts:1106 T BX 4718
+core.ts:168 switchExecMode 1
+core.ts:1313 T PUSH -4a90
+core.ts:1208 T LDR(3) 4d0e
+core.ts:1208 T LDR(3) 4e0e
+core.ts:1127 T SUB(3) 1b76
+core.ts:1170 T ASR(1) 10b6
+core.ts:1413 T B(1) -2ffa
+core.ts:1427 T BL(X) -801
+core.ts:1454 T BL(1) -801
+core.ts:1427 T BL(X) -7d
+core.ts:1464 T BL(2) -7d
+core.ts:1313 T PUSH -4a08
+core.ts:1101 T MOV(3) 46c0
+core.ts:1306 T POP -4308
+core.ts:1306 T POP -43f8
+core.ts:1101 T MOV(3) 469e
+core.ts:1106 T BX 4770
+core.ts:168 switchExecMode 1
+core.ts:1208 T LDR(3) 4d09
+core.ts:1208 T LDR(3) 4e09
+core.ts:1127 T SUB(3) 1b76
+core.ts:1170 T ASR(1) 10b6
+core.ts:1413 T B(1) -2ffa
+core.ts:1185 T MOV(1) 2400
+core.ts:1391 T LDMIA -32f8
+core.ts:1194 T ADD(2) 3401
+core.ts:1427 T BL(X) -1000
+core.ts:1454 T BL(1) -1000
+core.ts:1427 T BL(X) -7f3
+core.ts:1464 T BL(2) -7f3
+core.ts:1106 T BX 4718
+core.ts:168 switchExecMode 1
+core.ts:1208 T LDR(3) 4b06
+core.ts:1313 T PUSH -4af0
+core.ts:1190 T CMP(1) 2b00
+core.ts:1413 T B(1) -2ffd
+core.ts:1427 T BL(X) -801
+core.ts:1454 T BL(1) -801
+core.ts:1427 T BL(X) -3c
+core.ts:1464 T BL(2) -3c
+core.ts:1208 T LDR(3) 4808
+core.ts:1208 T LDR(3) 4909
+core.ts:1127 T SUB(3) 1a09
+core.ts:1170 T ASR(1) 1089
+core.ts:1165 T LSR(1) fcb
+core.ts:1122 T ADD(3) 1859
+core.ts:1313 T PUSH -4af0
+core.ts:1170 T ASR(1) 1049
+core.ts:1413 T B(1) -2ffc
+core.ts:1306 T POP -43f0
+core.ts:1306 T POP -43ff
+core.ts:1106 T BX 4700
+core.ts:168 switchExecMode 1
+core.ts:1306 T POP -43f0
+core.ts:1306 T POP -43ff
+core.ts:1106 T BX 4700
+core.ts:168 switchExecMode 1
+core.ts:1049 T CMP(2) 42a6
+core.ts:1413 T B(1) -2e07
+core.ts:1306 T POP -4390
+core.ts:1306 T POP -43ff
+core.ts:1106 T BX 4700
+core.ts:168 switchExecMode 1
+core.ts:1185 T MOV(1) 2000
+core.ts:1185 T MOV(1) 2100
+core.ts:1208 T LDR(3) 4b22
+core.ts:1427 T BL(X) -1000
+core.ts:1454 T BL(1) -1000
+core.ts:1427 T BL(X) -7f7
+core.ts:1464 T BL(2) -7f7
+core.ts:168 switchExecMode 1
+core.ts:1185 T MOV(1) 2380
+core.ts:1208 T LDR(3) 4a03
+core.ts:1160 T LSL(1) 4db
+core.ts:1294 T STR(1) 601a
+core.ts:1185 T MOV(1) 221f
+core.ts:1208 T LDR(3) 4b02
+core.ts:1331 T SDRH(1) -7fe6
+core.ts:1427 T BL(X) -1802
+core.ts:1433 T B(2) -1802

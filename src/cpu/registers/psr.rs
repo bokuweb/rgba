@@ -33,6 +33,7 @@ bitfield! {
     pub get_C, set_C: 29;
     #[allow(non_snake_case)]
     pub get_V, set_V: 28;
+    pub get_flag_bits, set_flag_bits: 31, 28;
     #[allow(non_snake_case)]
     pub get_Q, set_Q: 27;
     #[allow(non_snake_case)]
@@ -52,6 +53,10 @@ impl PSR {
         self.0
     }
 
+    pub fn set(&mut self, value: u32) {
+        self.0 = value
+    }
+
     pub fn get_mode(&self) -> Mode {
         let m = self.get_M();
         match m {
@@ -64,6 +69,10 @@ impl PSR {
             0b11111 => Mode::System,
             _ => panic!("{:x} is illegal mode", m),
         }
+    }
+
+    pub fn set_flags(&mut self, value: u32) {
+        self.set_flag_bits(value >> 28);
     }
 }
 
