@@ -21,7 +21,11 @@ const WIDTH: u32 = 240;
 const HEIGHT: u32 = 160;
 
 fn main() {
-    // cpu::run();
+    std::env::set_var("RUST_LOG", "debug");
+    pretty_env_logger::init();
+    cpu::run();
+
+    /*
     let sdl_context = sdl2::init().unwrap();
     let mut event_pump = sdl_context.event_pump().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -63,4 +67,5 @@ fn main() {
     loop {
         // renderer.render(&buf);
     }
+    */
 }
