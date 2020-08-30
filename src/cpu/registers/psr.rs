@@ -59,8 +59,16 @@ impl PSR {
 
     pub fn set_cpu_state(&mut self, state: CpuState) {
         match state {
-            CpuState::ARM => self.set_T(true),
-            CpuState::Thumb => self.set_T(false),
+            CpuState::ARM => self.set_T(false),
+            CpuState::Thumb => self.set_T(true),
+        }
+    }
+
+    pub fn get_cpu_state(&mut self) -> CpuState {
+        if self.get_T() {
+            CpuState::Thumb
+        } else {
+            CpuState::ARM
         }
     }
 

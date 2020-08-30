@@ -157,8 +157,8 @@ impl ARM {
             self.increment_pc();
             return Ok(());
         }
-        // debug!("registers = {:?}", self.gpr);
-        match self.state {
+        debug!("registers = {:?} {:?}", self.gpr, self.cpsr.get_cpu_state());
+        match self.cpsr.get_cpu_state() {
             CpuState::ARM => {
                 // debug!("fetch addr = 0x{:x}", self.gpr[PC] - (PC_OFFSET * 4) as u32);
                 let fetched = bus.read_word(self.gpr[PC] - (PC_OFFSET * 4) as u32);
@@ -168,7 +168,7 @@ impl ARM {
             }
             CpuState::Thumb => {
                 dbg!("thumb!!");
-                return Ok(())
+                return Ok(());
             }
         }
     }

@@ -10,16 +10,16 @@ pub fn exec_bx(
     gpr: &mut [Word; 16],
 ) -> Result<PipelineStatus, ()> {
     // TODO: Add cycle
-    if dec.get_bit0() {
+    let addr = gpr[dec.get_Rm() as usize];
+    if addr & 0x01 == 0x01 {
         // Switch cpu mode to execute thumb instructions.
-        let addr = dec.0 & !0x1;
         cpsr.set_cpu_state(CpuState::Thumb);
-        gpr[PC] = addr;
+        debug!("Switch cpu state to thumb");
+        gpr[PC] = addr & !0x1;
     } else {
         // clear Rm[1:0]
-        let addr = dec.0 & !0x3;
         cpsr.set_cpu_state(CpuState::ARM);
-        gpr[PC] = addr;
+        gpr[PC] = addr & !0x3;
     }
     Ok(PipelineStatus::Flush)
 }
