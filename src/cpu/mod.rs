@@ -38,14 +38,14 @@ struct CpuBus {
 
 impl BusAccessor for CpuBus {
     fn read_byte(&self, addr: u32) -> Byte {
-        // debug!("read byte addr = {:x}", addr);
+        debug!("read byte addr = {:x}", addr);
         match addr {
             0x0000_0000..=0x0007_FFFF => self.rom.read_byte(addr),
             _ => panic!("TODO: "),
         }
     }
     fn read_word(&self, addr: u32) -> Word {
-        // debug!("read word addr = {:x}", addr);
+        debug!("read word addr = {:x}", addr);
         match addr {
             0x0000_0000..=0x0007_FFFF => self.rom.read_word(addr),
             _ => panic!("TODO: "),
@@ -100,7 +100,12 @@ pub fn run() {
     let mut bus = CpuBus::new(rom, ram);
     let mut arm = cpu::ARM::new();
     arm.tick(&mut bus);
-    println!("{:?}", arm.get_gpr(0));
+    arm.tick(&mut bus);
+    arm.tick(&mut bus);
+    arm.tick(&mut bus);
+    arm.tick(&mut bus);
+    arm.tick(&mut bus);
+    arm.tick(&mut bus);
     arm.tick(&mut bus);
     arm.tick(&mut bus);
     arm.tick(&mut bus);
