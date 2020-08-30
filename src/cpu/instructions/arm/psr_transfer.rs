@@ -26,6 +26,7 @@ pub fn exec_msr(
     let value = if dec.get_I() {
         ror(dec.get_imm(), dec.get_rotate())
     } else {
+        dbg!(&gpr, dec.get_Rm());
         gpr[dec.get_Rm() as usize]
     };
 
@@ -51,13 +52,17 @@ pub fn exec_msr(
                 if dec.get_C() {
                     mask |= 0xff;
                 }
+                info!("{:x}", mask);
                 let current_value = cpsr.get();
+                dbg!(current_value);
                 let current_mode = cpsr.get_mode();
                 let new_value = (current_value & !mask) | (value & mask);
+                dbg!(new_value);
                 cpsr.set(new_value);
                 let new_mode = cpsr.get_mode();
                 if current_mode != new_mode {
-                    todo!("should change mode.");
+                    dbg!(current_mode, new_mode);
+                    // todo!("should change mode.");
                 }
             }
         }

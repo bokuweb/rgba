@@ -1,5 +1,6 @@
 mod block_data_transfer;
 mod branch;
+mod branch_and_exchange;
 mod data_processing;
 mod extra_memory;
 mod memory;
@@ -8,6 +9,7 @@ mod psr_transfer;
 
 pub use block_data_transfer::*;
 pub use branch::*;
+pub use branch_and_exchange::*;
 pub use data_processing::*;
 pub use extra_memory::*;
 pub use memory::*;
@@ -26,6 +28,7 @@ pub enum InstructionType {
     ExtraMemory,
     DataProcessing,
     Branch,
+    BranchAndExchange,
     BlockDataTransfer,
 }
 
@@ -69,6 +72,7 @@ pub enum Instruction {
     LDRSH(ExtraMemory),
     B(Branch),
     BL(Branch),
+    BX(BranchAndExchange),
     LDM(BlockDataTransfer),
     STM(BlockDataTransfer),
     Undefined,
@@ -205,8 +209,10 @@ pub fn decode(raw: Word) -> Instruction {
     //     COND_AL => Condition::AL,
     //     _ => panic!("Unknowm condition {}", cond),
     // };
+    dbg!(raw);
 
     let instruction_type = match raw {
+        v if ((v & 0x0ffffff0) == 0x012fff10) => InstructionType::BranchAndExchange,
         v if (v & 0x0180_0000) == 0x0100_0000 && (v & 0x0010_0000) == 0x0 => {
             InstructionType::PsrTransfer
         }
@@ -231,6 +237,7 @@ pub fn decode(raw: Word) -> Instruction {
         InstructionType::ExtraMemory => decode_extra_memory(raw),
         InstructionType::DataProcessing => decode_data_processing(raw),
         InstructionType::Branch => decode_branch(raw),
+        InstructionType::BranchAndExchange => Instruction::BX(BranchAndExchange(raw)),
         InstructionType::BlockDataTransfer => decode_block_data_transfer(raw),
         // v if (v & 0x0F00_0000) == 0x0F00_0000 => Instruction::SWI,
         _ => panic!("unsupported instruction"),
