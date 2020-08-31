@@ -1,16 +1,18 @@
 use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
-use crate::cpu::decoder::arm::{decode, Instruction};
+use crate::cpu::decoder::{arm, thumb};
 use crate::cpu::instructions::arm::{
     block_data_transfer::*, branch::*, branch_and_exchange::*, data::*, extra_memory::*, memory::*,
     multiple::*, psr_transfer::*,
 };
+
+use crate::cpu::instructions::thumb::*;
+
 use crate::cpu::instructions::PipelineStatus;
 use crate::cpu::registers::psr::{CpuState, PSR};
 use crate::cpu::types::*;
 
 pub const INITIAL_PIPELINE_WAIT: u8 = 2;
-pub const PC_OFFSET: usize = 2;
 
 enum Arm {
     NOP,
@@ -38,7 +40,6 @@ pub struct ARM {
 
     bank_spsr: [PSR; 5],
     mode: CpuMode,
-    state: CpuState,
     irq_disable: bool,
     fiq_disable: bool,
     optimise_swi: bool,
@@ -54,7 +55,6 @@ impl ARM {
             spsr: PSR::default(),
             bank_spsr: [PSR::default(); 5],
             mode: CpuMode::System,
-            state: CpuState::ARM,
             irq_disable: false,
             fiq_disable: false,
             optimise_swi: false,
@@ -67,7 +67,6 @@ impl ARM {
         self.cpsr = PSR::default();
 
         self.mode = CpuMode::Supervisor;
-        self.state = CpuState::ARM;
         self.irq_disable = true;
         self.fiq_disable = true;
     }
@@ -77,67 +76,89 @@ impl ARM {
     }
 
     fn increment_pc(&mut self) {
-        let next = if self.state == CpuState::ARM { 4 } else { 2 };
+        let next = if self.cpsr.get_cpu_state() == CpuState::ARM {
+            4
+        } else {
+            2
+        };
         self.gpr[PC] = self.gpr[PC].wrapping_add(next);
     }
 
-    fn execute<T>(&mut self, instruction: Instruction, bus: &mut T) -> Result<(), ()>
+    fn execute_arm<T>(&mut self, instruction: arm::Instruction, bus: &mut T) -> Result<(), ()>
     where
         T: BusAccessor,
     {
         debug!("execute {:?}", &instruction);
         let pipeline_status = {
             match instruction {
-                Instruction::AND(dec) => exec_and(bus, dec, &mut self.gpr)?,
-                Instruction::EOR(dec) => exec_eor(bus, dec, &mut self.gpr)?,
-                Instruction::SUB(dec) => exec_sub(bus, dec, &mut self.gpr)?,
-                Instruction::RSB(dec) => exec_rsb(bus, dec, &mut self.gpr)?,
-                Instruction::ADD(dec) => exec_add(bus, dec, &mut self.gpr)?,
-                Instruction::ADC(dec) => exec_adc(bus, dec, &mut self.gpr, &self.cpsr)?,
-                Instruction::SBC(dec) => exec_sbc(bus, dec, &mut self.gpr, &self.cpsr)?,
-                Instruction::RSC(dec) => exec_rsc(bus, dec, &mut self.gpr, &self.cpsr)?,
-                Instruction::TST(dec) => exec_tst(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                Instruction::TEQ(dec) => exec_teq(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                Instruction::CMP(dec) => exec_cmp(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                Instruction::CMN(dec) => exec_cmn(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                Instruction::ORR(dec) => exec_orr(bus, dec, &mut self.gpr)?,
-                Instruction::MOV(dec) => exec_mov(bus, dec, &mut self.gpr)?,
-                Instruction::LSL(dec) => exec_shift(bus, dec, &mut self.gpr)?,
-                Instruction::LSR(dec) => exec_shift(bus, dec, &mut self.gpr)?,
-                Instruction::ASR(dec) => exec_shift(bus, dec, &mut self.gpr)?,
-                Instruction::RRX(dec) => exec_rrx(bus, dec, &mut self.gpr, &self.cpsr)?,
-                Instruction::ROR(dec) => exec_shift(bus, dec, &mut self.gpr)?,
-                Instruction::BIC(dec) => exec_bic(bus, dec, &mut self.gpr)?,
-                Instruction::MVN(dec) => exec_mvn(bus, dec, &mut self.gpr)?,
-                Instruction::MUL(dec) => exec_mul(bus, dec, &mut self.gpr, &self.cpsr)?,
-                Instruction::MLA(dec) => exec_mla(bus, dec, &mut self.gpr, &self.cpsr)?,
-                Instruction::UMULL(dec) => exec_umull(bus, dec, &mut self.gpr, &self.cpsr)?,
-                Instruction::UMLAL(dec) => exec_umlal(bus, dec, &mut self.gpr, &self.cpsr)?,
-                Instruction::SMULL(dec) => exec_smull(bus, dec, &mut self.gpr, &self.cpsr)?,
-                Instruction::SMLAL(dec) => exec_smlal(bus, dec, &mut self.gpr, &self.cpsr)?,
-                Instruction::LDR(dec) => exec_ldr(bus, dec, &mut self.gpr)?,
-                Instruction::STR(dec) => exec_str(bus, dec, &mut self.gpr)?,
-                Instruction::LDRB(dec) => exec_ldrb(bus, dec, &mut self.gpr)?,
-                Instruction::STRB(dec) => exec_strb(bus, dec, &mut self.gpr)?,
-                Instruction::STRH(dec) => exec_strh(bus, dec, &mut self.gpr)?,
-                Instruction::LDRH(dec) => exec_ldrh(bus, dec, &mut self.gpr)?,
-                Instruction::LDRSB(dec) => exec_ldrsb(bus, dec, &mut self.gpr)?,
-                Instruction::LDRSH(dec) => exec_ldrsh(bus, dec, &mut self.gpr)?,
-                Instruction::B(dec) => exec_b(dec, &mut self.gpr)?,
-                Instruction::BL(dec) => exec_bl(dec, &mut self.gpr)?,
-                Instruction::BX(dec) => exec_bx(dec, &mut self.cpsr, &mut self.gpr)?,
-                Instruction::LDM(dec) => exec_ldm(bus, dec, &mut self.gpr)?,
-                Instruction::STM(dec) => exec_stm(bus, dec, &mut self.gpr)?,
-                Instruction::MRS(dec) => {
+                arm::Instruction::AND(dec) => exec_and(bus, dec, &mut self.gpr)?,
+                arm::Instruction::EOR(dec) => exec_eor(bus, dec, &mut self.gpr)?,
+                arm::Instruction::SUB(dec) => exec_sub(bus, dec, &mut self.gpr)?,
+                arm::Instruction::RSB(dec) => exec_rsb(bus, dec, &mut self.gpr)?,
+                arm::Instruction::ADD(dec) => exec_add(bus, dec, &mut self.gpr)?,
+                arm::Instruction::ADC(dec) => exec_adc(bus, dec, &mut self.gpr, &self.cpsr)?,
+                arm::Instruction::SBC(dec) => exec_sbc(bus, dec, &mut self.gpr, &self.cpsr)?,
+                arm::Instruction::RSC(dec) => exec_rsc(bus, dec, &mut self.gpr, &self.cpsr)?,
+                arm::Instruction::TST(dec) => exec_tst(bus, dec, &mut self.gpr, &mut self.cpsr)?,
+                arm::Instruction::TEQ(dec) => exec_teq(bus, dec, &mut self.gpr, &mut self.cpsr)?,
+                arm::Instruction::CMP(dec) => exec_cmp(bus, dec, &mut self.gpr, &mut self.cpsr)?,
+                arm::Instruction::CMN(dec) => exec_cmn(bus, dec, &mut self.gpr, &mut self.cpsr)?,
+                arm::Instruction::ORR(dec) => exec_orr(bus, dec, &mut self.gpr)?,
+                arm::Instruction::MOV(dec) => exec_mov(bus, dec, &mut self.gpr)?,
+                arm::Instruction::LSL(dec) => exec_shift(bus, dec, &mut self.gpr)?,
+                arm::Instruction::LSR(dec) => exec_shift(bus, dec, &mut self.gpr)?,
+                arm::Instruction::ASR(dec) => exec_shift(bus, dec, &mut self.gpr)?,
+                arm::Instruction::RRX(dec) => exec_rrx(bus, dec, &mut self.gpr, &self.cpsr)?,
+                arm::Instruction::ROR(dec) => exec_shift(bus, dec, &mut self.gpr)?,
+                arm::Instruction::BIC(dec) => exec_bic(bus, dec, &mut self.gpr)?,
+                arm::Instruction::MVN(dec) => exec_mvn(bus, dec, &mut self.gpr)?,
+                arm::Instruction::MUL(dec) => exec_mul(bus, dec, &mut self.gpr, &self.cpsr)?,
+                arm::Instruction::MLA(dec) => exec_mla(bus, dec, &mut self.gpr, &self.cpsr)?,
+                arm::Instruction::UMULL(dec) => exec_umull(bus, dec, &mut self.gpr, &self.cpsr)?,
+                arm::Instruction::UMLAL(dec) => exec_umlal(bus, dec, &mut self.gpr, &self.cpsr)?,
+                arm::Instruction::SMULL(dec) => exec_smull(bus, dec, &mut self.gpr, &self.cpsr)?,
+                arm::Instruction::SMLAL(dec) => exec_smlal(bus, dec, &mut self.gpr, &self.cpsr)?,
+                arm::Instruction::LDR(dec) => exec_ldr(bus, dec, &mut self.gpr)?,
+                arm::Instruction::STR(dec) => exec_str(bus, dec, &mut self.gpr)?,
+                arm::Instruction::LDRB(dec) => exec_ldrb(bus, dec, &mut self.gpr)?,
+                arm::Instruction::STRB(dec) => exec_strb(bus, dec, &mut self.gpr)?,
+                arm::Instruction::STRH(dec) => exec_strh(bus, dec, &mut self.gpr)?,
+                arm::Instruction::LDRH(dec) => exec_ldrh(bus, dec, &mut self.gpr)?,
+                arm::Instruction::LDRSB(dec) => exec_ldrsb(bus, dec, &mut self.gpr)?,
+                arm::Instruction::LDRSH(dec) => exec_ldrsh(bus, dec, &mut self.gpr)?,
+                arm::Instruction::B(dec) => exec_b(dec, &mut self.gpr)?,
+                arm::Instruction::BL(dec) => exec_bl(dec, &mut self.gpr)?,
+                arm::Instruction::BX(dec) => exec_bx(dec, &mut self.cpsr, &mut self.gpr)?,
+                arm::Instruction::LDM(dec) => exec_ldm(bus, dec, &mut self.gpr)?,
+                arm::Instruction::STM(dec) => exec_stm(bus, dec, &mut self.gpr)?,
+                arm::Instruction::MRS(dec) => {
                     exec_mrs(dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr)?
                 }
-                Instruction::MSR(dec) => {
+                arm::Instruction::MSR(dec) => {
                     exec_msr(dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr)?
                 }
-                Instruction::Undefined => unimplemented!(),
+                arm::Instruction::Undefined => unimplemented!(),
                 //arm::Opcode::NOP => unimplemented!(),
                 //// arm::Opcode::SWI => unimplemented!(),
                 // ArmOpcode::Unknown => self.execute_unknown(dec),
+                _ => unimplemented!(),
+            }
+        };
+        match pipeline_status {
+            PipelineStatus::Continue => self.increment_pc(),
+            PipelineStatus::Flush => self.flush_pipeline(),
+        };
+        Ok(())
+    }
+
+    fn execute_thumb<T>(&mut self, instruction: thumb::Instruction, bus: &mut T) -> Result<(), ()>
+    where
+        T: BusAccessor,
+    {
+        debug!("execute thumb {:?}", &instruction);
+        let pipeline_status = {
+            match instruction {
+                thumb::Instruction::LDR3(dec) => exec_ldr3(bus, dec, &mut self.gpr)?,
                 _ => unimplemented!(),
             }
         };
@@ -153,6 +174,7 @@ impl ARM {
         T: BusAccessor,
     {
         if self.pipeline_wait > 0 {
+            dbg!("inc pc");
             self.pipeline_wait -= 1;
             self.increment_pc();
             return Ok(());
@@ -160,17 +182,34 @@ impl ARM {
         debug!("registers = {:?} {:?}", self.gpr, self.cpsr.get_cpu_state());
         match self.cpsr.get_cpu_state() {
             CpuState::ARM => {
-                // debug!("fetch addr = 0x{:x}", self.gpr[PC] - (PC_OFFSET * 4) as u32);
-                let fetched = bus.read_word(self.gpr[PC] - (PC_OFFSET * 4) as u32);
-                // debug!("fetched code = {:x}", fetched);
-                let instruction = decode(fetched);
-                self.execute(instruction, bus)
+                let fetched = self.prefetch_arm(bus);
+                let instruction = arm::decode(fetched);
+                self.execute_arm(instruction, bus)
             }
             CpuState::Thumb => {
                 dbg!("thumb!!");
-                return Ok(());
+                let fetched = self.prefetch_thumb(bus);
+                debug!("{:x}", fetched);
+                let instruction = thumb::decode(fetched);
+                self.execute_thumb(instruction, bus)
             }
         }
+    }
+
+    fn prefetch_arm<T>(&mut self, bus: &mut T) -> Word
+    where
+        T: BusAccessor,
+    {
+        let fetched = bus.read_word(self.gpr[PC] - (PC_OFFSET * 4) as u32);
+        fetched
+    }
+
+    fn prefetch_thumb<T>(&mut self, bus: &mut T) -> HalfWord
+    where
+        T: BusAccessor,
+    {
+        let fetched = bus.read_halfword(self.gpr[PC] - (PC_OFFSET * 2) as u32);
+        fetched
     }
 
     pub fn get_gpr(&self, n: usize) -> Word {
@@ -221,6 +260,10 @@ mod test {
     impl BusAccessor for MockBus {
         fn read_byte(&self, addr: Word) -> Byte {
             self.mem[addr as usize]
+        }
+
+        fn read_halfword(&self, addr: Word) -> HalfWord {
+            LittleEndian::read_u16(&self.mem[(addr as usize)..])
         }
 
         fn read_word(&self, addr: Word) -> Word {

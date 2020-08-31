@@ -44,6 +44,15 @@ impl BusAccessor for CpuBus {
             _ => panic!("TODO: "),
         }
     }
+
+    fn read_halfword(&self, addr: u32) -> HalfWord {
+        debug!("read half word addr = {:x}", addr);
+        match addr {
+            0x0000_0000..=0x0007_FFFF => self.rom.read_halfword(addr),
+            _ => panic!("TODO: "),
+        }
+    }
+
     fn read_word(&self, addr: u32) -> Word {
         debug!("read word addr = {:x}", addr);
         match addr {
