@@ -40,3 +40,5 @@ pub(crate) const RD: u32 = 0x0000F000;
 pub(crate) const SP: usize = 13;
 pub(crate) const LR: usize = 14;
 pub(crate) const PC: usize = 15;
+
+pub const PC_OFFSET: u32 = 2;

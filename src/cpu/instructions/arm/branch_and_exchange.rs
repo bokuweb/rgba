@@ -15,6 +15,7 @@ pub fn exec_bx(
         // Switch cpu mode to execute thumb instructions.
         cpsr.set_cpu_state(CpuState::Thumb);
         debug!("Switch cpu state to thumb");
+        dbg!(addr);
         gpr[PC] = addr & !0x1;
     } else {
         // clear Rm[1:0]
