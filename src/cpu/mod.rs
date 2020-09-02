@@ -32,6 +32,7 @@ use std::path::Path;
 use types::*;
 
 struct CpuBus {
+    bios: Rom,
     rom: Rom,
     ram: Ram,
 }
@@ -40,7 +41,8 @@ impl BusAccessor for CpuBus {
     fn read_byte(&self, addr: u32) -> Byte {
         debug!("read byte addr = {:x}", addr);
         match addr {
-            0x0000_0000..=0x0007_FFFF => self.rom.read_byte(addr),
+            0x0000_0000..=0x0000_3FFF => self.bios.read_byte(addr),
+            0x0800_0000..=0x09FF_FFFF => self.rom.read_byte(addr - 0x0800_0000),
             _ => panic!("TODO: "),
         }
     }
@@ -48,7 +50,8 @@ impl BusAccessor for CpuBus {
     fn read_halfword(&self, addr: u32) -> HalfWord {
         debug!("read half word addr = {:x}", addr);
         match addr {
-            0x0000_0000..=0x0007_FFFF => self.rom.read_halfword(addr),
+            0x0000_0000..=0x0000_3FFF => self.bios.read_halfword(addr),
+            0x0800_0000..=0x09FF_FFFF => self.rom.read_halfword(addr - 0x0800_0000),
             _ => panic!("TODO: "),
         }
     }
@@ -56,7 +59,8 @@ impl BusAccessor for CpuBus {
     fn read_word(&self, addr: u32) -> Word {
         debug!("read word addr = {:x}", addr);
         match addr {
-            0x0000_0000..=0x0007_FFFF => self.rom.read_word(addr),
+            0x0000_0000..=0x0000_3FFF => self.bios.read_word(addr),
+            0x0800_0000..=0x09FF_FFFF => self.rom.read_word(addr - 0x0800_0000),
             _ => panic!("TODO: "),
         }
     }
@@ -84,8 +88,8 @@ impl BusAccessor for CpuBus {
 }
 
 impl CpuBus {
-    fn new(rom: Rom, ram: Ram) -> CpuBus {
-        CpuBus { rom, ram }
+    fn new(bios: Rom, rom: Rom, ram: Ram) -> CpuBus {
+        CpuBus { bios, rom, ram }
     }
 }
 
@@ -104,33 +108,13 @@ pub fn run() {
     let bin_path = env::args().nth(1).expect("Specify bin filename to build.");
     let bin = load_bin(bin_path).expect("faild to read bin");
     // debug!("read bin data = {:?}", bin);
-    let rom = Rom::new(0x80000, bin);
+    let bios = Rom::new(0x4000, &include_bytes!("../../bios/bios.bin")[..]);
+    let rom = Rom::new(0x80000, &bin);
     let ram = Ram::new(vec![0; 0x10000]);
-    let mut bus = CpuBus::new(rom, ram);
+    let mut bus = CpuBus::new(bios, rom, ram);
     let mut arm = cpu::ARM::new();
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
-    arm.tick(&mut bus);
+
+    for _ in 0..40 {
+        arm.tick(&mut bus);
+    }
 }

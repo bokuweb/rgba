@@ -5,7 +5,7 @@ use crate::cpu::constants::*;
 use crate::cpu::decoder::thumb::*;
 use crate::cpu::types::*;
 
-pub fn exec_ldr3<T>(
+pub fn exec_thumb_ldr3<T>(
     bus: &mut T,
     dec: SingleDataTransfer,
     gpr: &mut [Word; 16],
@@ -15,8 +15,8 @@ where
 {
     let rd = dec.get_Rd10_8() as usize;
     let offset = dec.get_off8() as u32;
-    let pc = gpr[PC] - (PC_OFFSET * 2);
-    let addr = (pc & 0xFFFF_FFFC) + offset;
+    let pc = gpr[PC];
+    let addr = (pc & 0xFFFF_FFFC) + offset.wrapping_shl(2);
     let data = bus.read_word(addr);
     // TODO: calc cycle
     gpr[rd] = data;

@@ -4,8 +4,7 @@ use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::*;
 use crate::cpu::types::*;
-
-use super::shift::shift;
+use crate::cpu::instructions::shift::*;
 
 fn exec_memory_processing<F>(
     gpr: &mut [u32; 16],

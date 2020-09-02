@@ -89,6 +89,14 @@ impl PSR {
     pub fn set_flags(&mut self, value: u32) {
         self.set_flag_bits(value >> 28);
     }
+
+    pub fn set_N_from(&mut self, reg: u32) {
+        self.set_N(reg >> 31 == 0x01);
+    }
+
+    pub fn set_Z_from(&mut self, reg: u32) {
+        self.set_Z(reg == 0x0);
+    }
 }
 
 impl Default for PSR {

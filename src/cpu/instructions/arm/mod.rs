@@ -6,4 +6,3 @@ pub mod extra_memory;
 pub mod memory;
 pub mod multiple;
 pub mod psr_transfer;
-pub mod shift;
