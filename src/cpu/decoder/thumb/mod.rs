@@ -1,16 +1,12 @@
 use crate::cpu::types::HalfWord;
 
+mod branch;
 mod data_processing;
 mod single_data_transfer;
 
+pub use branch::*;
 pub use data_processing::*;
 pub use single_data_transfer::*;
-
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum InstructionType {
-    SingleDataTransfer,
-    DataProcessing,
-}
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Instruction {
@@ -21,6 +17,7 @@ pub enum Instruction {
     LSL(DataProcessing),
     LSR(DataProcessing),
     ASR(DataProcessing),
+    B(Branch),
 }
 
 pub fn decode(raw: HalfWord) -> Instruction {
@@ -37,6 +34,8 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 _ => unreachable!("unknown thumb data processing instruction {}", dec.get_op()),
             }
         }
+        v if ((v & 0x7F00) == 0x5F00) => todo!("SWI"),
+        v if ((v & 0x7000) == 0x5000) => Instruction::B(Branch(v)),
         _ => panic!("Unsupported instruction"),
     }
 }
