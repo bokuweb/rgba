@@ -1,7 +1,7 @@
 use super::super::PipelineStatus;
 
 use crate::cpu::decoder::arm::*;
-use crate::cpu::instructions::arm::shift::ror;
+use crate::cpu::instructions::shift::ror;
 use crate::cpu::registers::psr::{Mode, PSR};
 use crate::cpu::types::*;
 
