@@ -1,9 +1,9 @@
 use super::super::PipelineStatus;
 
-use super::shift::{is_carry_over, ror, shift};
 use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::*;
+use crate::cpu::instructions::shift::{is_carry_over, ror, shift};
 use crate::cpu::registers::psr::PSR;
 use crate::cpu::types::*;
 
@@ -13,7 +13,7 @@ pub fn exec_data_processing<F>(
     data_process: &mut F,
 ) -> Result<PipelineStatus, ()>
 where
-    F: FnMut(&mut [Word; 16], Word, Option<bool>),
+    F: FnMut(&mut [Word; 16], Word, bool),
 {
     let (value, carry) = if dec.get_I() {
         let shift_value = dec.get_rotate() * 2;
@@ -198,8 +198,8 @@ where
         let tst = gpr[rn] & value;
         cspr.set_N(tst >> 31 != 0);
         cspr.set_Z(tst == 0);
-        if let Some(c) = carry {
-            cspr.set_C(c);
+        if carry {
+            cspr.set_C(true);
         }
     })
 }
@@ -218,8 +218,8 @@ where
         let teq = gpr[rn] ^ value;
         cspr.set_N(teq >> 31 != 0);
         cspr.set_Z(teq == 0);
-        if let Some(c) = carry {
-            cspr.set_C(c);
+        if carry {
+            cspr.set_C(true);
         }
     })
 }

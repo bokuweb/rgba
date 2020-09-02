@@ -158,7 +158,10 @@ impl ARM {
         debug!("execute thumb {:?}", &instruction);
         let pipeline_status = {
             match instruction {
-                thumb::Instruction::LDR3(dec) => exec_ldr3(bus, dec, &mut self.gpr)?,
+                thumb::Instruction::LDR3(dec) => exec_thumb_ldr3(bus, dec, &mut self.gpr)?,
+                thumb::Instruction::LSL(dec) => {
+                    exec_thumb_lsl(bus, dec, &mut self.gpr, &mut self.cpsr)?
+                }
                 _ => unimplemented!(),
             }
         };
