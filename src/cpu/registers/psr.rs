@@ -1,3 +1,5 @@
+use crate::cpu::types::*;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum CpuState {
     ARM,
@@ -96,6 +98,26 @@ impl PSR {
 
     pub fn set_Z_from(&mut self, reg: u32) {
         self.set_Z(reg == 0x0);
+    }
+
+    pub fn condition_ok(&self, cond: Cond) -> bool {
+        match cond {
+            Cond::EQ => self.get_Z(),
+            Cond::NE => !self.get_Z(),
+            Cond::CS_HS => self.get_C(),
+            Cond::CC_LO => !self.get_C(),
+            Cond::MI => self.get_N(),
+            Cond::PL => !self.get_N(),
+            Cond::VS => self.get_V(),
+            Cond::VC => !self.get_V(),
+            Cond::HI => self.get_C() && !self.get_Z(),
+            Cond::LS => !self.get_C() || self.get_Z(),
+            Cond::GE => !self.get_N() == !self.get_V(),
+            Cond::LT => !self.get_N() != !self.get_V(),
+            Cond::GT => !self.get_Z() && !self.get_N() == !self.get_V(),
+            Cond::LE => self.get_Z() || !self.get_N() != !self.get_V(),
+            Cond::AL => true,
+        }
     }
 }
 
