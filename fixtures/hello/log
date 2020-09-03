@@ -19,6 +19,7 @@ core.ts:589 BX e12fff10
 core.ts:168 switchExecMode 1
 core.ts:1208 T LDR(3) 482b
 core.ts:1160 T LSL(1) 140
+[33554432, 262144, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50364160, 0, 134218030]
 core.ts:1413 T B(1) -2df5
 core.ts:1185 T MOV(1) 2140
 core.ts:1160 T LSL(1) 309
