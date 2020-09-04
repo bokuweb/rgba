@@ -17,6 +17,7 @@ pub enum Instruction {
     LSL(DataProcessing),
     LSR(DataProcessing),
     ASR(DataProcessing),
+    MOV1(DataProcessing),
     B(Branch),
 }
 
@@ -31,6 +32,16 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 0b00 => Instruction::LSL(dec),
                 0b01 => Instruction::LSR(dec),
                 0b10 => Instruction::ASR(dec),
+                _ => unreachable!("unknown thumb data processing instruction {}", dec.get_op()),
+            }
+        }
+        v if ((v & 0xE000) == 0x2000) => {
+            let dec = DataProcessing(v);
+            match dec.get_op() {
+                0b00 => Instruction::MOV1(dec),
+                0b01 => todo!("CMP1"),
+                0b10 => todo!("ADD2"),
+                0b11 => todo!("SUB2"),
                 _ => unreachable!("unknown thumb data processing instruction {}", dec.get_op()),
             }
         }

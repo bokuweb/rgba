@@ -15,7 +15,7 @@ pub fn exec_thumb_lsl<T>(
 where
     T: BusAccessor,
 {
-    let rd = dec.get_Rd() as usize;
+    let rd = dec.get_Rd2_0() as usize;
     let rn = dec.get_Rn() as usize;
     let sh = dec.get_sh() as u32;
 
@@ -27,5 +27,17 @@ where
     }
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
+    Ok(PipelineStatus::Continue)
+}
+
+pub fn exec_thumb_mov1(
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+) -> Result<PipelineStatus, ()> {
+    let imm = dec.get_imm8() as u32;
+    gpr[dec.get_Rd10_8() as usize] = imm;
+    cpsr.set_N_from(imm);
+    cpsr.set_Z_from(imm);
     Ok(PipelineStatus::Continue)
 }
