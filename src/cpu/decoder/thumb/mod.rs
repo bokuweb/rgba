@@ -19,6 +19,7 @@ pub enum Instruction {
     ASR(DataProcessing),
     MOV1(DataProcessing),
     B(Branch),
+    BL(Branch),
 }
 
 pub fn decode(raw: HalfWord) -> Instruction {
@@ -46,6 +47,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
             }
         }
         v if ((v & 0x7F00) == 0x5F00) => todo!("SWI"),
+        v if ((v & 0xF000) == 0xF000) => Instruction::BL(Branch(v)),
         v if ((v & 0x7000) == 0x5000) => Instruction::B(Branch(v)),
         _ => panic!("Unsupported instruction"),
     }
