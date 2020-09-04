@@ -162,6 +162,9 @@ impl ARM {
                 thumb::Instruction::LSL(dec) => {
                     exec_thumb_lsl(bus, dec, &mut self.gpr, &mut self.cpsr)?
                 }
+                thumb::Instruction::MOV1(dec) => {
+                    exec_thumb_mov1(dec, &mut self.gpr, &mut self.cpsr)?
+                }
                 thumb::Instruction::B(dec) => exec_thumb_b(dec, &mut self.gpr, &mut self.cpsr)?,
                 _ => unimplemented!(),
             }
