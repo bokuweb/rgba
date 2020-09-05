@@ -100,6 +100,15 @@ impl PSR {
         self.set_Z(reg == 0x0);
     }
 
+    pub fn set_C_from(&mut self, reg: u64) {
+        self.set_C(reg > 0xFFFF_FFFF);
+    }
+
+    pub fn set_V_from(&mut self, cur: u32, reg: u32) {
+        let v = (cur >> 31) != 0 && (((cur >> 31) ^ reg) >> 31) != 0 && (reg >> 31) == 0;
+        self.set_V(v);
+    }
+
     pub fn condition_ok(&self, cond: Cond) -> bool {
         match cond {
             Cond::EQ => self.get_Z(),
