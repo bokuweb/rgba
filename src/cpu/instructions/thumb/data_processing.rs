@@ -27,12 +27,24 @@ pub fn exec_thumb_add3(
     gpr: &mut [Word; 16],
     cpsr: &mut PSR,
 ) -> Result<PipelineStatus, ()> {
-    let d = (gpr[dec.get_Rn() as usize]) as u64 + (gpr[dec.get_Rm() as usize]) as u64;
+    let d = (gpr[dec.get_Rn() as usize]) as u64 + (gpr[dec.get_Rm8_6() as usize]) as u64;
     cpsr.set_N_from(d as u32);
     cpsr.set_Z_from(d as u32);
     cpsr.set_C_from(d);
     cpsr.set_V_from(gpr[dec.get_Rd2_0() as usize], d as u32);
     gpr[dec.get_Rd2_0() as usize] = d as u32;
+    Ok(PipelineStatus::Continue)
+}
+
+pub fn exec_thumb_bic(
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+) -> Result<PipelineStatus, ()> {
+    let d = gpr[dec.get_Rd2_0() as usize] & !gpr[dec.get_Rm5_3() as usize];
+    gpr[dec.get_Rd2_0() as usize] = d;
+    cpsr.set_N_from(d as u32);
+    cpsr.set_Z_from(d as u32);
     Ok(PipelineStatus::Continue)
 }
 
