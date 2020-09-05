@@ -6,6 +6,36 @@ use crate::cpu::instructions::shift::*;
 use crate::cpu::registers::psr::PSR;
 use crate::cpu::types::*;
 
+pub fn exec_thumb_add1(
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+) -> Result<PipelineStatus, ()> {
+    let imm = dec.get_imm3() as u32;
+    let d = ((gpr[dec.get_Rn() as usize]) + imm) as u64;
+
+    cpsr.set_N_from(d as u32);
+    cpsr.set_Z_from(d as u32);
+    cpsr.set_C_from(d);
+    cpsr.set_V_from(gpr[dec.get_Rd2_0() as usize], d as u32);
+    gpr[dec.get_Rd2_0() as usize] = d as u32;
+    Ok(PipelineStatus::Continue)
+}
+
+pub fn exec_thumb_add3(
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+) -> Result<PipelineStatus, ()> {
+    let d = (gpr[dec.get_Rn() as usize]) as u64 + (gpr[dec.get_Rm() as usize]) as u64;
+    cpsr.set_N_from(d as u32);
+    cpsr.set_Z_from(d as u32);
+    cpsr.set_C_from(d);
+    cpsr.set_V_from(gpr[dec.get_Rd2_0() as usize], d as u32);
+    gpr[dec.get_Rd2_0() as usize] = d as u32;
+    Ok(PipelineStatus::Continue)
+}
+
 pub fn exec_thumb_lsl<T>(
     bus: &mut T,
     dec: DataProcessing,
