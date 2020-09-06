@@ -36,6 +36,7 @@ pub enum Instruction {
     LSR(DataProcessing),
     ASR(DataProcessing),
     MOV1(DataProcessing),
+    SUB2(DataProcessing),
     B(Branch),
     BL(Branch),
     LDMIA(BlockDataTransfer),
@@ -91,7 +92,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 0b00 => Instruction::MOV1(dec),
                 0b01 => todo!("CMP1"),
                 0b10 => todo!("ADD2"),
-                0b11 => todo!("SUB2"),
+                0b11 => Instruction::SUB2(dec),
                 _ => unreachable!(
                     "unknown thumb data processing instruction {}",
                     dec.get_op12_11()
