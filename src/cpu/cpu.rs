@@ -194,6 +194,8 @@ impl ARM {
                 }
                 thumb::Instruction::B(dec) => exec_thumb_b(dec, &mut self.gpr, &mut self.cpsr)?,
                 thumb::Instruction::BL(dec) => exec_thumb_bl(dec, &mut self.gpr)?,
+                thumb::Instruction::STMIA(dec) => exec_thumb_stmia(bus, dec, &mut self.gpr)?,
+                thumb::Instruction::LDMIA(dec) => exec_thumb_stmia(bus, dec, &mut self.gpr)?,
                 _ => unimplemented!(),
             }
         };
