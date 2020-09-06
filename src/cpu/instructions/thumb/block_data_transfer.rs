@@ -14,15 +14,36 @@ where
 {
     let mut base = gpr[dec.get_Rn() as usize];
     let register_list = dec.get_register_list();
-    dbg!(register_list);
     for i in 0..0x8 {
         if register_list & (1 << i) != 0 {
-            dbg!(base, gpr[i as usize]);
             bus.write_word(base, gpr[i as usize] as Word);
             base = base.wrapping_add(4);
         }
     }
     gpr[dec.get_Rn() as usize] = base;
-    dbg!(&gpr);
+    Ok(PipelineStatus::Continue)
+}
+
+pub fn exec_thumb_ldmia<T>(
+    bus: &T,
+    dec: BlockDataTransfer,
+    gpr: &mut [Word; 16],
+) -> Result<PipelineStatus, ()>
+where
+    T: BusAccessor,
+{
+    let rn = dec.get_Rn();
+    let mut base = gpr[rn as usize];
+    let register_list = dec.get_register_list();
+    for i in 0..0x8 {
+        if register_list & (1 << i) != 0 {
+            let d = bus.read_word(base);
+            gpr[i] = d;
+            base = base.wrapping_add(4);
+        }
+    }
+    if (1 << rn) & register_list == 0 {
+        gpr[rn as usize] = base;
+    }
     Ok(PipelineStatus::Continue)
 }
