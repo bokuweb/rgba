@@ -1,9 +1,11 @@
 use crate::cpu::types::HalfWord;
 
+mod block_data_transfer;
 mod branch;
 mod data_processing;
 mod single_data_transfer;
 
+pub use block_data_transfer::*;
 pub use branch::*;
 pub use data_processing::*;
 pub use single_data_transfer::*;
@@ -36,6 +38,10 @@ pub enum Instruction {
     MOV1(DataProcessing),
     B(Branch),
     BL(Branch),
+    LDMIA(BlockDataTransfer),
+    STMIA(BlockDataTransfer),
+    POP(BlockDataTransfer),
+    PUSH(BlockDataTransfer),
 }
 
 pub fn decode(raw: HalfWord) -> Instruction {
@@ -95,6 +101,22 @@ pub fn decode(raw: HalfWord) -> Instruction {
         v if ((v & 0x7F00) == 0x5F00) => todo!("SWI"),
         v if ((v & 0xF000) == 0xF000) => Instruction::BL(Branch(v)),
         v if ((v & 0x7000) == 0x5000) => Instruction::B(Branch(v)),
+        v if ((v & 0xF000) == 0xC000) => {
+            let dec = BlockDataTransfer(v);
+            if dec.get_L() {
+                Instruction::LDMIA(dec)
+            } else {
+                Instruction::STMIA(dec)
+            }
+        }
+        v if ((v & 0xF000) == 0xD000) => {
+            let dec = BlockDataTransfer(v);
+            if dec.get_L() {
+                Instruction::POP(dec)
+            } else {
+                Instruction::PUSH(dec)
+            }
+        }
         _ => panic!("Unsupported instruction"),
     }
 }
