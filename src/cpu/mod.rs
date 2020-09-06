@@ -17,12 +17,10 @@ pub(crate) use bus::accessor::*;
 // use constants::*;
 // use error::*;
 use super::memory::ram::Ram;
-use super::memory::readable::*;
 use super::memory::rom::Rom;
-// use super::memory::writable::*;
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use super::memory::readable::*;
+use super::memory::writable::*;
 
 use std::env;
 use std::fs::File;
@@ -34,7 +32,7 @@ use types::*;
 struct CpuBus {
     bios: Rom,
     rom: Rom,
-    ram: Ram,
+    eram: Ram,
 }
 
 impl BusAccessor for CpuBus {
@@ -78,6 +76,9 @@ impl BusAccessor for CpuBus {
             0x0000_0000..=0x0007_FFFF => {
                 self.rom.read_word(addr);
             }
+            0x0200_0000..=0x0203_FFFF => {
+                self.eram.write_word(addr - 0x0200_0000, data);
+            }
             // I/O Register
             0x0400_0000..=0x0400_03FE => {
                 debug!("I/O register is not implemented yet.");
@@ -88,8 +89,8 @@ impl BusAccessor for CpuBus {
 }
 
 impl CpuBus {
-    fn new(bios: Rom, rom: Rom, ram: Ram) -> CpuBus {
-        CpuBus { bios, rom, ram }
+    fn new(bios: Rom, rom: Rom, eram: Ram) -> CpuBus {
+        CpuBus { bios, rom, eram }
     }
 }
 
@@ -110,8 +111,8 @@ pub fn run() {
     // debug!("read bin data = {:?}", bin);
     let bios = Rom::new(0x4000, &include_bytes!("../../bios/bios.bin")[..]);
     let rom = Rom::new(0x80000, &bin);
-    let ram = Ram::new(vec![0; 0x10000]);
-    let mut bus = CpuBus::new(bios, rom, ram);
+    let eram = Ram::new(vec![0; 0x4_0000]);
+    let mut bus = CpuBus::new(bios, rom, eram);
     let mut arm = cpu::ARM::new();
 
     for _ in 0..50 {
