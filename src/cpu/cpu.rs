@@ -192,6 +192,9 @@ impl ARM {
                 thumb::Instruction::MOV1(dec) => {
                     exec_thumb_mov1(dec, &mut self.gpr, &mut self.cpsr)?
                 }
+                thumb::Instruction::SUB2(dec) => {
+                    exec_thumb_sub2(dec, &mut self.gpr, &mut self.cpsr)?
+                }
                 thumb::Instruction::B(dec) => exec_thumb_b(dec, &mut self.gpr, &mut self.cpsr)?,
                 thumb::Instruction::BL(dec) => exec_thumb_bl(dec, &mut self.gpr)?,
                 thumb::Instruction::STMIA(dec) => exec_thumb_stmia(bus, dec, &mut self.gpr)?,
