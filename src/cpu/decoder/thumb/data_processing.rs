@@ -5,12 +5,14 @@ bitfield! {
     pub get_op9_6, _: 9, 6;
     #[allow(non_snake_case)]
     pub get_Rd10_8, _: 10, 8;
+    #[allow(non_snake_case)]
+    pub get_Rn10_8, _: 10, 8;
     pub get_sh, _: 10, 6;
     pub get_imm3, _: 8, 6;
     #[allow(non_snake_case)]
     pub get_Rm8_6, _: 8, 6;
     #[allow(non_snake_case)]
-    pub get_Rn, _: 5, 3;
+    pub get_Rn5_3, _: 5, 3;
     #[allow(non_snake_case)]
     pub get_Rs, _: 5, 3;
     #[allow(non_snake_case)]

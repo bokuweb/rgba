@@ -115,7 +115,7 @@ pub fn run() {
     let mut bus = CpuBus::new(bios, rom, eram);
     let mut arm = cpu::ARM::new();
 
-    for _ in 0..50 {
+    for _ in 0..100 {
         arm.tick(&mut bus);
     }
 }
