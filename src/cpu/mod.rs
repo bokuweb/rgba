@@ -32,6 +32,7 @@ use types::*;
 struct CpuBus {
     bios: Rom,
     rom: Rom,
+    wram: Ram,
     eram: Ram,
     vram: Ram,
 }
@@ -89,6 +90,14 @@ impl BusAccessor for CpuBus {
             0x0200_0000..=0x0203_FFFF => {
                 self.eram.write_word(addr - 0x0200_0000, data);
             }
+            // WRAM
+            0x0300_0000..=0x0300_7FFF => {
+                self.wram.write_word(addr - 0x0300_0000, data);
+            }
+            // Unused
+            0x0300_8000..=0x03FF_FFFF => {
+                dbg!(format!("{:x}", addr));
+            }
             // I/O Register
             0x0400_0000..=0x0400_03FE => {
                 dbg!("I/O register is not implemented yet.");
@@ -99,10 +108,11 @@ impl BusAccessor for CpuBus {
 }
 
 impl CpuBus {
-    fn new(bios: Rom, rom: Rom, eram: Ram, vram: Ram) -> CpuBus {
+    fn new(bios: Rom, rom: Rom, wram: Ram, eram: Ram, vram: Ram) -> CpuBus {
         CpuBus {
             bios,
             rom,
+            wram,
             eram,
             vram,
         }
@@ -126,9 +136,10 @@ pub fn run() {
     // debug!("read bin data = {:?}", bin);
     let bios = Rom::new(0x4000, &include_bytes!("../../bios/bios.bin")[..]);
     let rom = Rom::new(0x80000, &bin);
+    let wram = Ram::new(vec![0; 0x8000]);
     let eram = Ram::new(vec![0; 0x4_0000]);
     let vram = Ram::new(vec![0; 0x1_8000]);
-    let mut bus = CpuBus::new(bios, rom, eram, vram);
+    let mut bus = CpuBus::new(bios, rom, wram, eram, vram);
     let mut arm = cpu::ARM::new();
 
     for _ in 0..1000000 {

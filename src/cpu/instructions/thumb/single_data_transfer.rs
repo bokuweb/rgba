@@ -20,5 +20,6 @@ where
     let data = bus.read_word(addr);
     // TODO: calc cycle
     gpr[rd] = data;
+    dbg!(&gpr);
     Ok(PipelineStatus::Continue)
 }
