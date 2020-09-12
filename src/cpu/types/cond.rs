@@ -1,3 +1,4 @@
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Cond {
     EQ = 0b0000,
     NE = 0b0001,

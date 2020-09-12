@@ -6,7 +6,7 @@ pub type Byte = u8;
 pub type HalfWord = u16;
 pub type Word = u32;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Shift {
     LSL,
     LSR,

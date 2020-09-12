@@ -81,7 +81,7 @@ impl BusAccessor for CpuBus {
             }
             // I/O Register
             0x0400_0000..=0x0400_03FE => {
-                debug!("I/O register is not implemented yet.");
+                todo!("I/O register is not implemented yet.");
             }
             _ => panic!("TODO: "),
         };
@@ -115,7 +115,7 @@ pub fn run() {
     let mut bus = CpuBus::new(bios, rom, eram);
     let mut arm = cpu::ARM::new();
 
-    for _ in 0..50 {
+    for _ in 0..100 {
         arm.tick(&mut bus);
     }
 }

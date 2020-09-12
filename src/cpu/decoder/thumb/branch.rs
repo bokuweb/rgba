@@ -9,6 +9,7 @@ bitfield! {
     pub get_offset8, _: 7, 0;
     #[allow(non_snake_case)]
     pub get_L, _: 7;
+    pub get_bit7, _: 7;
     #[allow(non_snake_case)]
     pub get_H6, _: 6;
     #[allow(non_snake_case)]
