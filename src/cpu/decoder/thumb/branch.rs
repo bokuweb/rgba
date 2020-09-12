@@ -13,6 +13,6 @@ bitfield! {
     #[allow(non_snake_case)]
     pub get_H6, _: 6;
     #[allow(non_snake_case)]
-    pub get_Rm, _: 5, 3;
+    pub get_Rm, _: 6, 3;
 }
 

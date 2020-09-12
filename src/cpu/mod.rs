@@ -81,7 +81,7 @@ impl BusAccessor for CpuBus {
     }
 
     fn write_word(&mut self, addr: u32, data: Word) {
-        info!("write word addr = 0x{:x} data = 0x{:x}", addr, data);
+        // info!("write word addr = 0x{:x} data = 0x{:x}", addr, data);
         match addr {
             0x0000_0000..=0x0007_FFFF => {
                 self.rom.read_word(addr);
@@ -93,7 +93,7 @@ impl BusAccessor for CpuBus {
             0x0400_0000..=0x0400_03FE => {
                 dbg!("I/O register is not implemented yet.");
             }
-            _ => panic!("TODO: "),
+            _ => panic!("TODO: addr = {:x} data = {:x}", addr, data),
         };
     }
 }
@@ -131,7 +131,7 @@ pub fn run() {
     let mut bus = CpuBus::new(bios, rom, eram, vram);
     let mut arm = cpu::ARM::new();
 
-    for _ in 0..100 {
+    for _ in 0..1000000 {
         arm.tick(&mut bus);
     }
 }

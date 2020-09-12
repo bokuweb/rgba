@@ -15,7 +15,7 @@ pub fn exec_thumb_b(
     let mut offset = dec.get_offset8() as i8;
 
     let cond: Cond = dec.get_cond().into();
-    dbg!(cpsr.condition_ok(cond.clone()), offset);
+    // dbg!(cpsr.condition_ok(cond.clone()), offset);
     if cpsr.condition_ok(cond) {
         gpr[PC] = (gpr[PC] as i64 + (offset as i64).wrapping_shl(1)) as u32;
         return Ok(PipelineStatus::Flush);
