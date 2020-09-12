@@ -307,11 +307,15 @@ mod test {
             LittleEndian::read_u32(&self.mem[(addr as usize)..])
         }
 
-        fn write_byte(&mut self, addr: Word, data: u8) {
+        fn write_byte(&mut self, addr: Word, data: Byte) {
             self.mem[(addr as usize)] = data;
         }
 
-        fn write_word(&mut self, addr: Word, data: u32) {
+        fn write_halfword(&mut self, addr: Word, data: HalfWord) {
+            LittleEndian::write_u16(&mut self.mem[(addr as usize)..], data);
+        }
+
+        fn write_word(&mut self, addr: Word, data: Word) {
             LittleEndian::write_u32(&mut self.mem[(addr as usize)..], data);
         }
     }

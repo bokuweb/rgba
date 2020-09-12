@@ -33,6 +33,7 @@ struct CpuBus {
     bios: Rom,
     rom: Rom,
     eram: Ram,
+    vram: Ram,
 }
 
 impl BusAccessor for CpuBus {
@@ -62,7 +63,8 @@ impl BusAccessor for CpuBus {
             _ => panic!("TODO: "),
         }
     }
-    fn write_byte(&mut self, addr: u32, data: u8) {
+
+    fn write_byte(&mut self, addr: u32, data: Byte) {
         info!("write byte addr = 0x{:x} data = 0x{:x}", addr, data);
         match addr {
             // 0x0000_0000...0x0007_FFFF => self.rom.borrow().read_word(addr),
@@ -70,7 +72,15 @@ impl BusAccessor for CpuBus {
         };
     }
 
-    fn write_word(&mut self, addr: u32, data: u32) {
+    fn write_halfword(&mut self, addr: u32, data: HalfWord) {
+        info!("write half word addr = 0x{:x} data = 0x{:x}", addr, data);
+        match addr {
+            0x0600_0000..=0x0601_7FFF => self.vram.write_halfword(addr - 0x0600_0000, data),
+            _ => panic!("TODO: "),
+        };
+    }
+
+    fn write_word(&mut self, addr: u32, data: Word) {
         info!("write word addr = 0x{:x} data = 0x{:x}", addr, data);
         match addr {
             0x0000_0000..=0x0007_FFFF => {
@@ -81,7 +91,7 @@ impl BusAccessor for CpuBus {
             }
             // I/O Register
             0x0400_0000..=0x0400_03FE => {
-                todo!("I/O register is not implemented yet.");
+                dbg!("I/O register is not implemented yet.");
             }
             _ => panic!("TODO: "),
         };
@@ -89,8 +99,13 @@ impl BusAccessor for CpuBus {
 }
 
 impl CpuBus {
-    fn new(bios: Rom, rom: Rom, eram: Ram) -> CpuBus {
-        CpuBus { bios, rom, eram }
+    fn new(bios: Rom, rom: Rom, eram: Ram, vram: Ram) -> CpuBus {
+        CpuBus {
+            bios,
+            rom,
+            eram,
+            vram,
+        }
     }
 }
 
@@ -112,7 +127,8 @@ pub fn run() {
     let bios = Rom::new(0x4000, &include_bytes!("../../bios/bios.bin")[..]);
     let rom = Rom::new(0x80000, &bin);
     let eram = Ram::new(vec![0; 0x4_0000]);
-    let mut bus = CpuBus::new(bios, rom, eram);
+    let vram = Ram::new(vec![0; 0x1_8000]);
+    let mut bus = CpuBus::new(bios, rom, eram, vram);
     let mut arm = cpu::ARM::new();
 
     for _ in 0..100 {
