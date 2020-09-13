@@ -16,6 +16,7 @@ pub enum Instruction {
     LDR2(SingleDataTransfer),
     LDR3(SingleDataTransfer),
     LDR4(SingleDataTransfer),
+    STR1(SingleDataTransfer),
     ADD3(DataProcessing),
     SUB3(DataProcessing),
     AND(DataProcessing),
@@ -49,6 +50,14 @@ pub enum Instruction {
 
 pub fn decode(raw: HalfWord) -> Instruction {
     match raw {
+        v if ((v & 0xE000) == 0x6000) => {
+            let dec = SingleDataTransfer(v);
+            if dec.get_L() {
+                Instruction::LDR1(dec)
+            } else {
+                Instruction::STR1(dec)
+            }
+        }
         v if ((v & 0xF800) == 0x4800) => Instruction::LDR3(SingleDataTransfer(v)),
         v if ((v & 0xFE00) == 0x1A00) => Instruction::SUB3(DataProcessing(v)),
         v if ((v & 0xFC00) == 0x1800) => Instruction::ADD3(DataProcessing(v)),

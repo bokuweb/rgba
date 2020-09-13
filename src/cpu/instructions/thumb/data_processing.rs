@@ -263,6 +263,7 @@ pub fn exec_thumb_bic(
     gpr[dec.get_Rd2_0() as usize] = d;
     cpsr.set_N_from(d as u32);
     cpsr.set_Z_from(d as u32);
+    dbg!("bic", &gpr);
     Ok(PipelineStatus::Continue)
 }
 

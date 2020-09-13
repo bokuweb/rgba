@@ -159,6 +159,7 @@ impl ARM {
         let pipeline_status = {
             match instruction {
                 thumb::Instruction::LDR3(dec) => exec_thumb_ldr3(bus, dec, &mut self.gpr)?,
+                thumb::Instruction::STR1(dec) => todo!("str1"),
                 thumb::Instruction::ADD3(dec) => {
                     exec_thumb_add3(dec, &mut self.gpr, &mut self.cpsr)?
                 }
@@ -202,7 +203,7 @@ impl ARM {
                 thumb::Instruction::BL(dec) => exec_thumb_bl1(dec, &mut self.gpr)?,
                 thumb::Instruction::BX(dec) => exec_thumb_bx(dec, &mut self.cpsr, &mut self.gpr)?,
                 thumb::Instruction::STMIA(dec) => exec_thumb_stmia(bus, dec, &mut self.gpr)?,
-                thumb::Instruction::LDMIA(dec) => exec_thumb_stmia(bus, dec, &mut self.gpr)?,
+                thumb::Instruction::LDMIA(dec) => exec_thumb_ldmia(bus, dec, &mut self.gpr)?,
                 _ => unimplemented!(),
             }
         };
