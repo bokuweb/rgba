@@ -23,3 +23,22 @@ where
     dbg!(&gpr);
     Ok(PipelineStatus::Continue)
 }
+
+pub fn exec_thumb_str1<T>(
+    bus: &mut T,
+    dec: SingleDataTransfer,
+    gpr: &mut [Word; 16],
+) -> Result<PipelineStatus, ()>
+where
+    T: BusAccessor,
+{
+    let rd = dec.get_Rd2_0() as usize;
+    let rn = dec.get_Rn() as usize;
+    let offset = dec.get_off5() as u32;
+
+    let addr = gpr[rn] + offset;
+    bus.write_word(addr, gpr[rd]);
+    // TODO: Add wait
+    // dbg!(&gpr);
+    Ok(PipelineStatus::Continue)
+}
