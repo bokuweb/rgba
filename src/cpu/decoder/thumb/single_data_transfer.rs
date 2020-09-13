@@ -19,6 +19,6 @@ bitfield! {
     #[allow(non_snake_case)]
     pub get_Rn, _: 5, 3;
     #[allow(non_snake_case)]
-    pub get_Rd3_0, _: 3, 0;
+    pub get_Rd2_0, _: 2, 0;
 }
 

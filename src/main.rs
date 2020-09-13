@@ -21,7 +21,7 @@ const WIDTH: u32 = 240;
 const HEIGHT: u32 = 160;
 
 fn main() {
-    std::env::set_var("RUST_LOG", "debug");
+    std::env::set_var("RUST_LOG", "info");
     pretty_env_logger::init();
     cpu::run();
 
