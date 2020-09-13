@@ -26,11 +26,12 @@ pub fn exec_thumb_b(
 pub fn exec_thumb_bl(dec: Branch, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()> {
     // TODO: Add cycle
     let offset = dec.get_offset11();
-
+dbg!("BL");
     if dec.get_H11() {
         let pc = gpr[PC];
         gpr[PC] = (gpr[LR] as i64 + ((offset as i64).wrapping_shl(1))) as u32;
         gpr[LR] = pc - 1;
+        dbg!(&gpr);
         return Ok(PipelineStatus::Flush);
     } else {
         let offset = if offset & 0x0400 != 0 {
@@ -39,6 +40,7 @@ pub fn exec_thumb_bl(dec: Branch, gpr: &mut [Word; 16]) -> Result<PipelineStatus
             (offset as i32).wrapping_shl(12)
         };
         gpr[LR] = (gpr[PC] as i64 + offset as i64) as u32;
+        dbg!(&gpr);
         return Ok(PipelineStatus::Continue);
     };
 }

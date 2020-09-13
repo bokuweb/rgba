@@ -33,6 +33,14 @@ pub fn exec_thumb_add3(
     cpsr.set_C_from(d);
     cpsr.set_V_from(gpr[dec.get_Rd2_0() as usize], d as u32);
     gpr[dec.get_Rd2_0() as usize] = d as u32;
+    dbg!(
+        "ADd3",
+        &gpr,
+        cpsr.get_C(),
+        cpsr.get_V(),
+        cpsr.get_N(),
+        cpsr.get_Z()
+    );
     Ok(PipelineStatus::Continue)
 }
 
@@ -49,6 +57,32 @@ pub fn exec_thumb_sub2(
     cpsr.set_C(gpr[rn as usize] >= imm);
     cpsr.set_V_from(gpr[dec.get_Rd10_8() as usize], d as u32);
     gpr[dec.get_Rd10_8() as usize] = d as u32;
+    Ok(PipelineStatus::Continue)
+}
+
+pub fn exec_thumb_sub3(
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+) -> Result<PipelineStatus, ()> {
+    dbg!(format!("{:x}", dec.0));
+    let rn = dec.get_Rn5_3() as usize;
+    let rm = dec.get_Rm8_6() as usize;
+    let rd = dec.get_Rd2_0() as usize;
+    let d = ((gpr[rn]) as i64 - (gpr[rm]) as i64) as u64;
+    cpsr.set_N_from(d as u32);
+    cpsr.set_Z_from(d as u32);
+    cpsr.set_C(gpr[rn] >= gpr[rm]);
+    cpsr.set_V_from(gpr[rd], d as u32);
+    gpr[rd] = d as u32;
+    dbg!(
+        "SUB3",
+        &gpr,
+        cpsr.get_C(),
+        cpsr.get_V(),
+        cpsr.get_N(),
+        cpsr.get_Z()
+    );
     Ok(PipelineStatus::Continue)
 }
 

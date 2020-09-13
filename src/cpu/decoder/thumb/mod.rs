@@ -17,6 +17,7 @@ pub enum Instruction {
     LDR3(SingleDataTransfer),
     LDR4(SingleDataTransfer),
     ADD3(DataProcessing),
+    SUB3(DataProcessing),
     AND(DataProcessing),
     EOR(DataProcessing),
     LSL2(DataProcessing),
@@ -49,6 +50,7 @@ pub enum Instruction {
 pub fn decode(raw: HalfWord) -> Instruction {
     match raw {
         v if ((v & 0xF800) == 0x4800) => Instruction::LDR3(SingleDataTransfer(v)),
+        v if ((v & 0xFE00) == 0x1A00) => Instruction::SUB3(DataProcessing(v)),
         v if ((v & 0xFC00) == 0x1800) => Instruction::ADD3(DataProcessing(v)),
         v if ((v & 0xFC00) == 0x1C00) => todo!("ADD1?"),
         v if ((v & 0xFC00) == 0x4000) => {

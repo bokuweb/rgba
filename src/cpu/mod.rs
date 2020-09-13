@@ -92,11 +92,13 @@ impl BusAccessor for CpuBus {
             }
             // WRAM
             0x0300_0000..=0x0300_7FFF => {
+                info!("wram addr = {:x} {:x}", addr, data);
+                todo!("wram is not implemented");
                 self.wram.write_word(addr - 0x0300_0000, data);
             }
             // Unused
             0x0300_8000..=0x03FF_FFFF => {
-                dbg!(format!("{:x}", addr));
+                // dbg!(format!("{:x}", addr));
             }
             // I/O Register
             0x0400_0000..=0x0400_03FE => {

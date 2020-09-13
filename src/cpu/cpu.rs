@@ -162,6 +162,9 @@ impl ARM {
                 thumb::Instruction::ADD3(dec) => {
                     exec_thumb_add3(dec, &mut self.gpr, &mut self.cpsr)?
                 }
+                thumb::Instruction::SUB3(dec) => {
+                    exec_thumb_sub3(dec, &mut self.gpr, &mut self.cpsr)?
+                }
                 thumb::Instruction::AND(dec) => exec_thumb_and(dec, &mut self.gpr, &mut self.cpsr)?,
                 thumb::Instruction::EOR(dec) => exec_thumb_eor(dec, &mut self.gpr, &mut self.cpsr)?,
                 thumb::Instruction::LSL2(dec) => {
