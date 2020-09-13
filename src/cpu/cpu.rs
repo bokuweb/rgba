@@ -159,8 +159,12 @@ impl ARM {
         let pipeline_status = {
             match instruction {
                 thumb::Instruction::LDR3(dec) => exec_thumb_ldr3(bus, dec, &mut self.gpr)?,
+                thumb::Instruction::STR1(dec) => exec_thumb_str1(bus, dec, &mut self.gpr)?,
                 thumb::Instruction::ADD3(dec) => {
                     exec_thumb_add3(dec, &mut self.gpr, &mut self.cpsr)?
+                }
+                thumb::Instruction::SUB3(dec) => {
+                    exec_thumb_sub3(dec, &mut self.gpr, &mut self.cpsr)?
                 }
                 thumb::Instruction::AND(dec) => exec_thumb_and(dec, &mut self.gpr, &mut self.cpsr)?,
                 thumb::Instruction::EOR(dec) => exec_thumb_eor(dec, &mut self.gpr, &mut self.cpsr)?,
@@ -196,9 +200,10 @@ impl ARM {
                     exec_thumb_sub2(dec, &mut self.gpr, &mut self.cpsr)?
                 }
                 thumb::Instruction::B(dec) => exec_thumb_b(dec, &mut self.gpr, &mut self.cpsr)?,
-                thumb::Instruction::BL(dec) => exec_thumb_bl(dec, &mut self.gpr)?,
+                thumb::Instruction::BL(dec) => exec_thumb_bl1(dec, &mut self.gpr)?,
+                thumb::Instruction::BX(dec) => exec_thumb_bx(dec, &mut self.cpsr, &mut self.gpr)?,
                 thumb::Instruction::STMIA(dec) => exec_thumb_stmia(bus, dec, &mut self.gpr)?,
-                thumb::Instruction::LDMIA(dec) => exec_thumb_stmia(bus, dec, &mut self.gpr)?,
+                thumb::Instruction::LDMIA(dec) => exec_thumb_ldmia(bus, dec, &mut self.gpr)?,
                 _ => unimplemented!(),
             }
         };
@@ -214,7 +219,6 @@ impl ARM {
         T: BusAccessor,
     {
         if self.pipeline_wait > 0 {
-            dbg!("inc pc");
             self.pipeline_wait -= 1;
             self.increment_pc();
             return Ok(());
@@ -227,7 +231,6 @@ impl ARM {
                 self.execute_arm(instruction, bus)
             }
             CpuState::Thumb => {
-                dbg!("thumb!!");
                 let fetched = self.prefetch_thumb(bus);
                 debug!("{:x}", fetched);
                 let instruction = thumb::decode(fetched);
@@ -310,11 +313,15 @@ mod test {
             LittleEndian::read_u32(&self.mem[(addr as usize)..])
         }
 
-        fn write_byte(&mut self, addr: Word, data: u8) {
+        fn write_byte(&mut self, addr: Word, data: Byte) {
             self.mem[(addr as usize)] = data;
         }
 
-        fn write_word(&mut self, addr: Word, data: u32) {
+        fn write_halfword(&mut self, addr: Word, data: HalfWord) {
+            LittleEndian::write_u16(&mut self.mem[(addr as usize)..], data);
+        }
+
+        fn write_word(&mut self, addr: Word, data: Word) {
             LittleEndian::write_u32(&mut self.mem[(addr as usize)..], data);
         }
     }

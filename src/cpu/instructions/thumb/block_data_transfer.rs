@@ -45,5 +45,6 @@ where
     if (1 << rn) & register_list == 0 {
         gpr[rn as usize] = base;
     }
+    dbg!("LDMIA", &gpr);
     Ok(PipelineStatus::Continue)
 }
