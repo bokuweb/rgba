@@ -23,7 +23,7 @@ pub fn exec_thumb_b(
     Ok(PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_bl(dec: Branch, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()> {
+pub fn exec_thumb_bl1(dec: Branch, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()> {
     // TODO: Add cycle
     let offset = dec.get_offset11();
 dbg!("BL");
