@@ -1,6 +1,7 @@
 use super::super::PipelineStatus;
 
 use crate::cpu::bus::accessor::*;
+use crate::cpu::constants::*;
 use crate::cpu::decoder::thumb::*;
 use crate::cpu::types::*;
 
@@ -46,5 +47,36 @@ where
         gpr[rn as usize] = base;
     }
     dbg!("LDMIA", &gpr);
+    Ok(PipelineStatus::Continue)
+}
+
+pub fn exec_thumb_push<T>(
+    bus: &mut T,
+    dec: BlockDataTransfer,
+    gpr: &mut [Word; 16],
+) -> Result<PipelineStatus, ()>
+where
+    T: BusAccessor,
+{
+    let mut addr = gpr[SP] - 4;
+    let register_list = dec.get_register_list();
+    dbg!("push", register_list);
+
+    // TODO: wait
+    if dec.get_R() {
+        bus.write_word(addr, gpr[LR]);
+        addr = addr - 4;
+    }
+
+    for i in 0..0x8 {
+        let i = 7 - i;
+        if register_list & (1 << i) != 0 {
+            bus.write_word(addr, gpr[i]);
+            addr -= 4;
+        }
+    }
+    // TODO: wait
+    gpr[SP] = addr + 4;
+    dbg!(&gpr);
     Ok(PipelineStatus::Continue)
 }
