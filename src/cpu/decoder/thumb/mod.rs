@@ -123,7 +123,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 Instruction::STMIA(dec)
             }
         }
-        v if ((v & 0xF000) == 0xD000) => {
+        v if ((v & 0xF000) == 0xB000) => {
             let dec = BlockDataTransfer(v);
             if dec.get_L() {
                 Instruction::POP(dec)
@@ -131,6 +131,6 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 Instruction::PUSH(dec)
             }
         }
-        _ => panic!("Unsupported instruction"),
+        _ => panic!(format!("Unsupported instruction {:x}", raw)),
     }
 }
