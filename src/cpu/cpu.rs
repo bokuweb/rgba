@@ -204,7 +204,12 @@ impl ARM {
                 thumb::Instruction::BX(dec) => exec_thumb_bx(dec, &mut self.cpsr, &mut self.gpr)?,
                 thumb::Instruction::STMIA(dec) => exec_thumb_stmia(bus, dec, &mut self.gpr)?,
                 thumb::Instruction::LDMIA(dec) => exec_thumb_ldmia(bus, dec, &mut self.gpr)?,
-                _ => unimplemented!(),
+                thumb::Instruction::PUSH(dec) => exec_thumb_push(bus, dec, &mut self.gpr)?,
+                thumb::Instruction::POP(dec) => exec_thumb_pop(bus, dec, &mut self.gpr)?,
+                _ => {
+                    dbg!(&instruction);
+                    unimplemented!();
+                }
             }
         };
         match pipeline_status {
