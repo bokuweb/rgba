@@ -80,3 +80,15 @@ where
     dbg!(&gpr);
     Ok(PipelineStatus::Continue)
 }
+
+pub fn exec_thumb_pop<T>(
+    bus: &mut T,
+    dec: BlockDataTransfer,
+    gpr: &mut [Word; 16],
+) -> Result<PipelineStatus, ()>
+where
+    T: BusAccessor,
+{
+    unimplemented!();
+    Ok(PipelineStatus::Continue)
+}
