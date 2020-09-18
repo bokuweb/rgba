@@ -174,6 +174,9 @@ impl ARM {
                 thumb::Instruction::LSR2(dec) => {
                     exec_thumb_lsr2(dec, &mut self.gpr, &mut self.cpsr)?
                 }
+                thumb::Instruction::ASR1(dec) => {
+                    exec_thumb_asr1(dec, &mut self.gpr, &mut self.cpsr)?
+                }
                 thumb::Instruction::ASR2(dec) => {
                     // exec_thumb_asr2(dec, &mut self.gpr, &mut self.cpsr)?
                     todo!("asr2")

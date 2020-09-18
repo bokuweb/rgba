@@ -110,6 +110,26 @@ pub fn exec_thumb_eor(
     Ok(PipelineStatus::Continue)
 }
 
+pub fn exec_thumb_asr1(
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+) -> Result<PipelineStatus, ()> {
+    let rd = dec.get_Rd2_0() as usize;
+    let rn = dec.get_Rn5_3() as usize;
+    let sh = dec.get_sh() as u32;
+    if sh == 0 {
+        gpr[rd] = gpr[rn];
+    } else {
+        cpsr.set_C(is_carry_over(Shift::ASR, gpr[rn], sh));
+        gpr[rd] = asr(gpr[rn], sh);
+    }
+    cpsr.set_N_from(gpr[rd]);
+    cpsr.set_Z_from(gpr[rd]);
+    dbg!("ASR1", &gpr, cpsr.get_C(), cpsr.get_N(), cpsr.get_Z(), cpsr.get_V());
+    Ok(PipelineStatus::Continue)
+}
+
 pub fn exec_thumb_lsl2(
     dec: DataProcessing,
     gpr: &mut [Word; 16],

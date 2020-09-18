@@ -36,7 +36,7 @@ pub enum Instruction {
     MVN(DataProcessing),
     LSL(DataProcessing),
     LSR(DataProcessing),
-    ASR(DataProcessing),
+    ASR1(DataProcessing),
     MOV1(DataProcessing),
     SUB2(DataProcessing),
     B(Branch),
@@ -91,7 +91,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
             match dec.get_op12_11() {
                 0b00 => Instruction::LSL(dec),
                 0b01 => Instruction::LSR(dec),
-                0b10 => Instruction::ASR(dec),
+                0b10 => Instruction::ASR1(dec),
                 _ => unreachable!(
                     "unknown thumb data processing instruction {}",
                     dec.get_op12_11()
