@@ -176,6 +176,7 @@ impl ARM {
                 thumb::Instruction::ROR(dec) => exec_thumb_ror(dec, &mut self.gpr, &mut self.cpsr)?,
                 thumb::Instruction::TST(dec) => exec_thumb_tst(dec, &mut self.gpr, &mut self.cpsr)?,
                 thumb::Instruction::NEG(dec) => exec_thumb_neg(dec, &mut self.gpr, &mut self.cpsr)?,
+                thumb::Instruction::CMP1(dec) => exec_thumb_cmp1(dec, &mut self.gpr, &mut self.cpsr)?,
                 thumb::Instruction::CMP2(dec) => exec_thumb_cmp2(dec, &mut self.gpr, &mut self.cpsr)?,
                 thumb::Instruction::CMN(dec) => exec_thumb_cmn(dec, &mut self.gpr, &mut self.cpsr)?,
                 thumb::Instruction::ORR(dec) => exec_thumb_orr(dec, &mut self.gpr, &mut self.cpsr)?,
