@@ -175,37 +175,42 @@ pub fn exec_thumb_neg(dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR)
 }
 
 pub fn exec_thumb_cmp1(dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<PipelineStatus, ()> {
-    let d = gpr[dec.get_Rd10_8() as usize] - dec.get_imm8() as u32;
-    cpsr.set_Z_from(d);
-    cpsr.set_N_from(d);
-    cpsr.set_C(gpr[dec.get_Rd10_8() as usize] >= dec.get_imm8() as u32);
-    cpsr.set_V_from(gpr[dec.get_Rd10_8() as usize], d);
+    let d = gpr[dec.get_Rd10_8() as usize] as i64 - dec.get_imm8() as i64;
+    cpsr.set_Z_from(d as u32);
+    cpsr.set_N_from(d as u32);
+    cpsr.set_C(d >= 0);
+    cpsr.set_V_from(gpr[dec.get_Rd10_8() as usize], d as u32);
     dbg!("CMP1", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
     Ok(PipelineStatus::Continue)
 }
 
 pub fn exec_thumb_cmp2(dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<PipelineStatus, ()> {
-    todo!();
+    let d = gpr[dec.get_Rd2_0() as usize] as i64 - gpr[dec.get_Rm5_3() as usize] as i64;
+    cpsr.set_N_from(d as u32);
+    cpsr.set_Z_from(d as u32);
+    cpsr.set_C(d >= 0);
+    cpsr.set_V_from(gpr[dec.get_Rd2_0() as usize], d as u32);
+    dbg!("CMP2", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
     Ok(PipelineStatus::Continue)
 }
 
 pub fn exec_thumb_cmn(dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<PipelineStatus, ()> {
-    todo!();
+    todo!("cmn");
     Ok(PipelineStatus::Continue)
 }
 
 pub fn exec_thumb_orr(dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<PipelineStatus, ()> {
-    todo!();
+    todo!("orr");
     Ok(PipelineStatus::Continue)
 }
 
 pub fn exec_thumb_mul(dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<PipelineStatus, ()> {
-    todo!();
+    todo!("mul");
     Ok(PipelineStatus::Continue)
 }
 
 pub fn exec_thumb_mvn(dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<PipelineStatus, ()> {
-    todo!();
+    todo!("mvn");
     Ok(PipelineStatus::Continue)
 }
 
@@ -218,7 +223,7 @@ pub fn exec_thumb_bic(dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR)
     Ok(PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_lsl<T>(bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<PipelineStatus, ()>
+pub fn exec_thumb_lsl1<T>(bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<PipelineStatus, ()>
 where
     T: BusAccessor,
 {
@@ -234,6 +239,26 @@ where
     }
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
+    Ok(PipelineStatus::Continue)
+}
+
+pub fn exec_thumb_lsr1<T>(bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<PipelineStatus, ()>
+where
+    T: BusAccessor,
+{
+    let rd = dec.get_Rd2_0() as usize;
+    let rn = dec.get_Rn5_3() as usize;
+    let sh = dec.get_sh() as u32;
+
+    if sh == 0 {
+        gpr[rd] = gpr[rn];
+    } else {
+        cpsr.set_C(is_carry_over(Shift::LSR, gpr[rn], sh));
+        gpr[rd] = lsr(gpr[rn], sh);
+    }
+    cpsr.set_N_from(gpr[rd]);
+    cpsr.set_Z_from(gpr[rd]);
+    dbg!("LSR1", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
     Ok(PipelineStatus::Continue)
 }
 

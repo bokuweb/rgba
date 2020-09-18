@@ -101,7 +101,10 @@ impl BusAccessor for CpuBus {
             }
             // I/O Register
             0x0400_0000..=0x0400_03FE => {
-                dbg!("I/O register is not implemented yet.");
+                dbg!(
+                    "I/O register is not implemented yet.",
+                    format!("addr = {:x} data = {:x}", addr, data)
+                );
             }
             _ => panic!("TODO: addr = {:x} data = {:x}", addr, data),
         };
