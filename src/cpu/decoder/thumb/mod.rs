@@ -13,12 +13,19 @@ pub use single_data_transfer::*;
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Instruction {
     LDR1(SingleDataTransfer),
+    LDRH(SingleDataTransfer),
     LDR2(SingleDataTransfer),
     LDR3(SingleDataTransfer),
     LDR4(SingleDataTransfer),
     STR1(SingleDataTransfer),
+    STRH(SingleDataTransfer),
+    ADD2(DataProcessing),
     ADD3(DataProcessing),
+    ADD4(DataProcessing),
+    CMP1(DataProcessing),
+    CMP3(DataProcessing),
     SUB3(DataProcessing),
+    MOV3(DataProcessing),
     AND(DataProcessing),
     EOR(DataProcessing),
     LSL2(DataProcessing),
@@ -34,12 +41,13 @@ pub enum Instruction {
     MUL(DataProcessing),
     BIC(DataProcessing),
     MVN(DataProcessing),
-    LSL(DataProcessing),
-    LSR(DataProcessing),
-    ASR(DataProcessing),
+    LSL1(DataProcessing),
+    LSR1(DataProcessing),
+    ASR1(DataProcessing),
     MOV1(DataProcessing),
     SUB2(DataProcessing),
     B(Branch),
+    B2(Branch),
     BL(Branch),
     BX(Branch),
     LDMIA(BlockDataTransfer),
@@ -56,6 +64,14 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 Instruction::LDR1(dec)
             } else {
                 Instruction::STR1(dec)
+            }
+        }
+        v if ((v & 0xF000) == 0x8000) => {
+            let dec = SingleDataTransfer(v);
+            if dec.get_L() {
+                Instruction::LDRH(dec)
+            } else {
+                Instruction::STRH(dec)
             }
         }
         v if ((v & 0xF800) == 0x4800) => Instruction::LDR3(SingleDataTransfer(v)),
@@ -80,41 +96,43 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 0b1101 => Instruction::MUL(dec),
                 0b1110 => Instruction::BIC(dec),
                 0b1111 => Instruction::MVN(dec),
-                _ => unreachable!(
-                    "unknown thumb data processing instruction {}",
-                    dec.get_op9_6()
-                ),
+                _ => unreachable!("unknown thumb data processing instruction {}", dec.get_op9_6()),
             }
         }
         v if ((v & 0xE000) == 0x0000) => {
             let dec = DataProcessing(v);
             match dec.get_op12_11() {
-                0b00 => Instruction::LSL(dec),
-                0b01 => Instruction::LSR(dec),
-                0b10 => Instruction::ASR(dec),
-                _ => unreachable!(
-                    "unknown thumb data processing instruction {}",
-                    dec.get_op12_11()
-                ),
+                0b00 => Instruction::LSL1(dec),
+                0b01 => Instruction::LSR1(dec),
+                0b10 => Instruction::ASR1(dec),
+                _ => unreachable!("unknown thumb data processing instruction {}", dec.get_op12_11()),
             }
         }
         v if ((v & 0xE000) == 0x2000) => {
             let dec = DataProcessing(v);
             match dec.get_op12_11() {
                 0b00 => Instruction::MOV1(dec),
-                0b01 => todo!("CMP1"),
-                0b10 => todo!("ADD2"),
+                0b01 => Instruction::CMP1(dec),
+                0b10 => Instruction::ADD2(dec),
                 0b11 => Instruction::SUB2(dec),
-                _ => unreachable!(
-                    "unknown thumb data processing instruction {}",
-                    dec.get_op12_11()
-                ),
+                _ => unreachable!("unknown thumb data processing instruction {}", dec.get_op12_11()),
+            }
+        }
+        v if ((v & 0xFF00) == 0x4700) => Instruction::BX(Branch(v)),
+        v if ((v & 0xFC00) == 0x4400) => {
+            let dec = DataProcessing(v);
+            match dec.get_op9_8() {
+                0b00 => Instruction::ADD4(dec),
+                0b01 => Instruction::CMP3(dec),
+                0b10 => Instruction::MOV3(dec),
+                // 0b11 => Instruction::BX(dec),
+                _ => unreachable!(),
             }
         }
         v if ((v & 0x7F00) == 0x5F00) => todo!("SWI"),
         v if ((v & 0xF000) == 0xF000) => Instruction::BL(Branch(v)),
         v if ((v & 0x7000) == 0x5000) => Instruction::B(Branch(v)),
-        v if ((v & 0xFF00) == 0x4700) => Instruction::BX(Branch(v)),
+        v if ((v & 0xF800) == 0xE000) => Instruction::B2(Branch(v)),
         v if ((v & 0xF000) == 0xC000) => {
             let dec = BlockDataTransfer(v);
             if dec.get_L() {

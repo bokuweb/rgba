@@ -5,11 +5,7 @@ use crate::cpu::constants::*;
 use crate::cpu::decoder::thumb::*;
 use crate::cpu::types::*;
 
-pub fn exec_thumb_ldr3<T>(
-    bus: &mut T,
-    dec: SingleDataTransfer,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_thumb_ldr3<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
 where
     T: BusAccessor,
 {
@@ -24,11 +20,7 @@ where
     Ok(PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_str1<T>(
-    bus: &mut T,
-    dec: SingleDataTransfer,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_thumb_str1<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
 where
     T: BusAccessor,
 {
@@ -40,5 +32,19 @@ where
     bus.write_word(addr, gpr[rd]);
     // TODO: Add wait
     // dbg!(&gpr);
+    Ok(PipelineStatus::Continue)
+}
+
+pub fn exec_thumb_strh<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
+where
+    T: BusAccessor,
+{
+    let rd = dec.get_Rd2_0() as usize;
+    let rn = dec.get_Rn() as usize;
+    let offset = dec.get_off5() as u32;
+
+    let addr = gpr[rn] + offset;
+    bus.write_halfword(addr, gpr[rd] as u16);
+    // TODO: Add wait
     Ok(PipelineStatus::Continue)
 }

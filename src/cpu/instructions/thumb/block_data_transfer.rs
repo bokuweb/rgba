@@ -5,11 +5,7 @@ use crate::cpu::constants::*;
 use crate::cpu::decoder::thumb::*;
 use crate::cpu::types::*;
 
-pub fn exec_thumb_stmia<T>(
-    bus: &mut T,
-    dec: BlockDataTransfer,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_thumb_stmia<T>(bus: &mut T, dec: BlockDataTransfer, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
 where
     T: BusAccessor,
 {
@@ -25,11 +21,7 @@ where
     Ok(PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_ldmia<T>(
-    bus: &T,
-    dec: BlockDataTransfer,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_thumb_ldmia<T>(bus: &T, dec: BlockDataTransfer, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
 where
     T: BusAccessor,
 {
@@ -50,11 +42,7 @@ where
     Ok(PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_push<T>(
-    bus: &mut T,
-    dec: BlockDataTransfer,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_thumb_push<T>(bus: &mut T, dec: BlockDataTransfer, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
 where
     T: BusAccessor,
 {
@@ -81,14 +69,33 @@ where
     Ok(PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_pop<T>(
-    bus: &mut T,
-    dec: BlockDataTransfer,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_thumb_pop<T>(bus: &mut T, dec: BlockDataTransfer, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
 where
     T: BusAccessor,
 {
-    unimplemented!();
-    Ok(PipelineStatus::Continue)
+    dbg!("pop");
+    // TODO: wait
+    let mut addr = gpr[SP];
+    let register_list = dec.get_register_list();
+
+    for i in 0..0x8 {
+        if register_list & (1 << i) != 0 {
+            // TODO: wait
+            gpr[i] = bus.read_word(addr);
+            addr += 4;
+        }
+    }
+
+    if dec.get_R() {
+        gpr[PC] = bus.read_word(addr) & 0xFFFF_FFFE;
+        addr += 4;
+    }
+    // TODO: wait
+    gpr[SP] = addr;
+    dbg!(&gpr);
+    if dec.get_R() {
+        Ok(PipelineStatus::Flush)
+    } else {
+        Ok(PipelineStatus::Continue)
+    }
 }
