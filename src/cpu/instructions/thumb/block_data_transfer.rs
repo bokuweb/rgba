@@ -93,6 +93,9 @@ where
     // TODO: wait
     gpr[SP] = addr;
     dbg!(&gpr);
-    panic!("");
-    Ok(PipelineStatus::Continue)
+    if dec.get_R() {
+        Ok(PipelineStatus::Flush)
+    } else {
+        Ok(PipelineStatus::Continue)
+    }
 }

@@ -17,8 +17,10 @@ pub enum Instruction {
     LDR3(SingleDataTransfer),
     LDR4(SingleDataTransfer),
     STR1(SingleDataTransfer),
+    ADD2(DataProcessing),
     ADD3(DataProcessing),
     ADD4(DataProcessing),
+    CMP1(DataProcessing),
     CMP3(DataProcessing),
     SUB3(DataProcessing),
     MOV3(DataProcessing),
@@ -99,8 +101,8 @@ pub fn decode(raw: HalfWord) -> Instruction {
             let dec = DataProcessing(v);
             match dec.get_op12_11() {
                 0b00 => Instruction::MOV1(dec),
-                0b01 => todo!("CMP1"),
-                0b10 => todo!("ADD2"),
+                0b01 => Instruction::CMP1(dec),
+                0b10 => Instruction::ADD2(dec),
                 0b11 => Instruction::SUB2(dec),
                 _ => unreachable!("unknown thumb data processing instruction {}", dec.get_op12_11()),
             }

@@ -18,6 +18,18 @@ pub fn exec_thumb_add1(dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR
     Ok(PipelineStatus::Continue)
 }
 
+pub fn exec_thumb_add2(dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<PipelineStatus, ()> {
+    let rn_rd = dec.get_Rd10_8() as usize;
+    let d = gpr[rn_rd] as u64 + dec.get_imm8() as u64;
+    cpsr.set_N_from(d as u32);
+    cpsr.set_Z_from(d as u32);
+    cpsr.set_C_from(d);
+    cpsr.set_V_from(gpr[rn_rd], d as u32);
+    gpr[rn_rd] = d as u32;
+    dbg!("ADD2", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
+    Ok(PipelineStatus::Continue)
+}
+
 pub fn exec_thumb_add3(dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<PipelineStatus, ()> {
     let d = (gpr[dec.get_Rn5_3() as usize]) as u64 + (gpr[dec.get_Rm8_6() as usize]) as u64;
     cpsr.set_N_from(d as u32);

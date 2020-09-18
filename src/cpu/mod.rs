@@ -88,12 +88,8 @@ impl BusAccessor for CpuBus {
     fn write_word(&mut self, addr: u32, data: Word) {
         // info!("write word addr = 0x{:x} data = 0x{:x}", addr, data);
         match addr {
-            0x0000_0000..=0x0007_FFFF => {
-                self.rom.read_word(addr);
-            }
-            0x0200_0000..=0x0203_FFFF => {
-                self.eram.write_word(addr - 0x0200_0000, data);
-            }
+            0x0000_0000..=0x0007_FFFF => panic!("illegal write access."),
+            0x0200_0000..=0x0203_FFFF => self.eram.write_word(addr - 0x0200_0000, data),
             // WRAM
             0x0300_0000..=0x0300_7FFF => {
                 info!("wram addr = {:x} {:x}", addr, data);
