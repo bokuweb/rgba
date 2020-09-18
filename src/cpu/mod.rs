@@ -57,11 +57,15 @@ impl BusAccessor for CpuBus {
     }
 
     fn read_word(&self, addr: u32) -> Word {
-        debug!("read word addr = {:x}", addr);
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_word(addr),
+            // WRAM
+            0x0300_0000..=0x0300_7FFF => {
+                info!("wram addr = {:x}", addr);
+                self.wram.read_word(addr - 0x0300_0000)
+            }
             0x0800_0000..=0x09FF_FFFF => self.rom.read_word(addr - 0x0800_0000),
-            _ => panic!("TODO: "),
+            _ => panic!(format!("TODO: addr = 0x{:x}", addr)),
         }
     }
 
