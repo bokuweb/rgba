@@ -89,6 +89,6 @@ pub fn exec_thumb_pop<T>(
 where
     T: BusAccessor,
 {
-    unimplemented!();
+    unimplemented!("pop");
     Ok(PipelineStatus::Continue)
 }
