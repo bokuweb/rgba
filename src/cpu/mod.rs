@@ -57,11 +57,15 @@ impl BusAccessor for CpuBus {
     }
 
     fn read_word(&self, addr: u32) -> Word {
-        debug!("read word addr = {:x}", addr);
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_word(addr),
+            // WRAM
+            0x0300_0000..=0x0300_7FFF => {
+                info!("wram addr = {:x}", addr);
+                self.wram.read_word(addr - 0x0300_0000)
+            }
             0x0800_0000..=0x09FF_FFFF => self.rom.read_word(addr - 0x0800_0000),
-            _ => panic!("TODO: "),
+            _ => panic!(format!("TODO: addr = 0x{:x}", addr)),
         }
     }
 
@@ -84,12 +88,8 @@ impl BusAccessor for CpuBus {
     fn write_word(&mut self, addr: u32, data: Word) {
         // info!("write word addr = 0x{:x} data = 0x{:x}", addr, data);
         match addr {
-            0x0000_0000..=0x0007_FFFF => {
-                self.rom.read_word(addr);
-            }
-            0x0200_0000..=0x0203_FFFF => {
-                self.eram.write_word(addr - 0x0200_0000, data);
-            }
+            0x0000_0000..=0x0007_FFFF => panic!("illegal write access."),
+            0x0200_0000..=0x0203_FFFF => self.eram.write_word(addr - 0x0200_0000, data),
             // WRAM
             0x0300_0000..=0x0300_7FFF => {
                 info!("wram addr = {:x} {:x}", addr, data);
@@ -101,7 +101,10 @@ impl BusAccessor for CpuBus {
             }
             // I/O Register
             0x0400_0000..=0x0400_03FE => {
-                dbg!("I/O register is not implemented yet.");
+                dbg!(
+                    "I/O register is not implemented yet.",
+                    format!("addr = {:x} data = {:x}", addr, data)
+                );
             }
             _ => panic!("TODO: addr = {:x} data = {:x}", addr, data),
         };
