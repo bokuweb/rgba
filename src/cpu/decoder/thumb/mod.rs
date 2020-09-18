@@ -47,6 +47,7 @@ pub enum Instruction {
     MOV1(DataProcessing),
     SUB2(DataProcessing),
     B(Branch),
+    B2(Branch),
     BL(Branch),
     BX(Branch),
     LDMIA(BlockDataTransfer),
@@ -131,6 +132,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
         v if ((v & 0x7F00) == 0x5F00) => todo!("SWI"),
         v if ((v & 0xF000) == 0xF000) => Instruction::BL(Branch(v)),
         v if ((v & 0x7000) == 0x5000) => Instruction::B(Branch(v)),
+        v if ((v & 0xF800) == 0xE000) => Instruction::B2(Branch(v)),
         v if ((v & 0xF000) == 0xC000) => {
             let dec = BlockDataTransfer(v);
             if dec.get_L() {
