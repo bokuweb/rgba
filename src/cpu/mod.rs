@@ -16,11 +16,10 @@ pub(crate) use bus::accessor::*;
 
 // use constants::*;
 // use error::*;
-use super::memory::ram::Ram;
-use super::memory::rom::Rom;
-
-use super::memory::readable::*;
-use super::memory::writable::*;
+use crate::memory::ram::Ram;
+use crate::memory::readable::*;
+use crate::memory::rom::Rom;
+use crate::memory::writable::*;
 
 use std::env;
 use std::fs::File;
@@ -29,7 +28,7 @@ use std::path::Path;
 
 use types::*;
 
-struct CpuBus {
+pub struct CpuBus {
     bios: Rom,
     rom: Rom,
     wram: Ram,
@@ -147,6 +146,59 @@ pub fn run() {
     let mut arm = cpu::ARM::new();
 
     for _ in 0..1000000 {
-        arm.tick(&mut bus);
+        arm.step(&mut bus);
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+    use pretty_assertions::*;
+
+    use crate::memory::ram::Ram;
+    use crate::memory::rom::Rom;
+
+    pub fn run_with_step(step: u64, bin: &[u8]) -> (cpu::ARM, CpuBus) {
+        // env_logger::init();
+        let bios = Rom::new(0x4000, &include_bytes!("../../bios/bios.bin")[..]);
+        let rom = Rom::new(0x80000, &bin);
+        let wram = Ram::new(vec![0; 0x8000]);
+        let eram = Ram::new(vec![0; 0x4_0000]);
+        let vram = Ram::new(vec![0; 0x1_8000]);
+        let mut bus = CpuBus::new(bios, rom, wram, eram, vram);
+        let mut arm = cpu::ARM::new();
+        for _ in 0..step {
+            arm.step(&mut bus).expect("should step");
+        }
+        (arm, bus)
+    }
+
+    #[test]
+    // step
+    fn test_hello_rom() {
+        let bin = include_bytes!("../../fixtures/hello/hello.gba");
+        let (cpu, _bus) = run_with_step(400000, bin);
+        self::assert_eq!(
+            cpu.gpr,
+            [
+                0,
+                0,
+                0x1F,
+                0x0600_96F0,
+                0x0200_0000,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0x0300_7F00,
+                0x0800_0187,
+                0x0800_02E4
+            ]
+        )
     }
 }
