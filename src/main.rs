@@ -24,7 +24,6 @@ const HEIGHT: u32 = 160;
 fn main() {
     std::env::set_var("RUST_LOG", "info");
     pretty_env_logger::init();
-    gba::frame();
 
     let sdl_context = sdl2::init().unwrap();
     let mut event_pump = sdl_context.event_pump().unwrap();
@@ -49,7 +48,7 @@ fn main() {
             }
         }
 
-        let buf = vec![128; 240 * 160 * 4];
+        let buf = gba::frame();
 
         for i in 0..HEIGHT {
             for j in 0..WIDTH {
