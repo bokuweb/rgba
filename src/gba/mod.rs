@@ -1,10 +1,10 @@
-pub mod bus;
-pub mod constants;
-pub mod cpu;
-pub mod decoder;
-pub mod instructions;
-pub mod registers;
-pub mod types;
+use crate::cpu::bus;
+use crate::cpu::constants;
+use crate::cpu::cpu;
+use crate::cpu::decoder;
+use crate::cpu::instructions;
+use crate::cpu::registers;
+use crate::cpu::types;
 
 pub(crate) use bus::accessor::*;
 
@@ -16,7 +16,6 @@ pub(crate) use bus::accessor::*;
 
 // use constants::*;
 // use error::*;
-/*
 use crate::memory::ram::Ram;
 use crate::memory::readable::*;
 use crate::memory::rom::Rom;
@@ -208,4 +207,3 @@ mod test {
         self::assert_eq!(bus.read_halfword(0x0600_96F0), 0x001F);
     }
 }
-*/
