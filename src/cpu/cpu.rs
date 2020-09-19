@@ -42,6 +42,9 @@ pub struct ARM {
     irq_disable: bool,
     fiq_disable: bool,
     optimise_swi: bool,
+
+    // For debug
+    steps: u64,
 }
 
 impl ARM {
@@ -57,6 +60,7 @@ impl ARM {
             irq_disable: false,
             fiq_disable: false,
             optimise_swi: false,
+            steps: 0,
         }
     }
 
@@ -209,10 +213,11 @@ impl ARM {
         Ok(())
     }
 
-    pub fn tick<T>(&mut self, bus: &mut T) -> Result<(), ()>
+    pub fn step<T>(&mut self, bus: &mut T) -> Result<(), ()>
     where
         T: BusAccessor,
     {
+        self.steps += 1;
         if self.pipeline_wait > 0 {
             self.pipeline_wait -= 1;
             self.increment_pc();
@@ -327,7 +332,7 @@ mod test {
             T: BusAccessor,
         {
             for _ in 0..(INITIAL_PIPELINE_WAIT + 1) {
-                self.tick(bus);
+                self.step(bus);
             }
         }
     }
@@ -339,12 +344,12 @@ mod test {
     }
 
     #[test]
-    // tick
+    // step
     fn increment_pc_by_tick() {
         setup();
         let mut bus = MockBus::new();
         let mut arm = ARM::new();
-        arm.tick(&mut bus);
+        arm.step(&mut bus);
         assert_eq!(arm.get_gpr(PC), 0x0000_0004);
     }
 

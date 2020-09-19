@@ -28,10 +28,8 @@ pub fn exec_thumb_b2(dec: Branch, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Resul
         offset as i32
     }
     .wrapping_shl(1);
-    dbg!(offset);
     let pc = gpr[PC] as i64 + offset as i64;
     gpr[PC] = pc as u32;
-    dbg!("B2", &gpr);
     Ok(PipelineStatus::Flush)
 }
 
