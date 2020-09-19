@@ -1,10 +1,10 @@
-pub mod bus;
-pub mod constants;
-pub mod cpu;
-pub mod decoder;
-pub mod instructions;
-pub mod registers;
-pub mod types;
+use crate::cpu::bus;
+use crate::cpu::constants;
+use crate::cpu::cpu;
+use crate::cpu::decoder;
+use crate::cpu::instructions;
+use crate::cpu::registers;
+use crate::cpu::types;
 
 pub(crate) use bus::accessor::*;
 
@@ -16,11 +16,11 @@ pub(crate) use bus::accessor::*;
 
 // use constants::*;
 // use error::*;
-/*
 use crate::memory::ram::Ram;
 use crate::memory::readable::*;
 use crate::memory::rom::Rom;
 use crate::memory::writable::*;
+use crate::memory::Raw;
 
 use std::env;
 use std::fs::File;
@@ -135,7 +135,7 @@ fn load_bin(bin: String) -> Result<Vec<u8>, std::io::Error> {
     Ok(buf)
 }
 
-pub fn frame() {
+pub fn frame() -> Vec<u8> {
     // env_logger::init();
     // let elf_path = env::args().nth(1).expect("");
     // let result = load_elf(elf_path);
@@ -153,6 +153,17 @@ pub fn frame() {
     for _ in 0..400000 {
         arm.step(&mut bus);
     }
+
+    let mut buf = vec![];
+    for offset in 0..(240 * 160) {
+        let p = bus.read_halfword(0x0600_0000 + offset * 2);
+        buf.push((((p & 0x001F) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
+        buf.push((((p & 0x03E0).wrapping_shr(5) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
+        buf.push((((p & 0xEC00).wrapping_shr(10) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
+        buf.push(255);
+    }
+    dbg!(buf.len());
+    buf
 }
 
 #[cfg(test)]
@@ -208,4 +219,3 @@ mod test {
         self::assert_eq!(bus.read_halfword(0x0600_96F0), 0x001F);
     }
 }
-*/
