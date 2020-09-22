@@ -1,7 +1,7 @@
 use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::*;
 use crate::cpu::instructions::*;
-use crate::cpu::types::*;
+use crate::types::*;
 
 pub fn exec_bl(dec: Branch, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()> {
     gpr[LR] = gpr[PC] - 4;

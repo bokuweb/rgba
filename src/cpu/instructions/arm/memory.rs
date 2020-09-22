@@ -3,14 +3,10 @@ use super::super::PipelineStatus;
 use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::*;
-use crate::cpu::types::*;
 use crate::cpu::instructions::shift::*;
+use crate::types::*;
 
-fn exec_memory_processing<F>(
-    gpr: &mut [u32; 16],
-    dec: Memory,
-    load_or_store: F,
-) -> Result<PipelineStatus, ()>
+fn exec_memory_processing<F>(gpr: &mut [u32; 16], dec: Memory, load_or_store: F) -> Result<PipelineStatus, ()>
 where
     F: FnOnce(&mut [u32; 16], u32),
 {

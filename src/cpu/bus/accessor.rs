@@ -1,4 +1,4 @@
-use super::super::types::{Byte, HalfWord, Word};
+use crate::types::*;
 
 pub trait BusAccessor {
     fn read_byte(&self, addr: Word) -> Byte;

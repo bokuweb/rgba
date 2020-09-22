@@ -3,26 +3,16 @@ use super::super::PipelineStatus;
 use crate::cpu::decoder::arm::*;
 use crate::cpu::instructions::shift::ror;
 use crate::cpu::registers::psr::{Mode, PSR};
-use crate::cpu::types::*;
+use crate::types::*;
 
-pub fn exec_mrs(
-    dec: PsrTransfer,
-    gpr: &mut [Word; 16],
-    cpsr: &PSR,
-    spsr: &PSR,
-) -> Result<PipelineStatus, ()> {
+pub fn exec_mrs(dec: PsrTransfer, gpr: &mut [Word; 16], cpsr: &PSR, spsr: &PSR) -> Result<PipelineStatus, ()> {
     let rd = dec.get_Rd() as usize;
     gpr[rd] = if dec.get_Pd() { spsr.get() } else { cpsr.get() };
     // TODO: Add 1S cycle.
     Ok(PipelineStatus::Continue)
 }
 
-pub fn exec_msr(
-    dec: PsrTransfer,
-    gpr: &mut [Word; 16],
-    cpsr: &mut PSR,
-    spsr: &mut PSR,
-) -> Result<PipelineStatus, ()> {
+pub fn exec_msr(dec: PsrTransfer, gpr: &mut [Word; 16], cpsr: &mut PSR, spsr: &mut PSR) -> Result<PipelineStatus, ()> {
     let value = if dec.get_I() {
         ror(dec.get_imm(), dec.get_rotate())
     } else {

@@ -9,7 +9,7 @@ use crate::cpu::instructions::thumb::*;
 
 use crate::cpu::instructions::PipelineStatus;
 use crate::cpu::registers::psr::{CpuState, PSR};
-use crate::cpu::types::*;
+use crate::types::*;
 
 pub const INITIAL_PIPELINE_WAIT: u8 = 2;
 

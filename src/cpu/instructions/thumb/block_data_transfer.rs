@@ -3,7 +3,7 @@ use super::super::PipelineStatus;
 use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::thumb::*;
-use crate::cpu::types::*;
+use crate::types::*;
 
 pub fn exec_thumb_stmia<T>(bus: &mut T, dec: BlockDataTransfer, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
 where
@@ -81,13 +81,15 @@ where
     for i in 0..0x8 {
         if register_list & (1 << i) != 0 {
             // TODO: wait
-            gpr[i] = bus.read_word(addr);
+            let data = bus.read_word(addr);
+            gpr[i] = data;
             addr += 4;
         }
     }
 
     if dec.get_R() {
-        gpr[PC] = bus.read_word(addr) & 0xFFFF_FFFE;
+        let data = bus.read_word(addr);
+        gpr[PC] = data & 0xFFFF_FFFE;
         addr += 4;
     }
     // TODO: wait

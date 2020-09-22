@@ -1,4 +1,4 @@
-use crate::cpu::types::HalfWord;
+use crate::types::HalfWord;
 
 mod block_data_transfer;
 mod branch;

@@ -5,7 +5,7 @@ use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::*;
 use crate::cpu::instructions::shift::{is_carry_over, ror, shift};
 use crate::cpu::registers::psr::PSR;
-use crate::cpu::types::*;
+use crate::types::*;
 
 pub fn exec_data_processing<F>(
     gpr: &mut [Word; 16],

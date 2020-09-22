@@ -2,7 +2,7 @@ use crate::cpu::constants::*;
 use crate::cpu::decoder::thumb::*;
 use crate::cpu::instructions::*;
 use crate::cpu::registers::psr::{CpuState, PSR};
-use crate::cpu::types::*;
+use crate::types::*;
 
 pub fn exec_thumb_bx(
     dec: Branch,

@@ -5,6 +5,7 @@ use crate::cpu::decoder::thumb::*;
 use crate::cpu::instructions::shift::*;
 use crate::cpu::registers::psr::PSR;
 use crate::cpu::types::*;
+use crate::types::*;
 
 pub fn exec_thumb_add1(dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<PipelineStatus, ()> {
     let imm = dec.get_imm3() as u32;

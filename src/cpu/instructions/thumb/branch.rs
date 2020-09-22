@@ -5,6 +5,7 @@ use crate::cpu::constants::*;
 use crate::cpu::decoder::thumb::*;
 use crate::cpu::registers::psr::PSR;
 use crate::cpu::types::*;
+use crate::types::*;
 
 pub fn exec_thumb_b(dec: Branch, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<PipelineStatus, ()> {
     // TODO: Add cycle

@@ -7,6 +7,7 @@ extern crate bitfield;
 mod cpu;
 mod gba;
 mod lcd;
+mod types;
 mod memory;
 
 use sdl2::event::Event;

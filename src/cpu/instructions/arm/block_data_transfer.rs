@@ -2,7 +2,7 @@ use super::super::PipelineStatus;
 
 use crate::cpu::bus::accessor::*;
 use crate::cpu::decoder::arm::*;
-use crate::cpu::types::*;
+use crate::types::*;
 
 // 31    28 27  25 24  23  22  21  20 19    16 15                      0
 // ---------------------------------------------------------------------
@@ -13,12 +13,7 @@ use crate::cpu::types::*;
 // S = Restore force user bit. S specifies if banked register access should occur when in privileged modes [or if R15 and 26 bit and user mode, if the PSR should be written while PC is updated]
 // W = 1: Auto Index
 // L = 0: Store / 1: Load
-fn exec_block_data_transfer<F, T>(
-    gpr: &mut [u32; 16],
-    dec: BlockDataTransfer,
-    bus: &mut T,
-    load_or_store: F,
-) -> Result<PipelineStatus, ()>
+fn exec_block_data_transfer<F, T>(gpr: &mut [u32; 16], dec: BlockDataTransfer, bus: &mut T, load_or_store: F) -> Result<PipelineStatus, ()>
 where
     F: Fn(&mut [u32; 16], u32, u32, &mut T),
     T: BusAccessor,
@@ -50,24 +45,17 @@ where
     }
 }
 
-pub fn exec_ldm<T>(
-    bus: &mut T,
-    dec: BlockDataTransfer,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_ldm<T>(bus: &mut T, dec: BlockDataTransfer, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
 where
     T: BusAccessor,
 {
     exec_block_data_transfer(gpr, dec, bus, |gpr, base, i, bus| {
-        gpr[i as usize] = bus.read_word(base) as Word;
+        let data = bus.read_word(base);
+        gpr[i as usize] = data;
     })
 }
 
-pub fn exec_stm<T>(
-    bus: &mut T,
-    dec: BlockDataTransfer,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_stm<T>(bus: &mut T, dec: BlockDataTransfer, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
 where
     T: BusAccessor,
 {

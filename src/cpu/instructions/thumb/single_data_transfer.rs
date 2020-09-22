@@ -3,7 +3,7 @@ use super::super::PipelineStatus;
 use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::thumb::*;
-use crate::cpu::types::*;
+use crate::types::*;
 
 pub fn exec_thumb_ldr3<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
 where
