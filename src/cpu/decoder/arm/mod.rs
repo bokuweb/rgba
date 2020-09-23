@@ -16,7 +16,7 @@ pub use memory::*;
 pub use multiple::*;
 pub use psr_transfer::*;
 
-use super::super::constants::COND_FIELD;
+use crate::cpu::types::Cond;
 use crate::types::Word;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -80,26 +80,27 @@ pub enum Instruction {
     MSR(PsrTransfer),
     MRS(PsrTransfer),
     // NOP,
-} //
-
-#[derive(Debug, PartialEq)]
-pub enum Condition {
-    EQ,
-    NE,
-    CS_HS,
-    CC_LO,
-    MI,
-    PL,
-    VS,
-    VC,
-    HI,
-    LS,
-    GE,
-    LT,
-    GT,
-    LE,
-    AL,
 }
+
+
+// #[derive(Debug, PartialEq)]
+// pub enum Condition {
+//     EQ,
+//     NE,
+//     CS_HS,
+//     CC_LO,
+//     MI,
+//     PL,
+//     VS,
+//     VC,
+//     HI,
+//     LS,
+//     GE,
+//     LT,
+//     GT,
+//     LE,
+//     AL,
+// }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum IndexMode {

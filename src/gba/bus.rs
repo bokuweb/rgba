@@ -59,12 +59,6 @@ pub const PAGE_GAMEPAK_WS2: usize = (GAMEPAK_WS2_LO >> 24) as usize;
 pub const PAGE_SRAM_LO: usize = (SRAM_LO >> 24) as usize;
 pub const PAGE_SRAM_HI: usize = (SRAM_HI >> 24) as usize;
 
-#[derive(Debug, Copy, Clone)]
-pub enum MemoryAccessType {
-    NonSeq,
-    Seq,
-}
-
 #[derive(Clone)]
 struct CycleLUT {
     n32: [usize; 0x10],
@@ -156,6 +150,7 @@ impl CycleLUT {
 }
 
 pub struct CpuBus {
+    cycleLUT: CycleLUT,
     bios: Rom,
     rom: Rom,
     wram: Ram,
@@ -239,11 +234,25 @@ impl BusAccessor for CpuBus {
             _ => panic!("TODO: addr = {:x} data = {:x}", addr, data),
         };
     }
+
+    fn compute_cycle(&self, addr: Word, access_type: AccessType) -> Cycle {
+        let page = (addr >> 24) as usize;
+        if page > 0xF {
+            return 1;
+        }
+        match access_type {
+            AccessType::NonSeq(AccessWidth::Byte) | AccessType::NonSeq(AccessWidth::HalfWord) => self.cycleLUT.n16[page],
+            AccessType::NonSeq(AccessWidth::Word) => self.cycleLUT.n32[page],
+            AccessType::Seq(AccessWidth::Byte) | AccessType::Seq(AccessWidth::HalfWord) => self.cycleLUT.s16[page],
+            AccessType::Seq(AccessWidth::Word) => self.cycleLUT.s32[page],
+        }
+    }
 }
 
 impl CpuBus {
     pub fn new(bios: Rom, rom: Rom, wram: Ram, eram: Ram, vram: Ram) -> CpuBus {
         CpuBus {
+            cycleLUT: CycleLUT::new(),
             bios,
             rom,
             wram,

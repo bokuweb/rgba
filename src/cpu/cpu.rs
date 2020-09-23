@@ -9,6 +9,7 @@ use crate::cpu::instructions::thumb::*;
 
 use crate::cpu::instructions::PipelineStatus;
 use crate::cpu::registers::psr::{CpuState, PSR};
+use crate::cpu::types::*;
 use crate::types::*;
 
 pub const INITIAL_PIPELINE_WAIT: u8 = 2;
@@ -83,7 +84,7 @@ impl ARM {
         self.gpr[PC] = self.gpr[PC].wrapping_add(next);
     }
 
-    fn execute_arm<T>(&mut self, instruction: arm::Instruction, bus: &mut T) -> Result<(), ()>
+    fn execute_arm<T>(&mut self, instruction: arm::Instruction, bus: &mut T) -> Result<Cycle, ()>
     where
         T: BusAccessor,
     {
@@ -143,7 +144,7 @@ impl ARM {
             PipelineStatus::Continue => self.increment_pc(),
             PipelineStatus::Flush => self.flush_pipeline(),
         };
-        Ok(())
+        Ok(0)
     }
 
     fn execute_thumb<T>(&mut self, instruction: thumb::Instruction, bus: &mut T) -> Result<(), ()>
@@ -213,7 +214,7 @@ impl ARM {
         Ok(())
     }
 
-    pub fn step<T>(&mut self, bus: &mut T) -> Result<(), ()>
+    pub fn step<T>(&mut self, bus: &mut T) -> Result<Cycle, ()>
     where
         T: BusAccessor,
     {
@@ -221,20 +222,26 @@ impl ARM {
         if self.pipeline_wait > 0 {
             self.pipeline_wait -= 1;
             self.increment_pc();
-            return Ok(());
+            return Ok(0);
         }
         debug!("registers = {:?} {:?}", self.gpr, self.cpsr.get_cpu_state());
         match self.cpsr.get_cpu_state() {
             CpuState::ARM => {
                 let fetched = self.prefetch_arm(bus);
+                let cond: Cond = fetched.wrapping_shr(28).into();
+                if !self.cpsr.condition_ok(cond) {
+                    return Ok(bus.compute_cycle(0, AccessType::Seq(AccessWidth::Word)));
+                }
                 let instruction = arm::decode(fetched);
-                self.execute_arm(instruction, bus)
+                self.execute_arm(instruction, bus);
+                Ok(0) // TODO:
             }
             CpuState::Thumb => {
                 let fetched = self.prefetch_thumb(bus);
                 debug!("{:x}", fetched);
                 let instruction = thumb::decode(fetched);
-                self.execute_thumb(instruction, bus)
+                self.execute_thumb(instruction, bus);
+                Ok(0) // TODO:
             }
         }
     }
@@ -323,6 +330,10 @@ mod test {
 
         fn write_word(&mut self, addr: Word, data: Word) {
             LittleEndian::write_u32(&mut self.mem[(addr as usize)..], data);
+        }
+
+        fn compute_cycle(&self, addr: Word, access_type: AccessType) -> Cycle {
+            1
         }
     }
 
