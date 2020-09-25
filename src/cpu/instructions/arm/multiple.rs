@@ -3,22 +3,23 @@ use super::super::PipelineStatus;
 use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::*;
+use crate::cpu::instructions::ExecuteResult;
 use crate::cpu::registers::psr::PSR;
 use crate::types::*;
 
-pub fn exec_multiple<F>(gpr: &mut [Word; 16], dec: Multiple, multiple: &mut F) -> Result<PipelineStatus, ()>
+pub fn exec_multiple<F>(gpr: &mut [Word; 16], dec: Multiple, multiple: &mut F) -> Result<ExecuteResult, ()>
 where
     F: FnMut(&mut [Word; 16]),
 {
     multiple(gpr);
     if dec.get_Rd() == PC as u32 {
-        Ok(PipelineStatus::Flush)
+        Ok((0, PipelineStatus::Flush))
     } else {
-        Ok(PipelineStatus::Continue)
+        Ok((0, PipelineStatus::Continue))
     }
 }
 
-pub fn exec_mul<T>(__bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<PipelineStatus, ()>
+pub fn exec_arm_mul<T>(__bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -30,7 +31,7 @@ where
     })
 }
 
-pub fn exec_mla<T>(__bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<PipelineStatus, ()>
+pub fn exec_arm_mla<T>(__bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -43,7 +44,7 @@ where
     })
 }
 
-pub fn exec_umull<T>(__bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<PipelineStatus, ()>
+pub fn exec_arm_umull<T>(__bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -58,7 +59,7 @@ where
     })
 }
 
-pub fn exec_umlal<T>(_bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<PipelineStatus, ()>
+pub fn exec_arm_umlal<T>(_bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -75,7 +76,7 @@ where
     })
 }
 
-pub fn exec_smull<T>(_bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<PipelineStatus, ()>
+pub fn exec_arm_smull<T>(_bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -90,7 +91,7 @@ where
     })
 }
 
-pub fn exec_smlal<T>(_bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<PipelineStatus, ()>
+pub fn exec_arm_smlal<T>(_bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {

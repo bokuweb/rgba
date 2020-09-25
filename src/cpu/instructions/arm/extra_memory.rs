@@ -3,9 +3,10 @@ use super::super::PipelineStatus;
 use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::*;
+use crate::cpu::instructions::ExecuteResult;
 use crate::types::*;
 
-fn exec_ex_memory_processing<F>(gpr: &mut [u32; 16], dec: ExtraMemory, load_or_store: F) -> Result<PipelineStatus, ()>
+fn exec_ex_memory_processing<F>(gpr: &mut [u32; 16], dec: ExtraMemory, load_or_store: F) -> Result<ExecuteResult, ()>
 where
     F: FnOnce(&mut [u32; 16], u32),
 {
@@ -26,13 +27,13 @@ where
         gpr[dec.get_Rn() as usize] = base;
     }
     if dec.get_Rd() as usize == PC {
-        Ok(PipelineStatus::Flush)
+        Ok((0, PipelineStatus::Flush))
     } else {
-        Ok(PipelineStatus::Continue)
+        Ok((0, PipelineStatus::Continue))
     }
 }
 
-pub fn exec_strh<T>(bus: &mut T, dec: ExtraMemory, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
+pub fn exec_arm_strh<T>(bus: &mut T, dec: ExtraMemory, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -43,7 +44,7 @@ where
 }
 
 #[allow(non_snake_case)]
-pub fn exec_ldrh<T>(bus: &mut T, dec: ExtraMemory, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
+pub fn exec_arm_ldrh<T>(bus: &mut T, dec: ExtraMemory, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -55,7 +56,7 @@ where
 }
 
 #[allow(non_snake_case)]
-pub fn exec_ldrsb<T>(bus: &mut T, dec: ExtraMemory, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
+pub fn exec_arm_ldrsb<T>(bus: &mut T, dec: ExtraMemory, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -66,7 +67,7 @@ where
 }
 
 #[allow(non_snake_case)]
-pub fn exec_ldrsh<T>(bus: &mut T, dec: ExtraMemory, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
+pub fn exec_arm_ldrsh<T>(bus: &mut T, dec: ExtraMemory, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {

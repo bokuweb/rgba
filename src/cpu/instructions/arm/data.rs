@@ -4,14 +4,11 @@ use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::*;
 use crate::cpu::instructions::shift::{is_carry_over, ror, shift};
+use crate::cpu::instructions::ExecuteResult;
 use crate::cpu::registers::psr::PSR;
 use crate::types::*;
 
-pub fn exec_data_processing<F>(
-    gpr: &mut [Word; 16],
-    dec: DataProcessing,
-    data_process: &mut F,
-) -> Result<PipelineStatus, ()>
+pub fn exec_data_processing<F>(gpr: &mut [Word; 16], dec: DataProcessing, data_process: &mut F) -> Result<ExecuteResult, ()>
 where
     F: FnMut(&mut [Word; 16], Word, bool),
 {
@@ -23,11 +20,7 @@ where
         )
     } else {
         let rm = dec.get_Rm() as usize;
-        let shift_value = if dec.get_bit4() {
-            dec.get_Rs()
-        } else {
-            dec.get_shamt5()
-        };
+        let shift_value = if dec.get_bit4() { dec.get_Rs() } else { dec.get_shamt5() };
         (
             shift(dec.get_sh().into(), gpr[rm], shift_value),
             is_carry_over(dec.get_sh().into(), gpr[rm], shift_value),
@@ -35,31 +28,24 @@ where
     };
     data_process(gpr, value, carry);
     if dec.get_Rd() == PC as u32 {
-        Ok(PipelineStatus::Flush)
+        Ok((0, PipelineStatus::Flush))
     } else {
-        Ok(PipelineStatus::Continue)
+        Ok((0, PipelineStatus::Continue))
     }
 }
 
-pub fn exec_mov<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_mov<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
+    dbg!("arm mov");
     exec_data_processing(gpr, dec, &mut |gpr, value, _| {
         gpr[rd] = value;
     })
 }
 
-pub fn exec_and<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_and<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -70,11 +56,7 @@ where
     })
 }
 
-pub fn exec_eor<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_eor<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -85,11 +67,7 @@ where
     })
 }
 
-pub fn exec_sub<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_sub<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -100,11 +78,7 @@ where
     })
 }
 
-pub fn exec_rsb<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_rsb<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -115,11 +89,7 @@ where
     })
 }
 
-pub fn exec_add<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_add<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -130,66 +100,40 @@ where
     })
 }
 
-pub fn exec_adc<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-    cspr: &PSR,
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_adc<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16], cspr: &PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
     exec_data_processing(gpr, dec, &mut |gpr, value, _| {
-        gpr[rd] = gpr[rn]
-            .wrapping_add(value)
-            .wrapping_add(if cspr.get_C() { 1 } else { 0 });
+        gpr[rd] = gpr[rn].wrapping_add(value).wrapping_add(if cspr.get_C() { 1 } else { 0 });
     })
 }
 
-pub fn exec_sbc<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-    cspr: &PSR,
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_sbc<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16], cspr: &PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
     exec_data_processing(gpr, dec, &mut |gpr, value, _| {
-        gpr[rd] = gpr[rn]
-            .wrapping_sub(value)
-            .wrapping_sub(if cspr.get_C() { 0 } else { 1 });
+        gpr[rd] = gpr[rn].wrapping_sub(value).wrapping_sub(if cspr.get_C() { 0 } else { 1 });
     })
 }
 
-pub fn exec_rsc<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-    cspr: &PSR,
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_rsc<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16], cspr: &PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
     exec_data_processing(gpr, dec, &mut |gpr, value, _| {
-        gpr[rd] = gpr[rn]
-            .wrapping_sub(value)
-            .wrapping_sub(if cspr.get_C() { 0 } else { 1 });
+        gpr[rd] = gpr[rn].wrapping_sub(value).wrapping_sub(if cspr.get_C() { 0 } else { 1 });
     })
 }
 
-pub fn exec_tst<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-    cspr: &mut PSR,
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_tst<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16], cspr: &mut PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -204,12 +148,7 @@ where
     })
 }
 
-pub fn exec_teq<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-    cspr: &mut PSR,
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_teq<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16], cspr: &mut PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -224,12 +163,7 @@ where
     })
 }
 
-pub fn exec_cmp<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-    cspr: &mut PSR,
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_cmp<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16], cspr: &mut PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -246,12 +180,7 @@ where
     })
 }
 
-pub fn exec_cmn<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-    cspr: &mut PSR,
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_cmn<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16], cspr: &mut PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -267,11 +196,7 @@ where
     })
 }
 
-pub fn exec_orr<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_orr<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -282,11 +207,7 @@ where
     })
 }
 
-pub fn exec_shift<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_shift<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -296,11 +217,7 @@ where
     })
 }
 
-pub fn exec_bic<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_bic<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -309,11 +226,7 @@ where
     exec_data_processing(gpr, dec, &mut |gpr, value, _| gpr[rd] = gpr[rn] & !value)
 }
 
-pub fn exec_mvn<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_mvn<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -321,12 +234,7 @@ where
     exec_data_processing(gpr, dec, &mut |gpr, value, _| gpr[rd] = !value)
 }
 
-pub fn exec_rrx<T>(
-    _bus: &mut T,
-    dec: DataProcessing,
-    gpr: &mut [Word; 16],
-    cspr: &PSR,
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_rrx<T>(_bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16], cspr: &PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {

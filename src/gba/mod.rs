@@ -29,7 +29,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use types::*;
+use crate::types::*;
 
 fn load_bin(bin: String) -> Result<Vec<u8>, std::io::Error> {
     let path = Path::new(&bin);
@@ -54,8 +54,11 @@ pub fn frame() -> Vec<u8> {
     let mut bus = CpuBus::new(bios, rom, wram, eram, vram);
     let mut arm = cpu::ARM::new();
 
-    for _ in 0..4000000 {
-        arm.step(&mut bus);
+    let mut cycle: Cycle = 0;
+
+    for _ in 0..4{
+        cycle = cycle + arm.step(&mut bus).unwrap();
+        dbg!(cycle);
     }
 
     let mut buf = vec![];
@@ -120,6 +123,14 @@ mod test {
                 0x0800_02E4
             ]
         );
+        self::assert_eq!(bus.read_halfword(0x0600_96F0), 0x001F);
+    }
+
+    #[test]
+    // step
+    fn test_dot_rom() {
+        let bin = include_bytes!("../../fixtures/dot_rs/dot.gba");
+        let (cpu, bus) = run_with_step(100, bin);
         self::assert_eq!(bus.read_halfword(0x0600_96F0), 0x001F);
     }
 }

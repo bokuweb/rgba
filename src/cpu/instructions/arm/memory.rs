@@ -3,10 +3,10 @@ use super::super::PipelineStatus;
 use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::*;
-use crate::cpu::instructions::shift::*;
+use crate::cpu::instructions::{shift::*, ExecuteResult};
 use crate::types::*;
 
-fn exec_memory_processing<F>(gpr: &mut [u32; 16], dec: Memory, load_or_store: F) -> Result<PipelineStatus, ()>
+fn exec_memory_processing<F>(gpr: &mut [u32; 16], dec: Memory, load_or_store: F) -> Result<ExecuteResult, ()>
 where
     F: FnOnce(&mut [u32; 16], u32),
 {
@@ -35,14 +35,14 @@ where
         gpr[dec.get_Rn() as usize] = base;
     }
     if dec.get_Rd() as usize == PC && dec.get_L() {
-        Ok(PipelineStatus::Flush)
+        Ok((0, PipelineStatus::Flush))
     } else {
-        Ok(PipelineStatus::Continue)
+        Ok((0, PipelineStatus::Continue))
     }
 }
 
 #[allow(non_snake_case)]
-pub fn exec_ldr<T>(bus: &mut T, dec: Memory, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
+pub fn exec_arm_ldr<T>(bus: &mut T, dec: Memory, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -53,7 +53,7 @@ where
 }
 
 #[allow(non_snake_case)]
-pub fn exec_ldrb<T>(bus: &mut T, dec: Memory, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
+pub fn exec_arm_ldrb<T>(bus: &mut T, dec: Memory, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -63,7 +63,7 @@ where
     })
 }
 
-pub fn exec_str<T>(bus: &mut T, dec: Memory, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
+pub fn exec_arm_str<T>(bus: &mut T, dec: Memory, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -73,7 +73,7 @@ where
     })
 }
 
-pub fn exec_strb<T>(bus: &mut T, dec: Memory, gpr: &mut [Word; 16]) -> Result<PipelineStatus, ()>
+pub fn exec_arm_strb<T>(bus: &mut T, dec: Memory, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {

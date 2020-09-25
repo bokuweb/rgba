@@ -1,18 +1,18 @@
 use super::super::PipelineStatus;
 
 use crate::cpu::decoder::arm::*;
-use crate::cpu::instructions::shift::ror;
+use crate::cpu::instructions::{shift::ror, ExecuteResult};
 use crate::cpu::registers::psr::{Mode, PSR};
 use crate::types::*;
 
-pub fn exec_mrs(dec: PsrTransfer, gpr: &mut [Word; 16], cpsr: &PSR, spsr: &PSR) -> Result<PipelineStatus, ()> {
+pub fn exec_arm_mrs(dec: PsrTransfer, gpr: &mut [Word; 16], cpsr: &PSR, spsr: &PSR) -> Result<ExecuteResult, ()> {
     let rd = dec.get_Rd() as usize;
     gpr[rd] = if dec.get_Pd() { spsr.get() } else { cpsr.get() };
     // TODO: Add 1S cycle.
-    Ok(PipelineStatus::Continue)
+    Ok((0, PipelineStatus::Continue))
 }
 
-pub fn exec_msr(dec: PsrTransfer, gpr: &mut [Word; 16], cpsr: &mut PSR, spsr: &mut PSR) -> Result<PipelineStatus, ()> {
+pub fn exec_arm_msr(dec: PsrTransfer, gpr: &mut [Word; 16], cpsr: &mut PSR, spsr: &mut PSR) -> Result<ExecuteResult, ()> {
     let value = if dec.get_I() {
         ror(dec.get_imm(), dec.get_rotate())
     } else {
@@ -59,5 +59,5 @@ pub fn exec_msr(dec: PsrTransfer, gpr: &mut [Word; 16], cpsr: &mut PSR, spsr: &m
     }
 
     // TODO: Add 1S cycle.
-    Ok(PipelineStatus::Continue)
+    Ok((0, PipelineStatus::Continue))
 }
