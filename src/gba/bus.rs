@@ -202,10 +202,18 @@ impl BusAccessor for CpuBus {
     fn write_halfword(&mut self, addr: u32, data: HalfWord) {
         info!("write half word addr = 0x{:x} data = 0x{:x}", addr, data);
         match addr {
+            // I/O Register
+            0x0400_0000..=0x0400_03FE => {
+                dbg!(
+                    "I/O register is not implemented yet.",
+                    format!("addr = {:x} data = {:x}", addr, data)
+                );
+            }
             0x0600_0000..=0x0601_7FFF => {
                 dbg!(addr, data);
                 self.vram.write_halfword(addr - 0x0600_0000, data);
             }
+
             _ => panic!("TODO: "),
         };
     }

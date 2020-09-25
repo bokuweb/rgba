@@ -54,7 +54,7 @@ pub fn frame() -> Vec<u8> {
     let mut bus = CpuBus::new(bios, rom, wram, eram, vram);
     let mut arm = cpu::ARM::new();
 
-    for _ in 0..400000 {
+    for _ in 0..4000000 {
         arm.step(&mut bus);
     }
 
