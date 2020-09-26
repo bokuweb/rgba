@@ -58,7 +58,7 @@ where
     } else {
         // consume merged I-S cycle
         let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
-        Ok((0, PipelineStatus::Continue))
+        Ok((cycle, PipelineStatus::Continue))
     }
 }
 
@@ -67,6 +67,8 @@ where
     T: BusAccessor,
 {
     let mut base: i64 = gpr[dec.get_Rn() as usize] as i64;
+    let mut cycle: Cycle = 0;
+
     let register_list = dec.get_register_list();
     let offset: i64 = if dec.get_U() { 4 } else { -4 };
     for i in 0..0x10 {
@@ -74,7 +76,14 @@ where
             if dec.get_P() {
                 base = base.wrapping_add(offset);
             }
-            bus.write_word(base as Word, gpr[i as usize] as Word);
+            let addr = base as Word;
+            let access_type = if i == 0 {
+                AccessType::NonSeq(AccessWidth::Word)
+            } else {
+                AccessType::Seq(AccessWidth::Word)
+            };
+            cycle += bus.compute_cycle(addr, access_type);
+            bus.write_word(addr, gpr[i as usize] as Word);
             if !dec.get_P() {
                 base = base.wrapping_add(offset);
             }
@@ -84,5 +93,7 @@ where
     if dec.get_W() {
         gpr[dec.get_Rn() as usize] = base as u32;
     }
+
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));
     Ok((0, PipelineStatus::Continue))
 }
