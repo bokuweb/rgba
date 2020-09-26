@@ -22,6 +22,7 @@ where
 {
     let mut base: i64 = gpr[dec.get_Rn() as usize] as i64;
     let mut cycle: Cycle = 0;
+    let mut is_n_cycle = true;
 
     let register_list = dec.get_register_list();
     let offset: i64 = if dec.get_U() { 4 } else { -4 };
@@ -31,7 +32,8 @@ where
                 base = base.wrapping_add(offset);
             }
             let addr = base as Word;
-            let access_type = if i == 0 {
+            let access_type = if is_n_cycle {
+                is_n_cycle = false;
                 AccessType::NonSeq(AccessWidth::Word)
             } else {
                 AccessType::Seq(AccessWidth::Word)
@@ -68,16 +70,19 @@ where
 {
     let mut base: i64 = gpr[dec.get_Rn() as usize] as i64;
     let mut cycle: Cycle = 0;
+    let mut is_n_cycle = true;
 
     let register_list = dec.get_register_list();
     let offset: i64 = if dec.get_U() { 4 } else { -4 };
+
     for i in 0..0x10 {
         if register_list & (1 << i) != 0 {
             if dec.get_P() {
                 base = base.wrapping_add(offset);
             }
             let addr = base as Word;
-            let access_type = if i == 0 {
+            let access_type = if is_n_cycle {
+                is_n_cycle = false;
                 AccessType::NonSeq(AccessWidth::Word)
             } else {
                 AccessType::Seq(AccessWidth::Word)
@@ -95,5 +100,5 @@ where
     }
 
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));
-    Ok((0, PipelineStatus::Continue))
+    Ok((cycle, PipelineStatus::Continue))
 }
