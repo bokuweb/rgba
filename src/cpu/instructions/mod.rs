@@ -1,6 +1,7 @@
 pub mod arm;
 pub mod shift;
 pub mod thumb;
+pub mod helpers;
 
 #[derive(Debug)]
 pub enum PipelineStatus {
