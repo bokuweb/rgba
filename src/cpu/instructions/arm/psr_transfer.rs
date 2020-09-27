@@ -1,18 +1,26 @@
 use super::super::PipelineStatus;
 
+use crate::cpu::bus::accessor::*;
+use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::*;
 use crate::cpu::instructions::{shift::ror, ExecuteResult};
 use crate::cpu::registers::psr::{Mode, PSR};
 use crate::types::*;
 
-pub fn exec_arm_mrs(dec: PsrTransfer, gpr: &mut [Word; 16], cpsr: &PSR, spsr: &PSR) -> Result<ExecuteResult, ()> {
+pub fn exec_arm_mrs<T>(bus: &T, dec: PsrTransfer, gpr: &mut [Word; 16], cpsr: &PSR, spsr: &PSR) -> Result<ExecuteResult, ()>
+where
+    T: BusAccessor,
+{
     let rd = dec.get_Rd() as usize;
     gpr[rd] = if dec.get_Pd() { spsr.get() } else { cpsr.get() };
-    // TODO: Add 1S cycle.
-    Ok((0, PipelineStatus::Continue))
+    let cycle = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    Ok((cycle, PipelineStatus::Continue))
 }
 
-pub fn exec_arm_msr(dec: PsrTransfer, gpr: &mut [Word; 16], cpsr: &mut PSR, spsr: &mut PSR) -> Result<ExecuteResult, ()> {
+pub fn exec_arm_msr<T>(bus: &T, dec: PsrTransfer, gpr: &mut [Word; 16], cpsr: &mut PSR, spsr: &mut PSR) -> Result<ExecuteResult, ()>
+where
+    T: BusAccessor,
+{
     let value = if dec.get_I() {
         ror(dec.get_imm(), dec.get_rotate())
     } else {
@@ -58,6 +66,6 @@ pub fn exec_arm_msr(dec: PsrTransfer, gpr: &mut [Word; 16], cpsr: &mut PSR, spsr
         }
     }
 
-    // TODO: Add 1S cycle.
-    Ok((0, PipelineStatus::Continue))
+    let cycle = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    Ok((cycle, PipelineStatus::Continue))
 }
