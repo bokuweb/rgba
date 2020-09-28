@@ -263,6 +263,8 @@ impl ARM {
                 thumb::Instruction::ADD3(dec) => exec_thumb_add3(dec, &mut self.gpr, &mut self.cpsr)?,
                 thumb::Instruction::ADD4(dec) => {
                     dbg!(dec.0);
+                    // Format 5
+                    // This instruction can change PC
                     todo!("ADD4");
                 }
                 thumb::Instruction::CMP3(dec) => {
