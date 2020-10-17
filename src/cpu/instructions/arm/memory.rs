@@ -82,7 +82,7 @@ where
         Ok((cycle, PipelineStatus::Flush))
     } else {
         // Add merged I + S cycle.
-        let cycle = cycle + bus.compute_cycle(base, AccessType::Seq(AccessWidth::Word));
+        let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
         Ok((cycle, PipelineStatus::Continue))
     }
 }
