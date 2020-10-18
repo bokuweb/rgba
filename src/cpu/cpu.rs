@@ -161,8 +161,8 @@ impl ARM {
                 let fetched = self.get_thumb_executable(bus);
                 debug!("{:x}", fetched);
                 let instruction = thumb::decode(fetched);
-                self.execute_thumb(instruction, bus);
-                Ok(0) // TODO:
+                let cycle = cycle + self.execute_thumb(instruction, bus);
+                Ok(cycle)
             }
         }
     }
@@ -410,7 +410,7 @@ mod test {
         let mut bus = MockBus::new();
         let mut arm = ARM::new();
         arm.step(&mut bus);
-        assert_eq!(arm.get_gpr(PC), 0x0000_0004);
+        assert_eq!(arm.get_gpr(PC), 0x0000_0008);
     }
 
     #[test]
@@ -884,10 +884,10 @@ mod test {
         setup();
         let mut bus = MockBus::new();
         &bus.set(0x0, 0xE51F_F004);
-        &bus.set(0x4, 0x8000_0000);
+        &bus.set(0x4, 0x0000_0010);
         let mut arm = ARM::new();
         arm.run_immediately(&mut bus);
-        assert_eq!(arm.get_gpr(PC), 0x8000_0000);
+        assert_eq!(arm.get_gpr(PC), 0x0000_0018);
     }
 
     #[test]
@@ -1034,7 +1034,7 @@ mod test {
         &bus.set(0x0000_0000, 0xEAFF_FFFE);
         let mut arm = ARM::new();
         arm.run_immediately(&mut bus);
-        assert_eq!(arm.get_gpr(PC), 0x0000_0000);
+        assert_eq!(arm.get_gpr(PC), 0x0000_0008);
     }
 
     #[test]
@@ -1045,7 +1045,7 @@ mod test {
         &bus.set(0x0000_0000, 0xEBFF_FFFE);
         let mut arm = ARM::new();
         arm.run_immediately(&mut bus);
-        assert_eq!(arm.get_gpr(PC), 0x0000_0000);
+        assert_eq!(arm.get_gpr(PC), 0x0000_0008);
         assert_eq!(arm.get_gpr(LR), 0x0000_0004);
     }
 

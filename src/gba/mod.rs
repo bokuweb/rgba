@@ -56,10 +56,10 @@ pub fn frame() -> Vec<u8> {
 
     let mut cycle: Cycle = 0;
 
-    for _ in 0..4{
+    for _ in 0..400000 {
         cycle = cycle + arm.step(&mut bus).unwrap();
-        dbg!(cycle);
     }
+    dbg!(cycle);
 
     let mut buf = vec![];
     for offset in 0..(240 * 160) {
@@ -120,7 +120,7 @@ mod test {
                 0,
                 0x0300_7F00,
                 0x0800_0187,
-                0x0800_02E4
+                0x0800_02E6
             ]
         );
         self::assert_eq!(bus.read_halfword(0x0600_96F0), 0x001F);
