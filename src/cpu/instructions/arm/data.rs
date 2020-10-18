@@ -52,6 +52,7 @@ where
     dbg!("arm mov");
     exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
         gpr[rd] = value;
+        dbg!(&gpr, value, rd);
     })
 }
 

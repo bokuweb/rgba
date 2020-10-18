@@ -73,6 +73,14 @@ impl ARM {
         self.mode = CpuMode::Supervisor;
         self.irq_disable = true;
         self.fiq_disable = true;
+
+        // TODO: ResetSP
+        // this.cpu.switchMode(this.cpu.MODE_SUPERVISOR);
+        // this.cpu.gprs[this.cpu.SP] = 0x3007FE0;
+        // this.cpu.switchMode(this.cpu.MODE_IRQ);
+        // this.cpu.gprs[this.cpu.SP] = 0x3007FA0;
+        // this.cpu.switchMode(this.cpu.MODE_SYSTEM);
+        self.gpr[SP] = 0x3007F00;
     }
 
     fn flush_pipeline(&mut self) {
