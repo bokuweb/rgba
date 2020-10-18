@@ -1,8 +1,10 @@
 use super::super::PipelineStatus;
 
 use crate::cpu::bus::accessor::*;
+use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::*;
-use crate::cpu::types::*;
+use crate::cpu::instructions::*;
+use crate::types::*;
 
 // 31    28 27  25 24  23  22  21  20 19    16 15                      0
 // ---------------------------------------------------------------------
@@ -13,17 +15,15 @@ use crate::cpu::types::*;
 // S = Restore force user bit. S specifies if banked register access should occur when in privileged modes [or if R15 and 26 bit and user mode, if the PSR should be written while PC is updated]
 // W = 1: Auto Index
 // L = 0: Store / 1: Load
-fn exec_block_data_transfer<F, T>(
-    gpr: &mut [u32; 16],
-    dec: BlockDataTransfer,
-    bus: &mut T,
-    load_or_store: F,
-) -> Result<PipelineStatus, ()>
+
+pub fn exec_arm_ldm<T>(bus: &mut T, dec: BlockDataTransfer, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
-    F: Fn(&mut [u32; 16], u32, u32, &mut T),
     T: BusAccessor,
 {
     let mut base: i64 = gpr[dec.get_Rn() as usize] as i64;
+    let mut cycle: Cycle = 0;
+    let mut is_n_cycle = true;
+
     let register_list = dec.get_register_list();
     let offset: i64 = if dec.get_U() { 4 } else { -4 };
     for i in 0..0x10 {
@@ -31,7 +31,16 @@ where
             if dec.get_P() {
                 base = base.wrapping_add(offset);
             }
-            load_or_store(gpr, base as u32, i, bus);
+            let addr = base as Word;
+            let access_type = if is_n_cycle {
+                is_n_cycle = false;
+                AccessType::NonSeq(AccessWidth::Word)
+            } else {
+                AccessType::Seq(AccessWidth::Word)
+            };
+            cycle += bus.compute_cycle(addr, access_type);
+            let data = bus.read_word(addr);
+            gpr[i as usize] = data;
             if !dec.get_P() {
                 base = base.wrapping_add(offset);
             }
@@ -42,36 +51,54 @@ where
         gpr[dec.get_Rn() as usize] = base as u32;
     }
 
+    // Consume 1I cycle.
+    let cycle = cycle + 1;
+
     // If PC is loaded
-    if register_list & 0x8000 != 0 && dec.get_L() {
-        Ok(PipelineStatus::Flush)
+    if register_list & 0x8000 != 0 {
+        Ok((cycle, PipelineStatus::Flush))
     } else {
-        Ok(PipelineStatus::Continue)
+        // consume merged I-S cycle
+        let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+        Ok((cycle, PipelineStatus::Continue))
     }
 }
 
-pub fn exec_ldm<T>(
-    bus: &mut T,
-    dec: BlockDataTransfer,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_stm<T>(bus: &mut T, dec: BlockDataTransfer, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
-    exec_block_data_transfer(gpr, dec, bus, |gpr, base, i, bus| {
-        gpr[i as usize] = bus.read_word(base) as Word;
-    })
-}
+    let mut base: i64 = gpr[dec.get_Rn() as usize] as i64;
+    let mut cycle: Cycle = 0;
+    let mut is_n_cycle = true;
 
-pub fn exec_stm<T>(
-    bus: &mut T,
-    dec: BlockDataTransfer,
-    gpr: &mut [Word; 16],
-) -> Result<PipelineStatus, ()>
-where
-    T: BusAccessor,
-{
-    exec_block_data_transfer(gpr, dec, bus, |gpr, base, i, bus| {
-        bus.write_word(base, gpr[i as usize] as Word);
-    })
+    let register_list = dec.get_register_list();
+    let offset: i64 = if dec.get_U() { 4 } else { -4 };
+
+    for i in 0..0x10 {
+        if register_list & (1 << i) != 0 {
+            if dec.get_P() {
+                base = base.wrapping_add(offset);
+            }
+            let addr = base as Word;
+            let access_type = if is_n_cycle {
+                is_n_cycle = false;
+                AccessType::NonSeq(AccessWidth::Word)
+            } else {
+                AccessType::Seq(AccessWidth::Word)
+            };
+            cycle += bus.compute_cycle(addr, access_type);
+            bus.write_word(addr, gpr[i as usize] as Word);
+            if !dec.get_P() {
+                base = base.wrapping_add(offset);
+            }
+        }
+    }
+    // TODO: Handle S flag.
+    if dec.get_W() {
+        gpr[dec.get_Rn() as usize] = base as u32;
+    }
+
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));
+    Ok((cycle, PipelineStatus::Continue))
 }
