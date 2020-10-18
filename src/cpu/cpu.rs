@@ -249,7 +249,7 @@ impl ARM {
         }
     }
 
-    fn execute_thumb<T>(&mut self, instruction: thumb::Instruction, bus: &mut T) -> Result<(), ()>
+    fn execute_thumb<T>(&mut self, instruction: thumb::Instruction, bus: &mut T) -> Cycle
     where
         T: BusAccessor,
     {
@@ -300,11 +300,11 @@ impl ARM {
                 thumb::Instruction::B(dec) => exec_thumb_b(dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::B2(dec) => exec_thumb_b2(dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::BL(dec) => exec_thumb_bl1(bus, dec, &mut self.gpr),
-                thumb::Instruction::BX(dec) => exec_thumb_bx(dec, &mut self.cpsr, &mut self.gpr)?,
-                thumb::Instruction::STMIA(dec) => exec_thumb_stmia(bus, dec, &mut self.gpr)?,
-                thumb::Instruction::LDMIA(dec) => exec_thumb_ldmia(bus, dec, &mut self.gpr)?,
-                thumb::Instruction::PUSH(dec) => exec_thumb_push(bus, dec, &mut self.gpr)?,
-                thumb::Instruction::POP(dec) => exec_thumb_pop(bus, dec, &mut self.gpr)?,
+                thumb::Instruction::BX(dec) => exec_thumb_bx(bus, dec, &mut self.cpsr, &mut self.gpr),
+                thumb::Instruction::STMIA(dec) => exec_thumb_stmia(bus, dec, &mut self.gpr),
+                thumb::Instruction::LDMIA(dec) => exec_thumb_ldmia(bus, dec, &mut self.gpr),
+                thumb::Instruction::PUSH(dec) => exec_thumb_push(bus, dec, &mut self.gpr),
+                thumb::Instruction::POP(dec) => exec_thumb_pop(bus, dec, &mut self.gpr),
                 _ => {
                     dbg!(&instruction);
                     unimplemented!();
@@ -312,10 +312,15 @@ impl ARM {
             }
         };
         match pipeline_status {
-            PipelineStatus::Continue => self.increment_pc(),
-            PipelineStatus::Flush => self.flush_pipeline(),
-        };
-        Ok(())
+            PipelineStatus::Continue => {
+                self.increment_pc();
+                cycle
+            }
+            PipelineStatus::Flush => {
+                self.flush_pipeline();
+                cycle + self.wait_pipeline_filled(bus)
+            }
+        }
     }
 }
 
