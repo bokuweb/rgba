@@ -1,0 +1,15 @@
+[package]
+name = "dot_rs"
+version = "0.1.0"
+authors = ["bokuweb <bokuweb12@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[profile.dev]
+panic = "abort"
+lto = true
+
+[profile.release]
+panic = 'abort'
+lto = true

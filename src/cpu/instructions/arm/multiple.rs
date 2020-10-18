@@ -3,48 +3,24 @@ use super::super::PipelineStatus;
 use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::*;
+use crate::cpu::instructions::{helpers::*, ExecuteResult};
 use crate::cpu::registers::psr::PSR;
-use crate::cpu::types::*;
+use crate::types::*;
 
-pub fn exec_multiple<F>(
-    gpr: &mut [Word; 16],
-    dec: Multiple,
-    multiple: &mut F,
-) -> Result<PipelineStatus, ()>
-where
-    F: FnMut(&mut [Word; 16]),
-{
-    multiple(gpr);
-    if dec.get_Rd() == PC as u32 {
-        Ok(PipelineStatus::Flush)
-    } else {
-        Ok(PipelineStatus::Continue)
-    }
-}
-
-pub fn exec_mul<T>(
-    __bus: &mut T,
-    dec: Multiple,
-    gpr: &mut [Word; 16],
-    _cspr: &PSR,
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_mul<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
     let rm = dec.get_Rm() as usize;
     let rs = dec.get_Rs() as usize;
-    exec_multiple(gpr, dec, &mut |gpr| {
-        gpr[rd] = ((gpr[rm] as u64) * gpr[rs] as u64) as u32;
-    })
+    gpr[rd] = ((gpr[rm] as u64) * gpr[rs] as u64) as u32;
+    // MUL consume (m)I + S
+    let cycle = compute_multiple_cycle(gpr[rs]) + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    Ok((cycle, PipelineStatus::Continue))
 }
 
-pub fn exec_mla<T>(
-    __bus: &mut T,
-    dec: Multiple,
-    gpr: &mut [Word; 16],
-    _cspr: &PSR,
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_mla<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -52,17 +28,13 @@ where
     let rm = dec.get_Rm() as usize;
     let rs = dec.get_Rs() as usize;
     let rn = dec.get_Rn() as usize;
-    exec_multiple(gpr, dec, &mut |gpr| {
-        gpr[rd] = (((gpr[rm] as u64) * gpr[rs] as u64) + gpr[rn] as u64) as u32;
-    })
+    gpr[rd] = (((gpr[rm] as u64) * gpr[rs] as u64) + gpr[rn] as u64) as u32;
+    // MLA consume I + (m)I + S
+    let cycle = 1 + compute_multiple_cycle(gpr[rs]) + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    Ok((cycle, PipelineStatus::Continue))
 }
 
-pub fn exec_umull<T>(
-    __bus: &mut T,
-    dec: Multiple,
-    gpr: &mut [Word; 16],
-    _cspr: &PSR,
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_umull<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -70,19 +42,15 @@ where
     let rm = dec.get_Rm() as usize;
     let rs = dec.get_Rs() as usize;
     let rn = dec.get_Rn() as usize;
-    exec_multiple(gpr, dec, &mut |gpr| {
-        let mul = (gpr[rm] as u64) * gpr[rs] as u64;
-        gpr[rn] = mul as u32;
-        gpr[rd] = (mul >> 32) as u32;
-    })
+    let mul = (gpr[rm] as u64) * gpr[rs] as u64;
+    gpr[rn] = mul as u32;
+    gpr[rd] = (mul >> 32) as u32;
+    // MULL consume (m)I + I + S
+    let cycle = compute_multiple_cycle(gpr[rs]) + 1 + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    Ok((cycle, PipelineStatus::Continue))
 }
 
-pub fn exec_umlal<T>(
-    _bus: &mut T,
-    dec: Multiple,
-    gpr: &mut [Word; 16],
-    _cspr: &PSR,
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_umlal<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -90,21 +58,17 @@ where
     let rm = dec.get_Rm() as usize;
     let rs = dec.get_Rs() as usize;
     let rn = dec.get_Rn() as usize;
-    exec_multiple(gpr, dec, &mut |gpr| {
-        let mul = (gpr[rm] as u64) * gpr[rs] as u64;
-        let base = ((gpr[rd] as u64) << 32) + (gpr[rn] as u64);
-        let result = mul + base;
-        gpr[rn] = result as u32;
-        gpr[rd] = (result >> 32) as u32;
-    })
+    let mul = (gpr[rm] as u64) * gpr[rs] as u64;
+    let base = ((gpr[rd] as u64) << 32) + (gpr[rn] as u64);
+    let result = mul + base;
+    gpr[rn] = result as u32;
+    gpr[rd] = (result >> 32) as u32;
+    // MLAL consume I + (m)I + I + S
+    let cycle = 1 + compute_multiple_cycle(gpr[rs]) + 1 + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    Ok((cycle, PipelineStatus::Continue))
 }
 
-pub fn exec_smull<T>(
-    _bus: &mut T,
-    dec: Multiple,
-    gpr: &mut [Word; 16],
-    _cspr: &PSR,
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_smull<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -112,19 +76,15 @@ where
     let rm = dec.get_Rm() as usize;
     let rs = dec.get_Rs() as usize;
     let rn = dec.get_Rn() as usize;
-    exec_multiple(gpr, dec, &mut |gpr| {
-        let mul = (gpr[rm] as i32 as i64) * gpr[rs] as i32 as i64;
-        gpr[rn] = mul as u32;
-        gpr[rd] = (mul >> 32) as u32;
-    })
+    let mul = (gpr[rm] as i32 as i64) * gpr[rs] as i32 as i64;
+    gpr[rn] = mul as u32;
+    gpr[rd] = (mul >> 32) as u32;
+    // MULL consume (m)I + I + S
+    let cycle = compute_multiple_cycle(gpr[rs]) + 1 + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    Ok((cycle, PipelineStatus::Continue))
 }
 
-pub fn exec_smlal<T>(
-    _bus: &mut T,
-    dec: Multiple,
-    gpr: &mut [Word; 16],
-    _cspr: &PSR,
-) -> Result<PipelineStatus, ()>
+pub fn exec_arm_smlal<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -132,11 +92,12 @@ where
     let rm = dec.get_Rm() as usize;
     let rs = dec.get_Rs() as usize;
     let rn = dec.get_Rn() as usize;
-    exec_multiple(gpr, dec, &mut |gpr| {
-        let mul = (gpr[rm] as i32 as i64) * gpr[rs] as i32 as i64;
-        let base = (((gpr[rd] as u64) << 32) + (gpr[rn] as u64)) as i64;
-        let result = mul + base;
-        gpr[rn] = result as u32;
-        gpr[rd] = (result >> 32) as u32;
-    })
+    let mul = (gpr[rm] as i32 as i64) * gpr[rs] as i32 as i64;
+    let base = (((gpr[rd] as u64) << 32) + (gpr[rn] as u64)) as i64;
+    let result = mul + base;
+    gpr[rn] = result as u32;
+    gpr[rd] = (result >> 32) as u32;
+    // MLAL consume I + (m)I + I + S
+    let cycle = 1 + compute_multiple_cycle(gpr[rs]) + 1 + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    Ok((cycle, PipelineStatus::Continue))
 }

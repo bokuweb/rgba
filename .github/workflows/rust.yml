@@ -28,6 +28,6 @@ jobs:
           sudo apt-get update -y -qq
           sudo apt-get install libsdl2-dev
       - name: build fixtures
-        run: cd fixtures && sh build.sh
+        run: cd fixtures && make
       - name: test
         run: cargo test

@@ -66,7 +66,7 @@ impl PSR {
         }
     }
 
-    pub fn get_cpu_state(&mut self) -> CpuState {
+    pub fn get_cpu_state(&self) -> CpuState {
         if self.get_T() {
             CpuState::Thumb
         } else {

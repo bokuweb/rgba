@@ -1,4 +1,4 @@
-use crate::cpu::types::HalfWord;
+use crate::types::HalfWord;
 
 use super::*;
 

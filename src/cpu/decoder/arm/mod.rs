@@ -16,8 +16,8 @@ pub use memory::*;
 pub use multiple::*;
 pub use psr_transfer::*;
 
-use super::super::constants::COND_FIELD;
-use super::super::types::{Shift, Word};
+use crate::cpu::types::Cond;
+use crate::types::Word;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum InstructionType {
@@ -80,26 +80,27 @@ pub enum Instruction {
     MSR(PsrTransfer),
     MRS(PsrTransfer),
     // NOP,
-} //
-
-#[derive(Debug, PartialEq)]
-pub enum Condition {
-    EQ,
-    NE,
-    CS_HS,
-    CC_LO,
-    MI,
-    PL,
-    VS,
-    VC,
-    HI,
-    LS,
-    GE,
-    LT,
-    GT,
-    LE,
-    AL,
 }
+
+
+// #[derive(Debug, PartialEq)]
+// pub enum Condition {
+//     EQ,
+//     NE,
+//     CS_HS,
+//     CC_LO,
+//     MI,
+//     PL,
+//     VS,
+//     VC,
+//     HI,
+//     LS,
+//     GE,
+//     LT,
+//     GT,
+//     LE,
+//     AL,
+// }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum IndexMode {
@@ -213,9 +214,7 @@ pub fn decode(raw: Word) -> Instruction {
 
     let instruction_type = match raw {
         v if ((v & 0x0ffffff0) == 0x012fff10) => InstructionType::BranchAndExchange,
-        v if (v & 0x0180_0000) == 0x0100_0000 && (v & 0x0010_0000) == 0x0 => {
-            InstructionType::PsrTransfer
-        }
+        v if (v & 0x0180_0000) == 0x0100_0000 && (v & 0x0010_0000) == 0x0 => InstructionType::PsrTransfer,
         v if (v & 0x0E00_0000) == 0x0A00_0000 => InstructionType::Branch,
         v if (v & 0x0FC0_00F0) == 0x0000_0090 => InstructionType::Multiple,
         v if (v & 0x0F80_00F0) == 0x0080_0090 => InstructionType::Multiple,
