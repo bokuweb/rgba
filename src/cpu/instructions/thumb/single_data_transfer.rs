@@ -21,6 +21,8 @@ where
 
     gpr[rd] = data;
 
+    dbg!("ldr");
+
     // Add merged I + S cycle.
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
     (cycle, PipelineStatus::Continue)
@@ -59,6 +61,7 @@ where
     let access_type = AccessType::NonSeq(AccessWidth::HalfWord);
     let store_cycle = bus.compute_cycle(addr, access_type);
     let fetch_cycle = bus.compute_cycle(gpr[PC], access_type);
+    dbg!("strh");
     // Store consume 2N cycle
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
 }
