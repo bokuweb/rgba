@@ -10,13 +10,14 @@ pub fn exec_thumb_bx<T: BusAccessor>(bus: &T, dec: Branch, cpsr: &mut PSR, gpr: 
     if addr & 0x01 == 0x01 {
         // Switch cpu mode to execute thumb instructions.
         cpsr.set_cpu_state(CpuState::Thumb);
-        info!("switch to thumb");
+        dbg!("switch to thumb");
     } else {
         cpsr.set_cpu_state(CpuState::ARM);
-        info!("switch to arm");
+        dbg!("switch to arm");
     }
     let m = if dec.get_Rm() == PC as u16 { addr & 0x0000_0002 } else { 0 };
     gpr[PC] = addr & (0xFFFF_FFFE - m);
+    dbg!(&gpr);
     // bx does not consume extra cycle.
     (0, PipelineStatus::Flush)
 }

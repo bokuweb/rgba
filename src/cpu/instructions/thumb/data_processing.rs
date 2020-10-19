@@ -293,6 +293,7 @@ pub fn exec_thumb_mov1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     cpsr.set_N_from(imm);
     cpsr.set_Z_from(imm);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    dbg!("mov1", &gpr);
     (s, PipelineStatus::Continue)
 }
 
