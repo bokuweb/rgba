@@ -43,9 +43,6 @@ pub struct ARM {
     irq_disable: bool,
     fiq_disable: bool,
     optimise_swi: bool,
-
-    // For debug
-    steps: u64,
 }
 
 impl ARM {
@@ -61,7 +58,6 @@ impl ARM {
             irq_disable: false,
             fiq_disable: false,
             optimise_swi: false,
-            steps: 0,
         }
     }
 

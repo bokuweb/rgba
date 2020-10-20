@@ -31,48 +31,63 @@ use std::path::Path;
 
 use crate::types::*;
 
-fn load_bin(bin: String) -> Result<Vec<u8>, std::io::Error> {
-    let path = Path::new(&bin);
-    let mut fd = File::open(path)?;
-    let mut buf = Vec::new();
-    fd.read_to_end(&mut buf)?;
-    Ok(buf)
+// Visible (*) 160 lines, 11.749 ms, 197120 cycles - 70% of v-time
+// V-Blanking   68 lines,  4.994 ms,  83776 cycles - 30% of v-time
+// Total       228 lines, 16.743 ms, 280896 cycles - ca. 59.737 Hz
+const CYCLES_PER_FRAME: usize = 280896;
+
+pub struct GBA {
+    pub cycles: usize,
+    pub arm: cpu::ARM,
+    pub bus: CpuBus,
 }
 
-pub fn frame() -> Vec<u8> {
-    // env_logger::init();
-    // let elf_path = env::args().nth(1).expect("");
-    // let result = load_elf(elf_path);
-    let bin_path = env::args().nth(1).expect("Specify bin filename to build.");
-    let bin = load_bin(bin_path).expect("faild to read bin");
-    // debug!("read bin data = {:?}", bin);
-    let bios = Rom::new(0x4000, &include_bytes!("../../bios/bios.bin")[..]);
-    let rom = Rom::new(0x80000, &bin);
-    let wram = Ram::new(vec![0; 0x8000]);
-    let eram = Ram::new(vec![0; 0x4_0000]);
-    let vram = Ram::new(vec![0; 0x1_8000]);
-    let mut bus = CpuBus::new(bios, rom, wram, eram, vram);
-    let mut arm = cpu::ARM::new();
+impl GBA {
+    pub fn new() -> Self {
+        let bin_path = env::args().nth(1).expect("Specify bin filename to build.");
+        let bin = GBA::load_bin(bin_path).expect("faild to read bin");
+        // debug!("read bin data = {:?}", bin);
+        let bios = Rom::new(0x4000, &include_bytes!("../../bios/bios.bin")[..]);
+        let rom = Rom::new(0x80000, &bin);
+        let wram = Ram::new(vec![0; 0x8000]);
+        let eram = Ram::new(vec![0; 0x4_0000]);
+        let vram = Ram::new(vec![0; 0x1_8000]);
+        let mut bus = CpuBus::new(bios, rom, wram, eram, vram);
+        let mut arm = cpu::ARM::new();
 
-    arm.reset();
+        arm.reset();
 
-    let mut cycle: Cycle = 0;
-
-    for _ in 0..200000 {
-        cycle = cycle + arm.step(&mut bus).unwrap();
+        Self { cycles: 0, arm, bus }
     }
-    dbg!(cycle);
 
-    let mut buf = vec![];
-    for offset in 0..(240 * 160) {
-        let p = bus.read_halfword(0x0600_0000 + offset * 2);
-        buf.push((((p & 0x001F) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
-        buf.push((((p & 0x03E0).wrapping_shr(5) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
-        buf.push((((p & 0xEC00).wrapping_shr(10) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
-        buf.push(255);
+    fn load_bin(bin: String) -> Result<Vec<u8>, std::io::Error> {
+        let path = Path::new(&bin);
+        let mut fd = File::open(path)?;
+        let mut buf = Vec::new();
+        fd.read_to_end(&mut buf)?;
+        Ok(buf)
     }
-    dbg!(buf.len());
-    buf
+
+    pub fn frame(&mut self) -> Vec<u8> {
+        loop {
+            self.cycles += self.arm.step(&mut self.bus).unwrap();
+            if self.cycles >= CYCLES_PER_FRAME {
+                self.cycles -= CYCLES_PER_FRAME;
+                break;
+            }
+        }
+
+        let mut buf = vec![];
+        for offset in 0..(240 * 160) {
+            let p = self.bus.read_halfword(0x0600_0000 + offset * 2);
+            buf.push((((p & 0x001F) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
+            buf.push((((p & 0x03E0).wrapping_shr(5) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
+            buf.push((((p & 0xEC00).wrapping_shr(10) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
+            buf.push(255);
+        }
+        dbg!(buf.len());
+        buf
+    }
 }
 
 #[cfg(test)]
