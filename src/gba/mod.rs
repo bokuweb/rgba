@@ -69,9 +69,12 @@ impl GBA {
     }
 
     pub fn frame(&mut self) -> Vec<u8> {
+        dbg!(self.cycles);
         loop {
             self.cycles += self.arm.step(&mut self.bus).unwrap();
             if self.cycles >= CYCLES_PER_FRAME {
+                dbg!(self.cycles);
+
                 self.cycles -= CYCLES_PER_FRAME;
                 break;
             }

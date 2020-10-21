@@ -18,6 +18,8 @@ pub fn exec_thumb_add1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     cpsr.set_V_from(gpr[dec.get_Rd2_0() as usize], d as u32);
     gpr[dec.get_Rd2_0() as usize] = d as u32;
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    dbg!(&gpr);
+    panic!("add1");
     (s, PipelineStatus::Continue)
 }
 
@@ -43,6 +45,18 @@ pub fn exec_thumb_add3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     gpr[dec.get_Rd2_0() as usize] = d as u32;
     dbg!("ADd3", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    (s, PipelineStatus::Continue)
+}
+
+pub fn exec_thumb_add7<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+    let imm = dec.get_imm7() as i8;
+    let imm = if dec.get_A() { -imm } else { imm };
+    dbg!(imm);
+    let imm = (imm as i32).wrapping_shl(2);
+    dbg!(imm);
+    let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    gpr[SP] = (gpr[SP] as i64 + imm as i64) as u32;
+    dbg!(&gpr, imm);
     (s, PipelineStatus::Continue)
 }
 

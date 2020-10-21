@@ -21,8 +21,6 @@ where
 
     gpr[rd] = data;
 
-    dbg!("ldr");
-
     // Add merged I + S cycle.
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
     (cycle, PipelineStatus::Continue)

@@ -257,12 +257,12 @@ impl ARM {
     where
         T: BusAccessor,
     {
-        debug!("execute thumb {:?}", &instruction);
         let (cycle, pipeline_status) = {
             match instruction {
                 thumb::Instruction::LDR3(dec) => exec_thumb_ldr3(bus, dec, &mut self.gpr),
                 thumb::Instruction::STR1(dec) => exec_thumb_str1(bus, dec, &mut self.gpr),
                 thumb::Instruction::STRH(dec) => exec_thumb_strh(bus, dec, &mut self.gpr),
+                thumb::Instruction::ADD1(dec) => exec_thumb_add1(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ADD2(dec) => exec_thumb_add2(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ADD3(dec) => exec_thumb_add3(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ADD4(dec) => {
@@ -271,6 +271,7 @@ impl ARM {
                     // This instruction can change PC
                     todo!("ADD4");
                 }
+                thumb::Instruction::ADD7(dec) => exec_thumb_add7(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::CMP3(dec) => {
                     dbg!(dec.0);
                     todo!("CMP3");
