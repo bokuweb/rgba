@@ -195,6 +195,9 @@ impl BusAccessor for CpuBus {
         info!("write byte addr = 0x{:x} data = 0x{:x}", addr, data);
         match addr {
             // 0x0000_0000...0x0007_FFFF => self.rom.borrow().read_word(addr),
+            0x0300_0000..=0x0300_7FFF => {
+                self.wram.write_byte(addr - 0x0300_0000, data);
+            }
             _ => panic!("TODO: "),
         };
     }
