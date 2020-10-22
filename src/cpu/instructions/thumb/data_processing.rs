@@ -18,8 +18,6 @@ pub fn exec_thumb_add1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     cpsr.set_V_from(gpr[dec.get_Rd2_0() as usize], d as u32);
     gpr[dec.get_Rd2_0() as usize] = d as u32;
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
-    dbg!(&gpr);
-    panic!("add1");
     (s, PipelineStatus::Continue)
 }
 
