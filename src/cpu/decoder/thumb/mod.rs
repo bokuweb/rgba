@@ -19,6 +19,7 @@ pub enum Instruction {
     LDR3(SingleDataTransfer),
     LDR4(SingleDataTransfer),
     STR1(SingleDataTransfer),
+    STR3(SingleDataTransfer),
     STRH(SingleDataTransfer),
     STRB(SingleDataTransfer),
     ADD1(DataProcessing),
@@ -95,6 +96,15 @@ pub fn decode(raw: HalfWord) -> Instruction {
             }
         }
         v if ((v & 0xF800) == 0x4800) => Instruction::LDR3(SingleDataTransfer(v)),
+        // THUMB.11 load/store SP-relative
+        v if ((v & 0xF000) == 0x9000) => {
+            let dec = SingleDataTransfer(v);
+            if dec.get_L() {
+                Instruction::LDR4(dec)
+            } else {
+                Instruction::STR3(dec)
+            }
+        }
         // THUMB 2: add/subtract
         v if ((v & 0xFE00) == 0x1A00) => Instruction::SUB3(DataProcessing(v)),
         v if ((v & 0xFE00) == 0x1800) => Instruction::ADD3(DataProcessing(v)),

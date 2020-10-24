@@ -261,6 +261,7 @@ impl ARM {
             match instruction {
                 thumb::Instruction::LDR3(dec) => exec_thumb_ldr3(bus, dec, &mut self.gpr),
                 thumb::Instruction::STR1(dec) => exec_thumb_str1(bus, dec, &mut self.gpr),
+                thumb::Instruction::LDRH(dec) => exec_thumb_ldrh(bus, dec, &mut self.gpr),
                 thumb::Instruction::STRH(dec) => exec_thumb_strh(bus, dec, &mut self.gpr),
                 thumb::Instruction::STRB(dec) => exec_thumb_strb(bus, dec, &mut self.gpr),
                 thumb::Instruction::ADD1(dec) => exec_thumb_add1(bus, dec, &mut self.gpr, &mut self.cpsr),
@@ -278,6 +279,7 @@ impl ARM {
                     todo!("CMP3");
                 }
                 thumb::Instruction::MOV3(dec) => exec_thumb_mov3(bus, dec, &mut self.gpr, &mut self.cpsr),
+                thumb::Instruction::SUB1(dec) => exec_thumb_sub1(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::SUB3(dec) => exec_thumb_sub3(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::AND(dec) => exec_thumb_and(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::EOR(dec) => exec_thumb_eor(bus, dec, &mut self.gpr, &mut self.cpsr),
