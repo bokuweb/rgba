@@ -261,6 +261,7 @@ impl ARM {
             match instruction {
                 thumb::Instruction::LDR3(dec) => exec_thumb_ldr3(bus, dec, &mut self.gpr),
                 thumb::Instruction::STR1(dec) => exec_thumb_str1(bus, dec, &mut self.gpr),
+                thumb::Instruction::STR3(dec) => exec_thumb_str3(bus, dec, &mut self.gpr),
                 thumb::Instruction::LDRH(dec) => exec_thumb_ldrh(bus, dec, &mut self.gpr),
                 thumb::Instruction::STRH(dec) => exec_thumb_strh(bus, dec, &mut self.gpr),
                 thumb::Instruction::STRB(dec) => exec_thumb_strb(bus, dec, &mut self.gpr),
