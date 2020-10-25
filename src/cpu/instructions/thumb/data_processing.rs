@@ -46,6 +46,25 @@ pub fn exec_thumb_add3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     (s, PipelineStatus::Continue)
 }
 
+// THUMB.12: get relative address
+pub fn exec_thumb_add_relative_address<T: BusAccessor>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+) -> ExecuteResult {
+    let imm = dec.get_imm8();
+    let imm = (imm as u32).wrapping_shl(2);
+    let rd = dec.get_Rd10_8();
+    let data = if dec.get_bit11() { gpr[SP] } else { gpr[PC] & 0xFFFF_FFFC };
+    let data = data + imm as u32;
+    gpr[rd as usize] = data;
+    let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    dbg!("after ADD6", &gpr);
+    panic!("");
+    (s, PipelineStatus::Continue)
+}
+
 pub fn exec_thumb_add7<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let imm = dec.get_imm7() as i8;
     let imm = if dec.get_A() { -imm } else { imm };

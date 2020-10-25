@@ -26,6 +26,8 @@ pub enum Instruction {
     ADD2(DataProcessing),
     ADD3(DataProcessing),
     ADD4(DataProcessing),
+    // ADD5(DataProcessing),
+    ADD6(DataProcessing), // 6 and 5
     ADD7(DataProcessing),
     CMP1(DataProcessing),
     CMP3(DataProcessing),
@@ -105,6 +107,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 Instruction::STR3(dec)
             }
         }
+        v if ((v & 0xF000) == 0xA000) => Instruction::ADD6(DataProcessing(v)),
         // THUMB 2: add/subtract
         v if ((v & 0xFE00) == 0x1A00) => Instruction::SUB3(DataProcessing(v)),
         v if ((v & 0xFE00) == 0x1800) => Instruction::ADD3(DataProcessing(v)),

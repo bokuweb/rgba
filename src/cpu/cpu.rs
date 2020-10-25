@@ -164,6 +164,7 @@ impl ARM {
             CpuState::Thumb => {
                 let fetched = self.get_thumb_executable(bus);
                 debug!("{:x}", fetched);
+                dbg!(&self.gpr);
                 let instruction = thumb::decode(fetched);
                 let cycle = cycle + self.execute_thumb(instruction, bus);
                 Ok(cycle)
@@ -274,6 +275,8 @@ impl ARM {
                     // This instruction can change PC
                     todo!("ADD4");
                 }
+                // THUMB.12 6 nad 5
+                thumb::Instruction::ADD6(dec) => exec_thumb_add_relative_address(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ADD7(dec) => exec_thumb_add7(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::CMP3(dec) => {
                     dbg!(dec.0);
