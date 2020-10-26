@@ -6,6 +6,28 @@ use crate::cpu::decoder::thumb::*;
 use crate::cpu::instructions::ExecuteResult;
 use crate::types::*;
 
+pub fn exec_thumb_ldr_with_immediate_offset<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
+where
+    T: BusAccessor,
+{
+    let rd = dec.get_Rd2_0() as usize;
+    let rb = dec.get_Rn() as usize;
+    let offset = dec.get_off5() as u32;
+    let addr = gpr[rb] + offset;
+    let data = bus.read_word(addr);
+
+    // 1N + 1I cycle
+    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
+
+    gpr[rd] = data;
+
+    dbg!("ldr1", &gpr);
+
+    // Add merged I + S cycle.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+    (cycle, PipelineStatus::Continue)
+}
+
 pub fn exec_thumb_ldr3<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
 where
     T: BusAccessor,
@@ -22,6 +44,27 @@ where
     gpr[rd] = data;
 
     dbg!("ldr3", &gpr);
+
+    // Add merged I + S cycle.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+    (cycle, PipelineStatus::Continue)
+}
+
+// THUMB.11: load_sp_relative
+pub fn exec_thumb_load_sp_relative<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
+where
+    T: BusAccessor,
+{
+    let rd = dec.get_Rd10_8() as usize;
+    let offset = dec.get_off8() as u32;
+    let addr = gpr[SP] + offset;
+
+    let data = bus.read_word(addr);
+
+    // 1N + 1I cycle
+    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
+
+    gpr[rd] = data;
 
     // Add merged I + S cycle.
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));

@@ -71,7 +71,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
             let dec = DataProcessing(v);
             Instruction::ADD7(dec)
         }
-        // THUMB.8
+        // THUMB.9
         v if ((v & 0xE000) == 0x6000) => {
             let dec = SingleDataTransfer(v);
             if dec.get_L() {

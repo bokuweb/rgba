@@ -60,8 +60,6 @@ pub fn exec_thumb_add_relative_address<T: BusAccessor>(
     let data = data + imm as u32;
     gpr[rd as usize] = data;
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
-    dbg!("after ADD6", &gpr);
-    panic!("");
     (s, PipelineStatus::Continue)
 }
 
