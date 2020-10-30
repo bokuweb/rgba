@@ -7,8 +7,8 @@ extern crate bitfield;
 mod cpu;
 mod gba;
 mod lcd;
-mod types;
 mod memory;
+mod types;
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -36,6 +36,7 @@ fn main() {
         .unwrap();
     let mut canvas = window.into_canvas().build().unwrap();
     let mut prev_time = SystemTime::now();
+    let mut gba = gba::GBA::new();
 
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -49,7 +50,7 @@ fn main() {
             }
         }
 
-        let buf = gba::frame();
+        let buf = gba.frame();
 
         for i in 0..HEIGHT {
             for j in 0..WIDTH {

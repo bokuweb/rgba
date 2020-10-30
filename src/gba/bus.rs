@@ -172,9 +172,14 @@ impl BusAccessor for CpuBus {
         debug!("read half word addr = {:x}", addr);
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_halfword(addr),
+            0x0300_0000..=0x0300_7FFF => self.wram.read_halfword(addr - 0x0300_0000),
+            0x0400_0000..=0x0400_03FE => {
+                dbg!("I/O register is not implemented yet.", format!("addr = {:x}", addr));
+                0
+            }
             0x0600_0000..=0x0601_7FFF => self.vram.read_halfword(addr - 0x0600_0000),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_halfword(addr - 0x0800_0000),
-            _ => panic!("TODO: "),
+            _ => panic!("TODO: {:x}", addr),
         }
     }
 
@@ -195,6 +200,9 @@ impl BusAccessor for CpuBus {
         info!("write byte addr = 0x{:x} data = 0x{:x}", addr, data);
         match addr {
             // 0x0000_0000...0x0007_FFFF => self.rom.borrow().read_word(addr),
+            0x0300_0000..=0x0300_7FFF => {
+                self.wram.write_byte(addr - 0x0300_0000, data);
+            }
             _ => panic!("TODO: "),
         };
     }

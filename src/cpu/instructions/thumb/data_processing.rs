@@ -46,6 +46,49 @@ pub fn exec_thumb_add3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     (s, PipelineStatus::Continue)
 }
 
+// THUMB.12: get relative address
+pub fn exec_thumb_add_relative_address<T: BusAccessor>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+) -> ExecuteResult {
+    let imm = dec.get_imm8();
+    let imm = (imm as u32).wrapping_shl(2);
+    let rd = dec.get_Rd10_8();
+    let data = if dec.get_bit11() { gpr[SP] } else { gpr[PC] & 0xFFFF_FFFC };
+    let data = data + imm as u32;
+    gpr[rd as usize] = data;
+    let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    (s, PipelineStatus::Continue)
+}
+
+pub fn exec_thumb_add7<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+    let imm = dec.get_imm7() as i8;
+    let imm = if dec.get_A() { -imm } else { imm };
+    dbg!(imm);
+    let imm = (imm as i32).wrapping_shl(2);
+    dbg!(imm);
+    let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    gpr[SP] = (gpr[SP] as i64 + imm as i64) as u32;
+    dbg!(&gpr, imm);
+    (s, PipelineStatus::Continue)
+}
+
+pub fn exec_thumb_sub1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+    let imm = dec.get_imm3() as u32;
+    let rn = dec.get_Rn5_3() as usize;
+    let d = (gpr[rn] as i64) - imm as i64;
+
+    cpsr.set_N_from(d as u32);
+    cpsr.set_Z_from(d as u32);
+    cpsr.set_C(gpr[rn] >= imm);
+    cpsr.set_V_from(gpr[dec.get_Rd2_0() as usize], d as u32);
+    gpr[dec.get_Rd2_0() as usize] = d as u32;
+    let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    (s, PipelineStatus::Continue)
+}
+
 pub fn exec_thumb_sub2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let imm = dec.get_imm8() as u32;
     let rn = dec.get_Rn10_8() as u32;
