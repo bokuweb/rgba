@@ -13,17 +13,25 @@ pub use single_data_transfer::*;
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Instruction {
     LDR1(SingleDataTransfer),
+    LDRB(SingleDataTransfer),
     LDRH(SingleDataTransfer),
     LDR2(SingleDataTransfer),
     LDR3(SingleDataTransfer),
     LDR4(SingleDataTransfer),
     STR1(SingleDataTransfer),
+    STR3(SingleDataTransfer),
     STRH(SingleDataTransfer),
+    STRB(SingleDataTransfer),
+    ADD1(DataProcessing),
     ADD2(DataProcessing),
     ADD3(DataProcessing),
     ADD4(DataProcessing),
+    // ADD5(DataProcessing),
+    ADD6(DataProcessing), // 6 and 5
+    ADD7(DataProcessing),
     CMP1(DataProcessing),
     CMP3(DataProcessing),
+    SUB1(DataProcessing),
     SUB3(DataProcessing),
     MOV3(DataProcessing),
     AND(DataProcessing),
@@ -58,14 +66,29 @@ pub enum Instruction {
 
 pub fn decode(raw: HalfWord) -> Instruction {
     match raw {
+        // THUMB.13
+        v if (v & 0xFF00) == 0xB000 => {
+            let dec = DataProcessing(v);
+            Instruction::ADD7(dec)
+        }
+        // THUMB.9
         v if ((v & 0xE000) == 0x6000) => {
             let dec = SingleDataTransfer(v);
             if dec.get_L() {
-                Instruction::LDR1(dec)
+                if dec.get_B() {
+                    Instruction::LDRB(dec)
+                } else {
+                    Instruction::LDR1(dec)
+                }
             } else {
-                Instruction::STR1(dec)
+                if dec.get_B() {
+                    Instruction::STRB(dec)
+                } else {
+                    Instruction::STR1(dec)
+                }
             }
         }
+        // THUMB.10
         v if ((v & 0xF000) == 0x8000) => {
             let dec = SingleDataTransfer(v);
             if dec.get_L() {
@@ -75,9 +98,22 @@ pub fn decode(raw: HalfWord) -> Instruction {
             }
         }
         v if ((v & 0xF800) == 0x4800) => Instruction::LDR3(SingleDataTransfer(v)),
+        // THUMB.11 load/store SP-relative
+        v if ((v & 0xF000) == 0x9000) => {
+            let dec = SingleDataTransfer(v);
+            if dec.get_L() {
+                Instruction::LDR4(dec)
+            } else {
+                Instruction::STR3(dec)
+            }
+        }
+        v if ((v & 0xF000) == 0xA000) => Instruction::ADD6(DataProcessing(v)),
+        // THUMB 2: add/subtract
         v if ((v & 0xFE00) == 0x1A00) => Instruction::SUB3(DataProcessing(v)),
-        v if ((v & 0xFC00) == 0x1800) => Instruction::ADD3(DataProcessing(v)),
-        v if ((v & 0xFC00) == 0x1C00) => todo!("ADD1?"),
+        v if ((v & 0xFE00) == 0x1800) => Instruction::ADD3(DataProcessing(v)),
+        v if ((v & 0xFE00) == 0x1C00) => Instruction::ADD1(DataProcessing(v)),
+        v if ((v & 0xFE00) == 0x1E00) => Instruction::SUB1(DataProcessing(v)),
+        // THUMB 4: ALU operations
         v if ((v & 0xFC00) == 0x4000) => {
             let dec = DataProcessing(v);
             match dec.get_op9_6() {

@@ -41,13 +41,14 @@ pub fn exec_thumb_b2(dec: Branch, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Execu
 /// Consume 3S+1N (first 1S, second 2S+1N)
 pub fn exec_thumb_bl1<T: BusAccessor>(bus: &T, dec: Branch, gpr: &mut [Word; 16]) -> ExecuteResult {
     let offset = dec.get_offset11();
-    dbg!("BL");
+    dbg!("BL", &gpr);
     let access_type = AccessType::NonSeq(AccessWidth::HalfWord);
     let s_cycle = bus.compute_cycle(gpr[PC], access_type);
     if dec.get_H11() {
         let pc = gpr[PC];
         gpr[PC] = (gpr[LR] as i64 + ((offset as i64).wrapping_shl(1))) as u32;
         gpr[LR] = pc - 1;
+        dbg!(&gpr, "bl1!~!!!!!!!!!!!!");
         (s_cycle, PipelineStatus::Flush)
     } else {
         let offset = if offset & 0x0400 != 0 {
@@ -56,7 +57,7 @@ pub fn exec_thumb_bl1<T: BusAccessor>(bus: &T, dec: Branch, gpr: &mut [Word; 16]
             (offset as i32).wrapping_shl(12)
         };
         gpr[LR] = (gpr[PC] as i64 + offset as i64) as u32;
-        dbg!(&gpr);
+        dbg!(&gpr, "bl1!~!!!!!!!!!!!!");
         (s_cycle, PipelineStatus::Continue)
     }
 }
