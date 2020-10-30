@@ -57,9 +57,11 @@ where
 {
     let rd = dec.get_Rd10_8() as usize;
     let offset = dec.get_off8() as u32;
-    let addr = gpr[SP] + offset;
+    let addr = gpr[SP] + offset.wrapping_shl(2);
 
+    dbg!(addr, "ldr4");
     let data = bus.read_word(addr);
+    dbg!(data, rd, "ldr4");
 
     // 1N + 1I cycle
     let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
@@ -121,7 +123,7 @@ where
     let rd = dec.get_Rd10_8() as usize;
     let offset = dec.get_off8() as u32;
     let data = gpr[rd as usize];
-    let addr = gpr[SP] + offset;
+    let addr = gpr[SP] + offset.wrapping_shl(2);
     bus.write_word(addr, data);
     let access_type = AccessType::NonSeq(AccessWidth::Word);
     let store_cycle = bus.compute_cycle(addr, access_type);
