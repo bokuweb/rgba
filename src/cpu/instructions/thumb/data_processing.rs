@@ -282,9 +282,14 @@ pub fn exec_thumb_mul<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
 }
 
 pub fn exec_thumb_mvn<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
-    todo!("mvn");
-    // let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
-    (0, PipelineStatus::Continue)
+    let d = !gpr[dec.get_Rm5_3() as usize];
+    gpr[dec.get_Rd2_0() as usize] = d;
+    cpsr.set_N_from(d);
+    cpsr.set_Z_from(d);
+    // Consume 1S
+    let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    dbg!("mvn", &gpr);
+    (s, PipelineStatus::Continue)
 }
 
 pub fn exec_thumb_bic<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
