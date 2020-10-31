@@ -14,7 +14,11 @@ bitfield! {
     #[allow(non_snake_case)]
     pub get_Rm8_6, _: 8, 6;
     #[allow(non_snake_case)]
+    pub get_msbd, _: 7;
+    #[allow(non_snake_case)]
     pub get_Rn5_3, _: 5, 3;
+    #[allow(non_snake_case)]
+    pub get_Rs6_3, _: 6, 3;
     #[allow(non_snake_case)]
     pub get_Rs, _: 5, 3;
     #[allow(non_snake_case)]
@@ -25,4 +29,15 @@ bitfield! {
     pub get_imm8, _: 7, 0;
     #[allow(non_snake_case)]
     pub get_Rd2_0, _: 2, 0;
+}
+
+impl DataProcessing {
+    pub fn get_Rd_7_2_0(&self) -> u16 {
+        let rd = self.get_Rd2_0();
+        if self.get_msbd() {
+            rd + 0x8
+        } else {
+            rd
+        }
+    }
 }

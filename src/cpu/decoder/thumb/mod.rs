@@ -157,6 +157,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
         v if ((v & 0xFF00) == 0x4700) => Instruction::BX(Branch(v)),
         v if ((v & 0xFC00) == 0x4400) => {
             let dec = DataProcessing(v);
+            // THUMB.5: Hi register operations
             match dec.get_op9_8() {
                 0b00 => Instruction::ADD4(dec),
                 0b01 => Instruction::CMP3(dec),

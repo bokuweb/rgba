@@ -348,12 +348,12 @@ pub fn exec_thumb_mov1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     (s, PipelineStatus::Continue)
 }
 
-// Format 5
+// Format 5 Hi register operations
 pub fn exec_thumb_mov3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
-    let rm = dec.get_Rm5_3() as usize;
-    let rd = dec.get_Rd2_0() as usize;
+    let rs = dec.get_Rs6_3() as usize;
+    let rd = dec.get_Rd_7_2_0() as usize;
 
-    gpr[rd] = gpr[rm];
+    gpr[rd] = gpr[rs];
     dbg!("MOV3", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
 
     if rd == PC {
