@@ -13,7 +13,7 @@ where
     let rd = dec.get_Rd2_0() as usize;
     let rb = dec.get_Rn() as usize;
     let offset = dec.get_off5() as u32;
-    let addr = gpr[rb] + offset;
+    let addr = gpr[rb] + offset.wrapping_shl(2);
     let data = bus.read_word(addr);
 
     // 1N + 1I cycle
@@ -104,7 +104,7 @@ where
     let rn = dec.get_Rn() as usize;
     let offset = dec.get_off5() as u32;
 
-    let addr = gpr[rn] + offset;
+    let addr = gpr[rn] + offset.wrapping_shl(2);
     bus.write_word(addr, gpr[rd]);
 
     let access_type = AccessType::NonSeq(AccessWidth::Word);

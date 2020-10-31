@@ -3,7 +3,7 @@ use super::super::PipelineStatus;
 use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::thumb::*;
-use crate::cpu::instructions::{shift::*, ExecuteResult};
+use crate::cpu::instructions::{helpers::compute_multiple_cycle, shift::*, ExecuteResult};
 use crate::cpu::registers::psr::PSR;
 use crate::cpu::types::*;
 use crate::types::*;
@@ -269,8 +269,16 @@ pub fn exec_thumb_orr<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
 }
 
 pub fn exec_thumb_mul<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
-    todo!("mul");
-    (0, PipelineStatus::Continue)
+    let rd = dec.get_Rd2_0() as usize;
+    let rm = dec.get_Rm5_3() as usize;
+    let d = gpr[rd] as i128 * gpr[rm] as i128;
+    cpsr.set_N_from(d as u32);
+    cpsr.set_Z_from(d as u32);
+    gpr[rd] = d as u32;
+    // MUL consume (m)I + S
+    let cycle = compute_multiple_cycle(gpr[rm]) + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    dbg!("MUL", &gpr);
+    (cycle, PipelineStatus::Continue)
 }
 
 pub fn exec_thumb_mvn<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
