@@ -155,7 +155,8 @@ pub fn exec_thumb_asr1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
 
 pub fn exec_thumb_lsl2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let rd = dec.get_Rd2_0() as usize;
-    let sh = dec.get_Rs() as u32;
+    let rs = dec.get_Rs() as usize;
+    let sh = gpr[rs];
 
     if sh == 0 {
         return (1, PipelineStatus::Continue);
@@ -171,8 +172,10 @@ pub fn exec_thumb_lsl2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
 
 pub fn exec_thumb_lsr2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let rd = dec.get_Rd2_0() as usize;
-    let sh = dec.get_Rs() as u32;
+    let rs = dec.get_Rs() as usize;
+    let sh = gpr[rs];
 
+    dbg!("lsr2", sh);
     if sh == 0 {
         return (1, PipelineStatus::Continue);
     }
@@ -264,8 +267,17 @@ pub fn exec_thumb_cmn<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
 }
 
 pub fn exec_thumb_orr<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
-    todo!("orr");
-    (0, PipelineStatus::Continue)
+    let rd = dec.get_Rd2_0() as usize;
+    let rm = dec.get_Rm5_3() as usize;
+    let d = gpr[rd] | gpr[rm];
+    gpr[rd] = d;
+    cpsr.set_N_from(d);
+    cpsr.set_Z_from(d);
+    // Consume 1S
+    let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    dbg!("orr", &gpr);
+    panic!("orr");
+    (s, PipelineStatus::Continue)
 }
 
 pub fn exec_thumb_mul<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {

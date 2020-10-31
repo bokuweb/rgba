@@ -259,6 +259,7 @@ impl ARM {
         T: BusAccessor,
     {
         let (cycle, pipeline_status) = {
+            dbg!(instruction);
             match instruction {
                 thumb::Instruction::LDR1(dec) => exec_thumb_ldr_with_immediate_offset(bus, dec, &mut self.gpr),
                 thumb::Instruction::LDR3(dec) => exec_thumb_ldr3(bus, dec, &mut self.gpr),

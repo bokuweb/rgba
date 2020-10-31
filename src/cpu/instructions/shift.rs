@@ -31,6 +31,7 @@ pub fn lsr(value: u32, shift: u32) -> u32 {
     if shift == 0 {
         return value;
     }
+    dbg!(shift);
     value.wrapping_shr(shift)
 }
 
