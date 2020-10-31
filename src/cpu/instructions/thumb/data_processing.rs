@@ -276,7 +276,6 @@ pub fn exec_thumb_orr<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
     // Consume 1S
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     dbg!("orr", &gpr);
-    panic!("orr");
     (s, PipelineStatus::Continue)
 }
 
