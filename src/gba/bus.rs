@@ -185,9 +185,6 @@ impl BusAccessor for CpuBus {
     }
 
     fn read_word(&self, addr: u32) -> Word {
-        if addr == 0x0400_0200 || addr == 0x0400_0006 {
-            panic!("aaaa")
-        }
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_word(addr),
             0x0200_0000..=0x0203_FFFF => self.eram.read_word(addr - 0x0200_0000),
@@ -246,9 +243,6 @@ impl BusAccessor for CpuBus {
 
     fn write_word(&mut self, addr: u32, data: Word) {
         dbg!(format!("write word addr 0x{:x} data = 0x{:x}", addr, data));
-        if addr == 0x0400_0000 {
-            panic!("aaaa")
-        }
 
         match addr {
             0x0000_0000..=0x0007_FFFF => panic!("illegal write access."),

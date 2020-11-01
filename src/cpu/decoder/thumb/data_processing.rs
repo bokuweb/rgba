@@ -2,13 +2,14 @@ bitfield! {
     #[derive(Debug, PartialEq, Clone, Copy)]
     pub struct DataProcessing(u16);
     pub get_op12_11, _: 12, 11;
+    pub get_op10_9, _: 9, 6;
+    pub get_op9_8, _: 9, 8;
     pub get_op9_6, _: 9, 6;
     pub get_bit11, _: 11;
     #[allow(non_snake_case)]
     pub get_Rd10_8, _: 10, 8;
     #[allow(non_snake_case)]
     pub get_Rn10_8, _: 10, 8;
-    pub get_op9_8, _: 9, 8;
     pub get_sh, _: 10, 6;
     pub get_imm3, _: 8, 6;
     #[allow(non_snake_case)]
