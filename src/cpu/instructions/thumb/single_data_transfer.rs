@@ -153,7 +153,7 @@ where
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_strb<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
+pub fn exec_thumb_strb_imm_offset<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
 where
     T: BusAccessor,
 {

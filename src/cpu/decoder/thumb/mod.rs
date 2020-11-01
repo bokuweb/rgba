@@ -21,7 +21,7 @@ pub enum Instruction {
     STR1(SingleDataTransfer),
     STR3(SingleDataTransfer),
     STRH(SingleDataTransfer),
-    STRB(SingleDataTransfer),
+    STRB_IMM_OFFET(SingleDataTransfer),
     ADD1(DataProcessing),
     ADD2(DataProcessing),
     ADD3(DataProcessing),
@@ -71,6 +71,17 @@ pub fn decode(raw: HalfWord) -> Instruction {
             let dec = DataProcessing(v);
             Instruction::ADD7(dec)
         }
+        // THUMB.7
+        v if ((v & 0xF000) == 0x5000) => {
+            let dec = SingleDataTransfer(v);
+            match dec.get_op11_10() {
+                0b00 => todo!("str"),
+                0b01 => todo!("strb"),
+                0b10 => todo!("ldr"),
+                0b11 => todo!("ldrb"),
+                _ => unreachable!("unknown thumb data transfer instruction {}", dec.get_op11_10()),
+            }
+        }
         // THUMB.9
         v if ((v & 0xE000) == 0x6000) => {
             let dec = SingleDataTransfer(v);
@@ -82,7 +93,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 }
             } else {
                 if dec.get_B() {
-                    Instruction::STRB(dec)
+                    Instruction::STRB_IMM_OFFET(dec)
                 } else {
                     Instruction::STR1(dec)
                 }
