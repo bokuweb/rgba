@@ -6,7 +6,7 @@ use crate::cpu::decoder::thumb::*;
 use crate::cpu::instructions::ExecuteResult;
 use crate::types::*;
 
-pub fn exec_thumb_ldr_with_imm_offset<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
+pub fn exec_thumb_ldr_imm_offset<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
 where
     T: BusAccessor,
 {
@@ -28,7 +28,7 @@ where
     (cycle, PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_ldr_with_reg_offset<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
+pub fn exec_thumb_ldr_reg_offset<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
 where
     T: BusAccessor,
 {
@@ -48,7 +48,31 @@ where
 
     // Add merged I + S cycle.
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
-    dbg!("after ldr", &gpr);
+    // dbg!("after ldr", &gpr);
+    (cycle, PipelineStatus::Continue)
+}
+
+pub fn exec_thumb_ldrb_reg_offset<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
+where
+    T: BusAccessor,
+{
+    let rd = dec.get_Rd2_0() as usize;
+    let rn = dec.get_Rn() as usize;
+    let rm = dec.get_Rm() as usize;
+
+    let addr = gpr[rn] + gpr[rm];
+    let data = bus.read_byte(addr);
+
+    // 1N + 1I cycle
+    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
+
+    gpr[rd] = data as u32;
+
+    // dbg!("ldr1", &gpr);
+
+    // Add merged I + S cycle.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+    // dbg!("after ldrb", &gpr);
     (cycle, PipelineStatus::Continue)
 }
 

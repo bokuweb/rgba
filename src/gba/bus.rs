@@ -161,7 +161,7 @@ pub struct CpuBus {
 impl BusAccessor for CpuBus {
     fn read_byte(&self, addr: u32) -> Byte {
         debug!("read byte addr = {:x}", addr);
-        if addr == 0x0400_0200 || addr == 0x0400_0006 {
+        if addr == 0x0400_0006 {
             panic!("aaaa")
         }
         match addr {
@@ -175,6 +175,7 @@ impl BusAccessor for CpuBus {
     fn read_halfword(&self, addr: u32) -> HalfWord {
         debug!("read half word addr = {:x}", addr);
         if addr == 0x0400_0006 {
+            dbg!(format!("{:X}", addr));
             panic!("aaaa")
         }
         match addr {
@@ -191,15 +192,15 @@ impl BusAccessor for CpuBus {
     }
 
     fn read_word(&self, addr: u32) -> Word {
-        if addr == 0x0400_0200 || addr == 0x0400_0006 {
-            panic!("aaaa")
+        if addr == 0x0400_0006 {
+            dbg!("read 0x0400_0006");
         }
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_word(addr),
             0x0200_0000..=0x0203_FFFF => self.eram.read_word(addr - 0x0200_0000),
             // WRAM
             0x0300_0000..=0x0300_7FFF => {
-                info!("wram addr = {:x}", addr);
+                // info!("wram addr = {:x}", addr);
 
                 self.wram.read_word(addr - 0x0300_0000)
             }
@@ -209,7 +210,7 @@ impl BusAccessor for CpuBus {
     }
 
     fn write_byte(&mut self, addr: u32, data: Byte) {
-        info!("write byte addr = 0x{:x} data = 0x{:x}", addr, data);
+        debug!("write byte addr = 0x{:x} data = 0x{:x}", addr, data);
         match addr {
             // 0x0000_0000...0x0007_FFFF => self.rom.borrow().read_word(addr),
             0x0300_0000..=0x0300_7FFF => {
@@ -223,16 +224,13 @@ impl BusAccessor for CpuBus {
     }
 
     fn write_halfword(&mut self, addr: u32, data: HalfWord) {
-        info!("write half word addr = 0x{:x} data = 0x{:x}", addr, data);
+        debug!("write half word addr = 0x{:x} data = 0x{:x}", addr, data);
         match addr {
             // I/O Register
             0x0200_0000..=0x0203_FFFF => self.eram.write_halfword(addr - 0x0200_0000, data),
             // WRAM
             0x0300_0000..=0x0300_7FFF => {
-                info!("wram addr = {:x} {:x}", addr, data);
-                if addr == 0x03007dd9 {
-                    // dbg!("write to 0x03007dd9", data);
-                }
+                // info!("wram addr = {:x} {:x}", addr, data);
                 self.wram.write_halfword(addr - 0x0300_0000, data);
             }
             0x0400_0000..=0x0400_03FE => {
@@ -258,10 +256,7 @@ impl BusAccessor for CpuBus {
             0x0200_0000..=0x0203_FFFF => self.eram.write_word(addr - 0x0200_0000, data),
             // WRAM
             0x0300_0000..=0x0300_7FFF => {
-                info!("wram addr = {:x} {:x}", addr, data);
-                if addr == 0x03007dd9 {
-                    // dbg!("write to 0x03007dd9", data);
-                }
+                // info!("wram addr = {:x} {:x}", addr, data);
                 self.wram.write_word(addr - 0x0300_0000, data);
             }
             // Unused

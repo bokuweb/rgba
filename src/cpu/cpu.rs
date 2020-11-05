@@ -261,13 +261,14 @@ impl ARM {
         let (cycle, pipeline_status) = {
             // dbg!(instruction);
             match instruction {
-                thumb::Instruction::LDR1(dec) => exec_thumb_ldr_with_imm_offset(bus, dec, &mut self.gpr),
-                thumb::Instruction::LDRRegOffset(dec) => exec_thumb_ldr_with_reg_offset(bus, dec, &mut self.gpr),
+                thumb::Instruction::LDR1(dec) => exec_thumb_ldr_imm_offset(bus, dec, &mut self.gpr),
+                thumb::Instruction::LDRRegOffset(dec) => exec_thumb_ldr_reg_offset(bus, dec, &mut self.gpr),
                 thumb::Instruction::LDR3(dec) => exec_thumb_ldr3(bus, dec, &mut self.gpr),
                 thumb::Instruction::LDR4(dec) => exec_thumb_load_sp_relative(bus, dec, &mut self.gpr),
                 thumb::Instruction::STR1(dec) => exec_thumb_str1(bus, dec, &mut self.gpr),
                 thumb::Instruction::STR3(dec) => exec_thumb_str3(bus, dec, &mut self.gpr),
                 thumb::Instruction::LDRB(dec) => exec_thumb_ldrb_imm_offset(bus, dec, &mut self.gpr),
+                thumb::Instruction::LDRBRegOffset(dec) => exec_thumb_ldrb_reg_offset(bus, dec, &mut self.gpr),
                 thumb::Instruction::LDRH(dec) => exec_thumb_ldrh(bus, dec, &mut self.gpr),
                 thumb::Instruction::STRH(dec) => exec_thumb_strh(bus, dec, &mut self.gpr),
                 thumb::Instruction::STRB_IMM_OFFET(dec) => exec_thumb_strb_imm_offset(bus, dec, &mut self.gpr),
