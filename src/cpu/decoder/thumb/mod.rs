@@ -15,7 +15,7 @@ pub enum Instruction {
     LDR1(SingleDataTransfer),
     LDRB(SingleDataTransfer),
     LDRH(SingleDataTransfer),
-    LDR2(SingleDataTransfer),
+    LDRRegOffset(SingleDataTransfer),
     LDR3(SingleDataTransfer),
     LDR4(SingleDataTransfer),
     STR1(SingleDataTransfer),
@@ -87,7 +87,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 match dec.get_op11_10() {
                     0b00 => todo!("str"),
                     0b01 => Instruction::STRBRegOffset(dec),
-                    0b10 => todo!("ldr"),
+                    0b10 => Instruction::LDRRegOffset(dec),
                     0b11 => todo!("ldrb"),
                     _ => unreachable!("unknown thumb data transfer instruction {}", dec.get_op11_10()),
                 }
