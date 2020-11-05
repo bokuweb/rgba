@@ -161,6 +161,9 @@ pub struct CpuBus {
 impl BusAccessor for CpuBus {
     fn read_byte(&self, addr: u32) -> Byte {
         debug!("read byte addr = {:x}", addr);
+        if addr == 0x0400_0200 || addr == 0x0400_0006 {
+            panic!("aaaa")
+        }
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_byte(addr),
             0x0300_0000..=0x0300_7FFF => self.wram.read_byte(addr - 0x0300_0000),
@@ -171,11 +174,14 @@ impl BusAccessor for CpuBus {
 
     fn read_halfword(&self, addr: u32) -> HalfWord {
         debug!("read half word addr = {:x}", addr);
+        if addr == 0x0400_0006 {
+            panic!("aaaa")
+        }
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_halfword(addr),
             0x0300_0000..=0x0300_7FFF => self.wram.read_halfword(addr - 0x0300_0000),
             0x0400_0000..=0x0400_03FE => {
-                dbg!("I/O register is not implemented yet.", format!("addr = {:x}", addr));
+                // dbg!("I/O register is not implemented yet.", format!("addr = {:x}", addr));
                 0
             }
             0x0600_0000..=0x0601_7FFF => self.vram.read_halfword(addr - 0x0600_0000),
@@ -185,6 +191,9 @@ impl BusAccessor for CpuBus {
     }
 
     fn read_word(&self, addr: u32) -> Word {
+        if addr == 0x0400_0200 || addr == 0x0400_0006 {
+            panic!("aaaa")
+        }
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_word(addr),
             0x0200_0000..=0x0203_FFFF => self.eram.read_word(addr - 0x0200_0000),
@@ -205,7 +214,7 @@ impl BusAccessor for CpuBus {
             // 0x0000_0000...0x0007_FFFF => self.rom.borrow().read_word(addr),
             0x0300_0000..=0x0300_7FFF => {
                 if addr == 0x03007dd9 {
-                    dbg!("write to 0x03007dd9", data);
+                    // dbg!("write to 0x03007dd9", data);
                 }
                 self.wram.write_byte(addr - 0x0300_0000, data);
             }
@@ -222,18 +231,18 @@ impl BusAccessor for CpuBus {
             0x0300_0000..=0x0300_7FFF => {
                 info!("wram addr = {:x} {:x}", addr, data);
                 if addr == 0x03007dd9 {
-                    dbg!("write to 0x03007dd9", data);
+                    // dbg!("write to 0x03007dd9", data);
                 }
                 self.wram.write_halfword(addr - 0x0300_0000, data);
             }
             0x0400_0000..=0x0400_03FE => {
-                dbg!(
-                    "I/O register is not implemented yet.",
-                    format!("addr = {:x} data = {:x}", addr, data)
-                );
+                // dbg!(
+                //                    "I/O register is not implemented yet.",
+                //                    format!("addr = {:x} data = {:x}", addr, data)
+                //                );
             }
             0x0600_0000..=0x0601_7FFF => {
-                dbg!(addr, data);
+                // dbg!(addr, data);
                 self.vram.write_halfword(addr - 0x0600_0000, data);
             }
 
@@ -242,7 +251,7 @@ impl BusAccessor for CpuBus {
     }
 
     fn write_word(&mut self, addr: u32, data: Word) {
-        dbg!(format!("write word addr 0x{:x} data = 0x{:x}", addr, data));
+        // dbg!(format!("write word addr 0x{:x} data = 0x{:x}", addr, data));
 
         match addr {
             0x0000_0000..=0x0007_FFFF => panic!("illegal write access."),
@@ -251,20 +260,20 @@ impl BusAccessor for CpuBus {
             0x0300_0000..=0x0300_7FFF => {
                 info!("wram addr = {:x} {:x}", addr, data);
                 if addr == 0x03007dd9 {
-                    dbg!("write to 0x03007dd9", data);
+                    // dbg!("write to 0x03007dd9", data);
                 }
                 self.wram.write_word(addr - 0x0300_0000, data);
             }
             // Unused
             0x0300_8000..=0x03FF_FFFF => {
-                // dbg!(format!("{:x}", addr));
+                // // dbg!(format!("{:x}", addr));
             }
             // I/O Register
             0x0400_0000..=0x0400_03FE => {
-                dbg!(
-                    "I/O register is not implemented yet.",
-                    format!("addr = {:x} data = {:x}", addr, data)
-                );
+                // dbg!(
+                //    "I/O register is not implemented yet.",
+                //    format!("addr = {:x} data = {:x}", addr, data)
+                //);
             }
             _ => panic!("TODO: addr = {:x} data = {:x}", addr, data),
         };

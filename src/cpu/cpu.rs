@@ -163,8 +163,8 @@ impl ARM {
             }
             CpuState::Thumb => {
                 let fetched = self.get_thumb_executable(bus);
-                debug!("{:x}", fetched);
-                dbg!(&self.gpr);
+                // debug!("{:x}", fetched);
+                // dbg!(&self.gpr);
                 let instruction = thumb::decode(fetched);
                 let cycle = cycle + self.execute_thumb(instruction, bus);
                 Ok(cycle)
@@ -259,21 +259,23 @@ impl ARM {
         T: BusAccessor,
     {
         let (cycle, pipeline_status) = {
-            dbg!(instruction);
+            // dbg!(instruction);
             match instruction {
                 thumb::Instruction::LDR1(dec) => exec_thumb_ldr_with_immediate_offset(bus, dec, &mut self.gpr),
                 thumb::Instruction::LDR3(dec) => exec_thumb_ldr3(bus, dec, &mut self.gpr),
                 thumb::Instruction::LDR4(dec) => exec_thumb_load_sp_relative(bus, dec, &mut self.gpr),
                 thumb::Instruction::STR1(dec) => exec_thumb_str1(bus, dec, &mut self.gpr),
                 thumb::Instruction::STR3(dec) => exec_thumb_str3(bus, dec, &mut self.gpr),
+                thumb::Instruction::LDRB(dec) => exec_thumb_ldrb_imm_offset(bus, dec, &mut self.gpr),
                 thumb::Instruction::LDRH(dec) => exec_thumb_ldrh(bus, dec, &mut self.gpr),
                 thumb::Instruction::STRH(dec) => exec_thumb_strh(bus, dec, &mut self.gpr),
                 thumb::Instruction::STRB_IMM_OFFET(dec) => exec_thumb_strb_imm_offset(bus, dec, &mut self.gpr),
+                thumb::Instruction::STRBRegOffset(dec) => exec_thumb_strb_reg_offset(bus, dec, &mut self.gpr),
                 thumb::Instruction::ADD1(dec) => exec_thumb_add1(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ADD2(dec) => exec_thumb_add2(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ADD3(dec) => exec_thumb_add3(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ADD4(dec) => {
-                    dbg!(dec.0);
+                    // dbg!(dec.0);
                     // Format 5
                     // This instruction can change PC
                     todo!("ADD4");
@@ -282,7 +284,7 @@ impl ARM {
                 thumb::Instruction::ADD6(dec) => exec_thumb_add_relative_address(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ADD7(dec) => exec_thumb_add7(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::CMP3(dec) => {
-                    dbg!(dec.0);
+                    // dbg!(dec.0);
                     todo!("CMP3");
                 }
                 thumb::Instruction::MOV3(dec) => exec_thumb_mov3(bus, dec, &mut self.gpr, &mut self.cpsr),
@@ -321,7 +323,7 @@ impl ARM {
                 thumb::Instruction::PUSH(dec) => exec_thumb_push(bus, dec, &mut self.gpr),
                 thumb::Instruction::POP(dec) => exec_thumb_pop(bus, dec, &mut self.gpr),
                 _ => {
-                    dbg!(&instruction);
+                    dbg!(&instruction, &self.gpr);
                     unimplemented!();
                 }
             }

@@ -21,7 +21,7 @@ where
 
     gpr[rd] = data;
 
-    dbg!("ldr1", &gpr);
+    // dbg!("ldr1", &gpr);
 
     // Add merged I + S cycle.
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
@@ -43,7 +43,7 @@ where
 
     gpr[rd] = data;
 
-    dbg!("ldr3", &gpr);
+    // dbg!("ldr3", &gpr);
 
     // Add merged I + S cycle.
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
@@ -59,9 +59,9 @@ where
     let offset = dec.get_off8() as u32;
     let addr = gpr[SP] + offset.wrapping_shl(2);
 
-    dbg!(addr, "ldr4");
+    // dbg!(addr, "ldr4");
     let data = bus.read_word(addr);
-    dbg!(data, rd, "ldr4");
+    // dbg!(data, rd, "ldr4");
 
     // 1N + 1I cycle
     let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
@@ -92,7 +92,7 @@ where
 
     // Add merged I + S cycle.
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
-    dbg!("ldrh", &gpr);
+    // dbg!("ldrh", &gpr);
     (cycle, PipelineStatus::Continue)
 }
 
@@ -129,7 +129,7 @@ where
     let store_cycle = bus.compute_cycle(addr, access_type);
     let access_type = AccessType::NonSeq(AccessWidth::HalfWord);
     let fetch_cycle = bus.compute_cycle(gpr[PC], access_type);
-    dbg!("after str3", &gpr);
+    // dbg!("after str3", &gpr);
     // Store consume 2N cycle
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
 }
@@ -148,9 +148,30 @@ where
     let access_type = AccessType::NonSeq(AccessWidth::HalfWord);
     let store_cycle = bus.compute_cycle(addr, access_type);
     let fetch_cycle = bus.compute_cycle(gpr[PC], access_type);
-    dbg!("strh");
+    // dbg!("strh");
     // Store consume 2N cycle
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
+}
+
+pub fn exec_thumb_ldrb_imm_offset<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
+where
+    T: BusAccessor,
+{
+    let rd = dec.get_Rd2_0() as usize;
+    let rn = dec.get_Rn() as usize;
+    let offset = dec.get_off5() as u32;
+
+    let addr = gpr[rn] + offset;
+
+    // 1N + 1I cycle
+    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
+
+    gpr[rd] = bus.read_byte(addr) as u32;
+
+    // Add merged I + S cycle.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+
+    (cycle, PipelineStatus::Continue)
 }
 
 pub fn exec_thumb_strb_imm_offset<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
@@ -167,7 +188,29 @@ where
     let access_type = AccessType::NonSeq(AccessWidth::Byte);
     let store_cycle = bus.compute_cycle(addr, access_type);
     let fetch_cycle = bus.compute_cycle(gpr[PC], access_type);
-    dbg!("strB");
+    // dbg!("strB");
+    // Store consume 2N cycle
+    (store_cycle + fetch_cycle, PipelineStatus::Continue)
+}
+
+pub fn exec_thumb_strb_reg_offset<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
+where
+    T: BusAccessor,
+{
+    let rd = dec.get_Rd2_0() as usize;
+    let rn = dec.get_Rn() as usize;
+    let rm = dec.get_Rm() as usize;
+
+    let addr = gpr[rn] + gpr[rm];
+    bus.write_byte(addr, gpr[rd] as u8);
+
+    let access_type = AccessType::NonSeq(AccessWidth::Byte);
+    let store_cycle = bus.compute_cycle(addr, access_type);
+    let fetch_cycle = bus.compute_cycle(gpr[PC], access_type);
+    // dbg!("strB");
+    if addr == 0x0300_0200 {
+        let _a = "".to_owned();
+    }
     // Store consume 2N cycle
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
 }

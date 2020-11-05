@@ -22,6 +22,7 @@ pub enum Instruction {
     STR3(SingleDataTransfer),
     STRH(SingleDataTransfer),
     STRB_IMM_OFFET(SingleDataTransfer),
+    STRBRegOffset(SingleDataTransfer),
     ADD1(DataProcessing),
     ADD2(DataProcessing),
     ADD3(DataProcessing),
@@ -85,7 +86,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
             } else {
                 match dec.get_op11_10() {
                     0b00 => todo!("str"),
-                    0b01 => todo!("strb"),
+                    0b01 => Instruction::STRBRegOffset(dec),
                     0b10 => todo!("ldr"),
                     0b11 => todo!("ldrb"),
                     _ => unreachable!("unknown thumb data transfer instruction {}", dec.get_op11_10()),

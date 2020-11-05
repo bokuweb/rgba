@@ -210,7 +210,7 @@ pub fn decode(raw: Word) -> Instruction {
     //     COND_AL => Condition::AL,
     //     _ => panic!("Unknowm condition {}", cond),
     // };
-    dbg!(raw);
+    // dbg!(raw);
 
     let instruction_type = match raw {
         v if ((v & 0x0ffffff0) == 0x012fff10) => InstructionType::BranchAndExchange,

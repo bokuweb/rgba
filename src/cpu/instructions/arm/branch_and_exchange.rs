@@ -11,7 +11,7 @@ pub fn exec_arm_bx(dec: BranchAndExchange, cpsr: &mut PSR, gpr: &mut [Word; 16])
         cpsr.set_cpu_state(CpuState::Thumb);
         debug!("Switch cpu state to thumb");
         gpr[PC] = addr & !0x1;
-        dbg!(gpr[PC]);
+        // dbg!(gpr[PC]);
     } else {
         // clear Rm[1:0]
         cpsr.set_cpu_state(CpuState::ARM);
