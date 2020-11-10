@@ -5,6 +5,7 @@ use crate::cpu::decoder;
 use crate::cpu::instructions;
 use crate::cpu::registers;
 use crate::cpu::types;
+use crate::lcd;
 use crate::types::*;
 
 pub(crate) use bus::accessor::*;
@@ -151,6 +152,7 @@ impl CycleLUT {
 
 pub struct CpuBus {
     cycleLUT: CycleLUT,
+    lcdc: lcd::LCDController,
     bios: Rom,
     rom: Rom,
     wram: Ram,
@@ -192,9 +194,6 @@ impl BusAccessor for CpuBus {
     }
 
     fn read_word(&self, addr: u32) -> Word {
-        if addr == 0x0400_0006 {
-            dbg!("read 0x0400_0006");
-        }
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_word(addr),
             0x0200_0000..=0x0203_FFFF => self.eram.read_word(addr - 0x0200_0000),
@@ -289,14 +288,19 @@ impl BusAccessor for CpuBus {
 }
 
 impl CpuBus {
-    pub fn new(bios: Rom, rom: Rom, wram: Ram, eram: Ram, vram: Ram) -> CpuBus {
+    pub fn new(bios: Rom, lcdc: lcd::LCDController, rom: Rom, wram: Ram, eram: Ram, vram: Ram) -> CpuBus {
         CpuBus {
             cycleLUT: CycleLUT::new(),
+            lcdc,
             bios,
             rom,
             wram,
             eram,
             vram,
         }
+    }
+
+    pub fn get_mut_lcdc(&mut self) -> &mut lcd::LCDController {
+        &mut self.lcdc
     }
 }

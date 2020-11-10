@@ -14,6 +14,11 @@ where
     let rb = dec.get_Rn() as usize;
     let offset = dec.get_off5() as u32;
     let addr = gpr[rb] + offset.wrapping_shl(2);
+
+    if addr == 0x0400_0006 {
+        dbg!("read 0x0400_0006", &gpr);
+    }
+
     let data = bus.read_word(addr);
 
     // 1N + 1I cycle
@@ -37,6 +42,11 @@ where
     let rm = dec.get_Rm() as usize;
 
     let addr = gpr[rn] + gpr[rm];
+
+    if addr == 0x0400_0006 {
+        dbg!("read 0x0400_0006", &gpr);
+    }
+
     let data = bus.read_word(addr);
 
     // 1N + 1I cycle
@@ -153,6 +163,11 @@ where
     let offset = dec.get_off5() as u32;
 
     let addr = gpr[rn] + offset.wrapping_shl(2);
+
+    if addr == 0x0400_0006 {
+        dbg!("read 0x0400_0006", &gpr);
+    }
+
     bus.write_word(addr, gpr[rd]);
 
     let access_type = AccessType::NonSeq(AccessWidth::Word);
@@ -172,6 +187,11 @@ where
     let offset = dec.get_off8() as u32;
     let data = gpr[rd as usize];
     let addr = gpr[SP] + offset.wrapping_shl(2);
+
+    if addr == 0x0400_0006 {
+        dbg!("read 0x0400_0006", &gpr);
+    }
+
     bus.write_word(addr, data);
     let access_type = AccessType::NonSeq(AccessWidth::Word);
     let store_cycle = bus.compute_cycle(addr, access_type);
@@ -179,6 +199,7 @@ where
     let fetch_cycle = bus.compute_cycle(gpr[PC], access_type);
     // dbg!("after str3", &gpr);
     // Store consume 2N cycle
+
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
 }
 
