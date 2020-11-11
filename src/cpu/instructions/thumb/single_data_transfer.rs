@@ -15,9 +15,6 @@ where
     let offset = dec.get_off5() as u32;
     let addr = gpr[rb] + offset.wrapping_shl(2);
 
-    if addr == 0x0400_0006 {
-        dbg!("read 0x0400_0006", &gpr);
-    }
 
     let data = bus.read_word(addr);
 
@@ -211,7 +208,7 @@ where
     let rn = dec.get_Rn() as usize;
     let offset = dec.get_off5() as u32;
 
-    let addr = gpr[rn] + offset;
+    let addr = gpr[rn] + offset.wrapping_shl(1);
     bus.write_halfword(addr, gpr[rd] as u16);
 
     let access_type = AccessType::NonSeq(AccessWidth::HalfWord);
@@ -271,7 +268,7 @@ where
     let rm = dec.get_Rm() as usize;
 
     let addr = gpr[rn] + gpr[rm];
-    bus.write_byte(addr, gpr[rd] as u8);
+    bus.write_byte(addr, gpr[rd] as Byte);
 
     let access_type = AccessType::NonSeq(AccessWidth::Byte);
     let store_cycle = bus.compute_cycle(addr, access_type);
@@ -281,5 +278,22 @@ where
         let _a = "".to_owned();
     }
     // Store consume 2N cycle
+    (store_cycle + fetch_cycle, PipelineStatus::Continue)
+}
+
+pub fn exec_thumb_strh_reg_offset<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
+where
+    T: BusAccessor,
+{
+    let rd = dec.get_Rd2_0() as usize;
+    let rn = dec.get_Rn() as usize;
+    let rm = dec.get_Rm() as usize;
+
+    let addr = gpr[rn] + gpr[rm];
+    bus.write_halfword(addr, gpr[rd] as HalfWord);
+
+    let access_type = AccessType::NonSeq(AccessWidth::Byte);
+    let store_cycle = bus.compute_cycle(addr, access_type);
+    let fetch_cycle = bus.compute_cycle(gpr[PC], access_type);
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
 }

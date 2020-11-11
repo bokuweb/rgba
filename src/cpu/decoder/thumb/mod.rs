@@ -24,6 +24,7 @@ pub enum Instruction {
     STRH(SingleDataTransfer),
     STRB_IMM_OFFET(SingleDataTransfer),
     STRBRegOffset(SingleDataTransfer),
+    STRHRegOffset(SingleDataTransfer),
     ADD1(DataProcessing),
     ADD2(DataProcessing),
     ADD3(DataProcessing),
@@ -78,7 +79,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
             let dec = SingleDataTransfer(v);
             if dec.get_S() {
                 match dec.get_op11_10() {
-                    0b00 => todo!("strh"),
+                    0b00 => Instruction::STRHRegOffset(dec),
                     0b01 => todo!("ldsb"),
                     0b10 => todo!("ldrh"),
                     0b11 => todo!("ldsh"),

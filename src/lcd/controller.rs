@@ -1,3 +1,5 @@
+use crate::types::*;
+
 // Visible     240 dots,  57.221 us,    960 cycles - 78% of h-time
 // H-Blanking   68 dots,  16.212 us,    272 cycles - 22% of h-time
 // Total       308 dots,  73.433 us,   1232 cycles - ca. 13.620 kHz
@@ -33,5 +35,9 @@ impl LCDController {
                 return true;
             }
         }
+    }
+
+    pub fn read(&self) -> HalfWord {
+        self.lines as HalfWord
     }
 }

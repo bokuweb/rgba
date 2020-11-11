@@ -1,4 +1,3 @@
 /fixtures/*/build
 /fixtures/*/*.elf
-/fixtures/*/*.gba
 /target

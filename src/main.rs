@@ -30,7 +30,7 @@ fn main() {
     let mut event_pump = sdl_context.event_pump().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem
-        .window("rustynes", WIDTH, HEIGHT)
+        .window("arm", WIDTH, HEIGHT)
         .position_centered()
         .build()
         .unwrap();
