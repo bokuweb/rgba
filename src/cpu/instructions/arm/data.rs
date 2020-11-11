@@ -49,10 +49,10 @@ where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
-    dbg!("arm mov");
+    // dbg!("arm mov");
     exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
         gpr[rd] = value;
-        dbg!(&gpr, value, rd);
+        // dbg!(&gpr, value, rd);
     })
 }
 

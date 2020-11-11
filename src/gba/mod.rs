@@ -1,5 +1,6 @@
 mod bus;
 
+use crate::lcd;
 use bus::CpuBus;
 
 use crate::cpu::bus::accessor::BusAccessor;
@@ -31,6 +32,9 @@ use std::path::Path;
 
 use crate::types::*;
 
+// Visible     240 dots,  57.221 us,    960 cycles - 78% of h-time
+// H-Blanking   68 dots,  16.212 us,    272 cycles - 22% of h-time
+// Total       308 dots,  73.433 us,   1232 cycles - ca. 13.620 kHz
 // Visible (*) 160 lines, 11.749 ms, 197120 cycles - 70% of v-time
 // V-Blanking   68 lines,  4.994 ms,  83776 cycles - 30% of v-time
 // Total       228 lines, 16.743 ms, 280896 cycles - ca. 59.737 Hz
@@ -39,6 +43,7 @@ const CYCLES_PER_FRAME: usize = 280896;
 pub struct GBA {
     pub cycles: usize,
     pub arm: cpu::ARM,
+    // pub lcdc: lcd::LCDController,
     pub bus: CpuBus,
 }
 
@@ -52,7 +57,8 @@ impl GBA {
         let wram = Ram::new(vec![0; 0x8000]);
         let eram = Ram::new(vec![0; 0x4_0000]);
         let vram = Ram::new(vec![0; 0x1_8000]);
-        let mut bus = CpuBus::new(bios, rom, wram, eram, vram);
+        let lcdc = lcd::LCDController::new();
+        let bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram);
         let mut arm = cpu::ARM::new();
 
         arm.reset();
@@ -69,13 +75,15 @@ impl GBA {
     }
 
     pub fn frame(&mut self) -> Vec<u8> {
-        dbg!(self.cycles);
+        // dbg!(self.cycles);
         loop {
-            self.cycles += self.arm.step(&mut self.bus).unwrap();
-            if self.cycles >= CYCLES_PER_FRAME {
-                dbg!(self.cycles);
+            let cycles = self.arm.step(&mut self.bus).unwrap();
 
-                self.cycles -= CYCLES_PER_FRAME;
+            let lcdc = self.bus.get_mut_lcdc();
+
+            let ready = lcdc.run(cycles);
+
+            if ready {
                 break;
             }
         }
@@ -88,7 +96,7 @@ impl GBA {
             buf.push((((p & 0xEC00).wrapping_shr(10) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
             buf.push(255);
         }
-        dbg!(buf.len());
+        // dbg!(buf.len());
         buf
     }
 }
@@ -109,7 +117,8 @@ mod test {
         let wram = Ram::new(vec![0; 0x8000]);
         let eram = Ram::new(vec![0; 0x4_0000]);
         let vram = Ram::new(vec![0; 0x1_8000]);
-        let mut bus = CpuBus::new(bios, rom, wram, eram, vram);
+        let lcdc = lcd::LCDController::new();
+        let mut bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram);
         let mut arm = cpu::ARM::new();
         for _ in 0..step {
             arm.step(&mut bus).expect("should step");

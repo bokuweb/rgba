@@ -96,7 +96,7 @@ where
     let res = exec_memory_load(bus, gpr, dec, |gpr, base| {
         gpr[rd] = bus.read_word(base);
     });
-    dbg!("LDR", gpr);
+    // dbg!("LDR", gpr);
     res
 }
 

@@ -71,7 +71,7 @@ where
     // consume merged I-S cycle
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
 
-    dbg!("LDMIA", &gpr);
+    // dbg!("LDMIA", &gpr);
 
     (cycle, PipelineStatus::Continue)
 }
@@ -111,7 +111,7 @@ where
     gpr[SP] = addr + 4;
     // Consume 1N cycle to next prefetch
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
-    dbg!(&gpr, "after push");
+    // dbg!(&gpr, "after push");
     (cycle, PipelineStatus::Continue)
 }
 
@@ -125,7 +125,7 @@ where
     let mut addr = gpr[SP];
     let register_list = dec.get_register_list();
 
-    dbg!("befpre pop", &gpr);
+    // dbg!("befpre pop", &gpr);
 
     for i in 0..0x8 {
         if register_list & (1 << i) != 0 {
@@ -150,7 +150,7 @@ where
     }
 
     gpr[SP] = addr;
-    dbg!("after pop", &gpr);
+    // dbg!("after pop", &gpr);
 
     // Consume 1I cycle.
     let cycle = cycle + 1;

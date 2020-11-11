@@ -82,7 +82,7 @@ impl BusAccessor for CpuBus {
         info!("write half word addr = 0x{:x} data = 0x{:x}", addr, data);
         match addr {
             0x0600_0000..=0x0601_7FFF => {
-                dbg!(addr, data);
+                // dbg!(addr, data);
                 self.vram.write_halfword(addr - 0x0600_0000, data);
             }
             _ => panic!("TODO: "),
@@ -101,11 +101,11 @@ impl BusAccessor for CpuBus {
             }
             // Unused
             0x0300_8000..=0x03FF_FFFF => {
-                // dbg!(format!("{:x}", addr));
+                // // dbg!(format!("{:x}", addr));
             }
             // I/O Register
             0x0400_0000..=0x0400_03FE => {
-                dbg!(
+                // dbg!(
                     "I/O register is not implemented yet.",
                     format!("addr = {:x} data = {:x}", addr, data)
                 );

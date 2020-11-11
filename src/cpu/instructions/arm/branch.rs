@@ -16,7 +16,7 @@ pub fn exec_arm_b(dec: Branch, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()
         imm
     }) as i32;
     gpr[PC] = (gpr[PC] as i32 + imm * 4) as Word;
-    dbg!("b");
+    // dbg!("b");
     // b does not consume extra cycle.
     Ok((0, PipelineStatus::Flush))
 }
