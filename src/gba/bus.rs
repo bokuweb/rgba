@@ -5,6 +5,7 @@ use crate::cpu::decoder;
 use crate::cpu::instructions;
 use crate::cpu::registers;
 use crate::cpu::types;
+use crate::lcd;
 use crate::types::*;
 
 pub(crate) use bus::accessor::*;
@@ -151,6 +152,7 @@ impl CycleLUT {
 
 pub struct CpuBus {
     cycleLUT: CycleLUT,
+    lcdc: lcd::LCDController,
     bios: Rom,
     rom: Rom,
     wram: Ram,
@@ -161,8 +163,12 @@ pub struct CpuBus {
 impl BusAccessor for CpuBus {
     fn read_byte(&self, addr: u32) -> Byte {
         debug!("read byte addr = {:x}", addr);
+        if addr == 0x0400_0006 {
+            panic!("aaaa")
+        }
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_byte(addr),
+            0x0300_0000..=0x0300_7FFF => self.wram.read_byte(addr - 0x0300_0000),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_byte(addr - 0x0800_0000),
             _ => panic!("TODO: "),
         }
@@ -174,7 +180,10 @@ impl BusAccessor for CpuBus {
             0x0000_0000..=0x0000_3FFF => self.bios.read_halfword(addr),
             0x0300_0000..=0x0300_7FFF => self.wram.read_halfword(addr - 0x0300_0000),
             0x0400_0000..=0x0400_03FE => {
-                dbg!("I/O register is not implemented yet.", format!("addr = {:x}", addr));
+                // dbg!("I/O register is not implemented yet.", format!("addr = {:x}", addr));
+                if addr == 0x0400_0006 {
+                    return self.lcdc.read();
+                }
                 0
             }
             0x0600_0000..=0x0601_7FFF => self.vram.read_halfword(addr - 0x0600_0000),
@@ -186,9 +195,11 @@ impl BusAccessor for CpuBus {
     fn read_word(&self, addr: u32) -> Word {
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_word(addr),
+            0x0200_0000..=0x0203_FFFF => self.eram.read_word(addr - 0x0200_0000),
             // WRAM
             0x0300_0000..=0x0300_7FFF => {
-                info!("wram addr = {:x}", addr);
+                // info!("wram addr = {:x}", addr);
+
                 self.wram.read_word(addr - 0x0300_0000)
             }
             0x0800_0000..=0x09FF_FFFF => self.rom.read_word(addr - 0x0800_0000),
@@ -197,10 +208,13 @@ impl BusAccessor for CpuBus {
     }
 
     fn write_byte(&mut self, addr: u32, data: Byte) {
-        info!("write byte addr = 0x{:x} data = 0x{:x}", addr, data);
+        debug!("write byte addr = 0x{:x} data = 0x{:x}", addr, data);
         match addr {
             // 0x0000_0000...0x0007_FFFF => self.rom.borrow().read_word(addr),
             0x0300_0000..=0x0300_7FFF => {
+                if addr == 0x03007dd9 {
+                    // dbg!("write to 0x03007dd9", data);
+                }
                 self.wram.write_byte(addr - 0x0300_0000, data);
             }
             _ => panic!("TODO: "),
@@ -208,17 +222,22 @@ impl BusAccessor for CpuBus {
     }
 
     fn write_halfword(&mut self, addr: u32, data: HalfWord) {
-        info!("write half word addr = 0x{:x} data = 0x{:x}", addr, data);
+        debug!("write half word addr = 0x{:x} data = 0x{:x}", addr, data);
         match addr {
             // I/O Register
+            0x0200_0000..=0x0203_FFFF => self.eram.write_halfword(addr - 0x0200_0000, data),
+            // WRAM
+            0x0300_0000..=0x0300_7FFF => {
+                // info!("wram addr = {:x} {:x}", addr, data);
+                self.wram.write_halfword(addr - 0x0300_0000, data);
+            }
             0x0400_0000..=0x0400_03FE => {
-                dbg!(
-                    "I/O register is not implemented yet.",
-                    format!("addr = {:x} data = {:x}", addr, data)
-                );
+                // dbg!(
+                //                    "I/O register is not implemented yet.",
+                //                    format!("addr = {:x} data = {:x}", addr, data)
+                //                );
             }
             0x0600_0000..=0x0601_7FFF => {
-                dbg!(addr, data);
                 self.vram.write_halfword(addr - 0x0600_0000, data);
             }
 
@@ -227,25 +246,26 @@ impl BusAccessor for CpuBus {
     }
 
     fn write_word(&mut self, addr: u32, data: Word) {
-        // info!("write word addr = 0x{:x} data = 0x{:x}", addr, data);
+        // dbg!(format!("write word addr 0x{:x} data = 0x{:x}", addr, data));
+
         match addr {
             0x0000_0000..=0x0007_FFFF => panic!("illegal write access."),
             0x0200_0000..=0x0203_FFFF => self.eram.write_word(addr - 0x0200_0000, data),
             // WRAM
             0x0300_0000..=0x0300_7FFF => {
-                info!("wram addr = {:x} {:x}", addr, data);
+                // info!("wram addr = {:x} {:x}", addr, data);
                 self.wram.write_word(addr - 0x0300_0000, data);
             }
             // Unused
             0x0300_8000..=0x03FF_FFFF => {
-                // dbg!(format!("{:x}", addr));
+                // // dbg!(format!("{:x}", addr));
             }
             // I/O Register
             0x0400_0000..=0x0400_03FE => {
-                dbg!(
-                    "I/O register is not implemented yet.",
-                    format!("addr = {:x} data = {:x}", addr, data)
-                );
+                // dbg!(
+                //    "I/O register is not implemented yet.",
+                //    format!("addr = {:x} data = {:x}", addr, data)
+                //);
             }
             _ => panic!("TODO: addr = {:x} data = {:x}", addr, data),
         };
@@ -266,14 +286,19 @@ impl BusAccessor for CpuBus {
 }
 
 impl CpuBus {
-    pub fn new(bios: Rom, rom: Rom, wram: Ram, eram: Ram, vram: Ram) -> CpuBus {
+    pub fn new(bios: Rom, lcdc: lcd::LCDController, rom: Rom, wram: Ram, eram: Ram, vram: Ram) -> CpuBus {
         CpuBus {
             cycleLUT: CycleLUT::new(),
+            lcdc,
             bios,
             rom,
             wram,
             eram,
             vram,
         }
+    }
+
+    pub fn get_mut_lcdc(&mut self) -> &mut lcd::LCDController {
+        &mut self.lcdc
     }
 }

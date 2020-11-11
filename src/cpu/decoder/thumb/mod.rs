@@ -15,13 +15,16 @@ pub enum Instruction {
     LDR1(SingleDataTransfer),
     LDRB(SingleDataTransfer),
     LDRH(SingleDataTransfer),
-    LDR2(SingleDataTransfer),
+    LDRBRegOffset(SingleDataTransfer),
+    LDRRegOffset(SingleDataTransfer),
     LDR3(SingleDataTransfer),
     LDR4(SingleDataTransfer),
     STR1(SingleDataTransfer),
     STR3(SingleDataTransfer),
     STRH(SingleDataTransfer),
-    STRB(SingleDataTransfer),
+    STRB_IMM_OFFET(SingleDataTransfer),
+    STRBRegOffset(SingleDataTransfer),
+    STRHRegOffset(SingleDataTransfer),
     ADD1(DataProcessing),
     ADD2(DataProcessing),
     ADD3(DataProcessing),
@@ -71,6 +74,27 @@ pub fn decode(raw: HalfWord) -> Instruction {
             let dec = DataProcessing(v);
             Instruction::ADD7(dec)
         }
+        // THUMB.7 / 8
+        v if ((v & 0xF000) == 0x5000) => {
+            let dec = SingleDataTransfer(v);
+            if dec.get_S() {
+                match dec.get_op11_10() {
+                    0b00 => Instruction::STRHRegOffset(dec),
+                    0b01 => todo!("ldsb"),
+                    0b10 => todo!("ldrh"),
+                    0b11 => todo!("ldsh"),
+                    _ => unreachable!("unknown thumb data transfer instruction {}", dec.get_op11_10()),
+                }
+            } else {
+                match dec.get_op11_10() {
+                    0b00 => todo!("str"),
+                    0b01 => Instruction::STRBRegOffset(dec),
+                    0b10 => Instruction::LDRRegOffset(dec),
+                    0b11 => Instruction::LDRBRegOffset(dec),
+                    _ => unreachable!("unknown thumb data transfer instruction {}", dec.get_op11_10()),
+                }
+            }
+        }
         // THUMB.9
         v if ((v & 0xE000) == 0x6000) => {
             let dec = SingleDataTransfer(v);
@@ -82,7 +106,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 }
             } else {
                 if dec.get_B() {
-                    Instruction::STRB(dec)
+                    Instruction::STRB_IMM_OFFET(dec)
                 } else {
                     Instruction::STR1(dec)
                 }
@@ -97,6 +121,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 Instruction::STRH(dec)
             }
         }
+        // THUMB.6
         v if ((v & 0xF800) == 0x4800) => Instruction::LDR3(SingleDataTransfer(v)),
         // THUMB.11 load/store SP-relative
         v if ((v & 0xF000) == 0x9000) => {
@@ -107,6 +132,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 Instruction::STR3(dec)
             }
         }
+        // THUMB.12
         v if ((v & 0xF000) == 0xA000) => Instruction::ADD6(DataProcessing(v)),
         // THUMB 2: add/subtract
         v if ((v & 0xFE00) == 0x1A00) => Instruction::SUB3(DataProcessing(v)),
@@ -135,6 +161,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 _ => unreachable!("unknown thumb data processing instruction {}", dec.get_op9_6()),
             }
         }
+        // THUMB.1: move shift register
         v if ((v & 0xE000) == 0x0000) => {
             let dec = DataProcessing(v);
             match dec.get_op12_11() {
@@ -144,6 +171,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 _ => unreachable!("unknown thumb data processing instruction {}", dec.get_op12_11()),
             }
         }
+        // THUMB.3
         v if ((v & 0xE000) == 0x2000) => {
             let dec = DataProcessing(v);
             match dec.get_op12_11() {
@@ -157,6 +185,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
         v if ((v & 0xFF00) == 0x4700) => Instruction::BX(Branch(v)),
         v if ((v & 0xFC00) == 0x4400) => {
             let dec = DataProcessing(v);
+            // THUMB.5: Hi register operations
             match dec.get_op9_8() {
                 0b00 => Instruction::ADD4(dec),
                 0b01 => Instruction::CMP3(dec),
@@ -165,10 +194,16 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 _ => unreachable!(),
             }
         }
+        // THUMB.17
         v if ((v & 0x7F00) == 0x5F00) => todo!("SWI"),
+        // THUMB.19
         v if ((v & 0xF000) == 0xF000) => Instruction::BL(Branch(v)),
         v if ((v & 0x7000) == 0x5000) => Instruction::B(Branch(v)),
+        // THUMB.18
         v if ((v & 0xF800) == 0xE000) => Instruction::B2(Branch(v)),
+        // THUMB.16
+        v if ((v & 0xF000) == 0xD000) => todo!("conditional branch"),
+        // THUMB.15
         v if ((v & 0xF000) == 0xC000) => {
             let dec = BlockDataTransfer(v);
             if dec.get_L() {
@@ -177,6 +212,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 Instruction::STMIA(dec)
             }
         }
+        //  THUMB.14
         v if ((v & 0xF000) == 0xB000) => {
             let dec = BlockDataTransfer(v);
             if dec.get_L() {

@@ -14,7 +14,7 @@ where
     let rd = dec.get_Rd() as usize;
     let rm = dec.get_Rm() as usize;
     let rs = dec.get_Rs() as usize;
-    gpr[rd] = ((gpr[rm] as u64) * gpr[rs] as u64) as u32;
+    gpr[rd] = ((gpr[rm] as i128) * gpr[rs] as i128) as u32;
     // MUL consume (m)I + S
     let cycle = compute_multiple_cycle(gpr[rs]) + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     Ok((cycle, PipelineStatus::Continue))
