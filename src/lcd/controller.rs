@@ -1,4 +1,7 @@
+use crate::memory::ram::Ram;
 use crate::types::*;
+
+use super::*;
 
 // Visible     240 dots,  57.221 us,    960 cycles - 78% of h-time
 // H-Blanking   68 dots,  16.212 us,    272 cycles - 22% of h-time
@@ -13,11 +16,17 @@ const LINES_PER_FRAME: usize = 228;
 pub struct LCDController {
     cycles: usize,
     lines: usize,
+    // registers
+    dispcnt: DISPCNT,
 }
 
 impl LCDController {
     pub fn new() -> LCDController {
-        LCDController { cycles: 0, lines: 0 }
+        LCDController {
+            cycles: 0,
+            lines: 0,
+            dispcnt: DISPCNT::new(),
+        }
     }
 
     pub fn run(&mut self, cycles: usize) -> bool {
@@ -39,5 +48,12 @@ impl LCDController {
 
     pub fn read(&self) -> HalfWord {
         self.lines as HalfWord
+    }
+
+    pub fn write(&mut self, addr: Word, data: HalfWord) {
+        match addr {
+            0x0000 => self.dispcnt.write(data),
+            _ => todo!(),
+        }
     }
 }
