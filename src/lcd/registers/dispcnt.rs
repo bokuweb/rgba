@@ -1,6 +1,16 @@
 use super::*;
 use crate::types::*;
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum BgMode {
+    Mode0,
+    Mode1,
+    Mode2,
+    Mode3,
+    Mode4,
+    Mode5,
+}
+
 bitfield! {
     #[derive(Debug, PartialEq, Clone, Copy)]
     pub struct DISPCNT(u16);
@@ -24,8 +34,24 @@ impl DISPCNT {
         DISPCNT::default()
     }
 
+    pub fn mode(&self) -> BgMode {
+        match self.bg_mode() {
+            0x00 => BgMode::Mode0,
+            0x01 => BgMode::Mode1,
+            0x02 => BgMode::Mode2,
+            0x03 => BgMode::Mode3,
+            0x04 => BgMode::Mode4,
+            0x05 => BgMode::Mode5,
+            _ => unreachable!("bg mode should be 0~5."),
+        }
+    }
+
     pub fn write(&mut self, data: HalfWord) {
         self.0 = data
+    }
+
+    pub fn read(&self) -> HalfWord {
+        self.0
     }
 }
 

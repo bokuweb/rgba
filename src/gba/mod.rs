@@ -77,29 +77,17 @@ impl GBA {
     }
 
     pub fn frame(&mut self) -> Vec<u8> {
-        // dbg!(self.cycles);
         loop {
             let cycles = self.arm.step(&mut self.bus).unwrap();
-
-            let lcdc = self.bus.get_mut_lcdc();
-
+            let lcdc = self.bus.borrow_mut_lcdc();
             let ready = lcdc.run(cycles);
-
             if ready {
                 break;
             }
         }
-
-        let mut buf = vec![];
-        for offset in 0..(240 * 160) {
-            let p = self.bus.read_halfword(0x0600_0000 + offset * 2);
-            buf.push((((p & 0x001F) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
-            buf.push((((p & 0x03E0).wrapping_shr(5) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
-            buf.push((((p & 0xEC00).wrapping_shr(10) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
-            buf.push(255);
-        }
-        // dbg!(buf.len());
-        buf
+        let lcdc = self.bus.borrow_lcdc();
+        let vram = self.bus.borrow_vram();
+        lcdc.render(vram)
     }
 }
 

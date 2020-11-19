@@ -1,4 +1,5 @@
 use crate::memory::ram::Ram;
+use crate::memory::readable::HalfWordReadable;
 use crate::types::*;
 
 use super::*;
@@ -46,8 +47,12 @@ impl LCDController {
         }
     }
 
-    pub fn read(&self) -> HalfWord {
-        self.lines as HalfWord
+    pub fn read(&self, addr: Word) -> HalfWord {
+        match addr {
+            0x0000 => self.dispcnt.read(),
+            0x0006 => self.lines as HalfWord,
+            _ => todo!(),
+        }
     }
 
     pub fn write(&mut self, addr: Word, data: HalfWord) {
@@ -55,5 +60,38 @@ impl LCDController {
             0x0000 => self.dispcnt.write(data),
             _ => todo!(),
         }
+    }
+
+    pub fn render(&self, vram: &Ram) -> Vec<u8> {
+        dbg!(self.dispcnt.mode());
+        match self.dispcnt.mode() {
+            BgMode::Mode0 => self.render_with_mode0(vram),
+            BgMode::Mode3 => self.render_with_mode3(vram),
+            _ => todo!(),
+        }
+    }
+
+    fn render_with_mode0(&self, vram: &Ram) -> Vec<u8> {
+        let mut buf = vec![];
+        for offset in 0..(240 * 160) {
+            let p = vram.read_halfword(offset * 2);
+            buf.push((((p & 0x001F) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
+            buf.push((((p & 0x03E0).wrapping_shr(5) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
+            buf.push((((p & 0xEC00).wrapping_shr(10) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
+            buf.push(255);
+        }
+        buf
+    }
+
+    fn render_with_mode3(&self, vram: &Ram) -> Vec<u8> {
+        let mut buf = vec![];
+        for offset in 0..(240 * 160) {
+            let p = vram.read_halfword( offset * 2);
+            buf.push((((p & 0x001F) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
+            buf.push((((p & 0x03E0).wrapping_shr(5) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
+            buf.push((((p & 0xEC00).wrapping_shr(10) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
+            buf.push(255);
+        }
+        buf
     }
 }
