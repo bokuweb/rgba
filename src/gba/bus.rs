@@ -278,7 +278,7 @@ impl BusAccessor for CpuBus {
 }
 
 impl CpuBus {
-    pub fn new(bios: Rom, lcdc: lcd::LCDController, rom: Rom, wram: Ram, eram: Ram, vram: Ram, palette: Ram, oam: Ram) -> CpuBus {
+    pub(crate) fn new(bios: Rom, lcdc: lcd::LCDController, rom: Rom, wram: Ram, eram: Ram, vram: Ram, palette: Ram, oam: Ram) -> CpuBus {
         CpuBus {
             cycleLUT: CycleLUT::new(),
             lcdc,
@@ -292,15 +292,23 @@ impl CpuBus {
         }
     }
 
-    pub fn borrow_mut_lcdc(&mut self) -> &mut lcd::LCDController {
+    pub(crate) fn borrow_mut_lcdc(&mut self) -> &mut lcd::LCDController {
         &mut self.lcdc
     }
 
-    pub fn borrow_lcdc(&self) -> &lcd::LCDController {
+    pub(crate) fn borrow_lcdc(&self) -> &lcd::LCDController {
         &self.lcdc
     }
 
-    pub fn borrow_vram(&self) -> &Ram {
+    pub(crate) fn borrow_vram(&self) -> &Ram {
         &self.vram
+    }
+
+    pub(crate) fn borrow_palette(&self) -> &Ram {
+        &self.palette
+    }
+
+    pub(crate) fn borrow_oam(&self) -> &Ram {
+        &self.oam
     }
 }

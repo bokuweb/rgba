@@ -87,7 +87,9 @@ impl GBA {
         }
         let lcdc = self.bus.borrow_lcdc();
         let vram = self.bus.borrow_vram();
-        lcdc.render(vram)
+        let palette = self.bus.borrow_palette();
+        let oam = self.bus.borrow_oam();
+        lcdc.render(vram, palette, oam)
     }
 }
 
