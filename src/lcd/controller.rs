@@ -82,7 +82,7 @@ impl LCDController {
         }
     }
 
-    pub fn read(&self, addr: Word) -> HalfWord {
+    pub fn read_halfword(&self, addr: Word) -> HalfWord {
         match addr {
             0x0000 => self.dispcnt.read(),
             0x0006 => self.lines as HalfWord,
@@ -94,7 +94,31 @@ impl LCDController {
         }
     }
 
-    pub fn write(&mut self, addr: Word, data: HalfWord) {
+    pub fn read_word(&self, addr: Word) -> Word {
+        match addr {
+            0x0000 => self.dispcnt.read() as Word,
+            0x0006 => self.lines as Word,
+            0x0008 => self.bg0cnt.read() as Word,
+            0x000A => self.bg1cnt.read() as Word,
+            0x000C => self.bg2cnt.read() as Word,
+            0x000E => self.bg3cnt.read() as Word,
+            _ => todo!(),
+        }
+    }
+
+    pub fn write_halfword(&mut self, addr: Word, data: HalfWord) {
+        match addr {
+            0x0000 => self.dispcnt.write(data),
+            0x0008 => self.bg0cnt.write(data),
+            0x000A => self.bg1cnt.write(data),
+            0x000C => self.bg2cnt.write(data),
+            0x000E => self.bg3cnt.write(data),
+            _ => todo!(),
+        }
+    }
+
+    pub fn write_word(&mut self, addr: Word, data: Word) {
+        let data = data as HalfWord;
         match addr {
             0x0000 => self.dispcnt.write(data),
             0x0008 => self.bg0cnt.write(data),
