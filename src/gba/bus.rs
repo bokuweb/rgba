@@ -158,17 +158,19 @@ pub struct CpuBus {
     wram: Ram,
     eram: Ram,
     vram: Ram,
+    palette: Ram,
+    oam: Ram,
 }
 
 impl BusAccessor for CpuBus {
     fn read_byte(&self, addr: u32) -> Byte {
         debug!("read byte addr = {:x}", addr);
-        if addr == 0x0400_0006 {
-            panic!("aaaa")
-        }
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_byte(addr),
             0x0300_0000..=0x0300_7FFF => self.wram.read_byte(addr - 0x0300_0000),
+            0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
+            0x0400_0060..=0x0400_03FF => 0,
+            0x0500_0000..=0x0500_03FF => self.palette.read_byte(addr - 0x0500_0000),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_byte(addr - 0x0800_0000),
             _ => panic!("TODO: "),
         }
@@ -179,13 +181,9 @@ impl BusAccessor for CpuBus {
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_halfword(addr),
             0x0300_0000..=0x0300_7FFF => self.wram.read_halfword(addr - 0x0300_0000),
-            0x0400_0000..=0x0400_03FE => {
-                // dbg!("I/O register is not implemented yet.", format!("addr = {:x}", addr));
-                if addr == 0x0400_0006 {
-                    return self.lcdc.read();
-                }
-                0
-            }
+            0x0400_0000..=0x0400_005F => self.lcdc.read_halfword(addr - 0x0400_0000),
+            0x0400_0060..=0x0400_03FF => 0,
+            0x0500_0000..=0x0500_03FF => self.palette.read_halfword(addr - 0x0500_0000),
             0x0600_0000..=0x0601_7FFF => self.vram.read_halfword(addr - 0x0600_0000),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_halfword(addr - 0x0800_0000),
             _ => panic!("TODO: {:x}", addr),
@@ -196,12 +194,10 @@ impl BusAccessor for CpuBus {
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_word(addr),
             0x0200_0000..=0x0203_FFFF => self.eram.read_word(addr - 0x0200_0000),
-            // WRAM
-            0x0300_0000..=0x0300_7FFF => {
-                // info!("wram addr = {:x}", addr);
-
-                self.wram.read_word(addr - 0x0300_0000)
-            }
+            0x0300_0000..=0x0300_7FFF => self.wram.read_word(addr - 0x0300_0000),
+            0x0400_0000..=0x0400_005F => self.lcdc.read_word(addr - 0x0400_0000),
+            0x0400_0060..=0x0400_03FF => 0,
+            0x0500_0000..=0x0500_03FF => self.palette.read_word(addr - 0x0500_0000),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_word(addr - 0x0800_0000),
             _ => panic!(format!("TODO: addr = 0x{:x}", addr)),
         }
@@ -217,6 +213,9 @@ impl BusAccessor for CpuBus {
                 }
                 self.wram.write_byte(addr - 0x0300_0000, data);
             }
+            0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
+            0x0400_0060..=0x0400_03FF => {}
+            0x0500_0000..=0x0500_03FF => self.palette.write_byte(addr - 0x0500_0000, data),
             _ => panic!("TODO: "),
         };
     }
@@ -231,12 +230,9 @@ impl BusAccessor for CpuBus {
                 // info!("wram addr = {:x} {:x}", addr, data);
                 self.wram.write_halfword(addr - 0x0300_0000, data);
             }
-            0x0400_0000..=0x0400_03FE => {
-                // dbg!(
-                //                    "I/O register is not implemented yet.",
-                //                    format!("addr = {:x} data = {:x}", addr, data)
-                //                );
-            }
+            0x0400_0000..=0x0400_005F => self.lcdc.write_halfword(addr - 0x0400_0000, data),
+            0x0400_0060..=0x0400_03FF => {}
+            0x0500_0000..=0x0500_03FF => self.palette.write_halfword(addr - 0x0500_0000, data),
             0x0600_0000..=0x0601_7FFF => {
                 self.vram.write_halfword(addr - 0x0600_0000, data);
             }
@@ -260,13 +256,9 @@ impl BusAccessor for CpuBus {
             0x0300_8000..=0x03FF_FFFF => {
                 // // dbg!(format!("{:x}", addr));
             }
-            // I/O Register
-            0x0400_0000..=0x0400_03FE => {
-                // dbg!(
-                //    "I/O register is not implemented yet.",
-                //    format!("addr = {:x} data = {:x}", addr, data)
-                //);
-            }
+            0x0400_0000..=0x0400_005F => self.lcdc.write_word(addr - 0x0400_0000, data),
+            0x0400_0060..=0x0400_03FF => {}
+            0x0500_0000..=0x0500_03FF => self.palette.write_word(addr - 0x0500_0000, data),
             _ => panic!("TODO: addr = {:x} data = {:x}", addr, data),
         };
     }
@@ -286,7 +278,7 @@ impl BusAccessor for CpuBus {
 }
 
 impl CpuBus {
-    pub fn new(bios: Rom, lcdc: lcd::LCDController, rom: Rom, wram: Ram, eram: Ram, vram: Ram) -> CpuBus {
+    pub(crate) fn new(bios: Rom, lcdc: lcd::LCDController, rom: Rom, wram: Ram, eram: Ram, vram: Ram, palette: Ram, oam: Ram) -> CpuBus {
         CpuBus {
             cycleLUT: CycleLUT::new(),
             lcdc,
@@ -295,10 +287,28 @@ impl CpuBus {
             wram,
             eram,
             vram,
+            palette,
+            oam,
         }
     }
 
-    pub fn get_mut_lcdc(&mut self) -> &mut lcd::LCDController {
+    pub(crate) fn borrow_mut_lcdc(&mut self) -> &mut lcd::LCDController {
         &mut self.lcdc
+    }
+
+    pub(crate) fn borrow_lcdc(&self) -> &lcd::LCDController {
+        &self.lcdc
+    }
+
+    pub(crate) fn borrow_vram(&self) -> &Ram {
+        &self.vram
+    }
+
+    pub(crate) fn borrow_palette(&self) -> &Ram {
+        &self.palette
+    }
+
+    pub(crate) fn borrow_oam(&self) -> &Ram {
+        &self.oam
     }
 }

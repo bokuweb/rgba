@@ -57,8 +57,10 @@ impl GBA {
         let wram = Ram::new(vec![0; 0x8000]);
         let eram = Ram::new(vec![0; 0x4_0000]);
         let vram = Ram::new(vec![0; 0x1_8000]);
+        let palette = Ram::new(vec![0; 0x0400]);
+        let oam = Ram::new(vec![0; 0x0400]);
         let lcdc = lcd::LCDController::new();
-        let bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram);
+        let bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam);
         let mut arm = cpu::ARM::new();
 
         arm.reset();
@@ -75,29 +77,19 @@ impl GBA {
     }
 
     pub fn frame(&mut self) -> Vec<u8> {
-        // dbg!(self.cycles);
         loop {
             let cycles = self.arm.step(&mut self.bus).unwrap();
-
-            let lcdc = self.bus.get_mut_lcdc();
-
+            let lcdc = self.bus.borrow_mut_lcdc();
             let ready = lcdc.run(cycles);
-
             if ready {
                 break;
             }
         }
-
-        let mut buf = vec![];
-        for offset in 0..(240 * 160) {
-            let p = self.bus.read_halfword(0x0600_0000 + offset * 2);
-            buf.push((((p & 0x001F) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
-            buf.push((((p & 0x03E0).wrapping_shr(5) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
-            buf.push((((p & 0xEC00).wrapping_shr(10) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
-            buf.push(255);
-        }
-        // dbg!(buf.len());
-        buf
+        let lcdc = self.bus.borrow_lcdc();
+        let vram = self.bus.borrow_vram();
+        let palette = self.bus.borrow_palette();
+        let oam = self.bus.borrow_oam();
+        lcdc.render(vram, palette, oam)
     }
 }
 
@@ -117,8 +109,10 @@ mod test {
         let wram = Ram::new(vec![0; 0x8000]);
         let eram = Ram::new(vec![0; 0x4_0000]);
         let vram = Ram::new(vec![0; 0x1_8000]);
+        let palette = Ram::new(vec![0; 0x0400]);
+        let oam = Ram::new(vec![0; 0x0400]);
         let lcdc = lcd::LCDController::new();
-        let mut bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram);
+        let mut bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam);
         let mut arm = cpu::ARM::new();
         for _ in 0..step {
             arm.step(&mut bus).expect("should step");
@@ -159,7 +153,7 @@ mod test {
     // step
     fn test_dot_rom() {
         let bin = include_bytes!("../../fixtures/dot_rs/dot.gba");
-        let (cpu, bus) = run_with_step(100, bin);
+        let (_cpu, bus) = run_with_step(100, bin);
         self::assert_eq!(bus.read_halfword(0x0600_96F0), 0x001F);
     }
 }
