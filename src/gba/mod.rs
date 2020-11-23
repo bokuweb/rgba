@@ -153,7 +153,7 @@ mod test {
     // step
     fn test_dot_rom() {
         let bin = include_bytes!("../../fixtures/dot_rs/dot.gba");
-        let (cpu, bus) = run_with_step(100, bin);
+        let (_cpu, bus) = run_with_step(100, bin);
         self::assert_eq!(bus.read_halfword(0x0600_96F0), 0x001F);
     }
 }
