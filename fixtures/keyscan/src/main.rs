@@ -97,7 +97,10 @@ fn main(_argc: isize, _argv: *const *const u8) -> isize {
             0x037F => prints("DOWN", 12, y),
             0x02FF => prints("R", 12, y),
             0x01FF => prints("L", 12, y),
-            _ => {}
+            _ => {
+                // multi input is not supported.
+                continue;
+            }
         }
         y += 1;
     }

@@ -1,6 +1,8 @@
 mod bus;
 
+use crate::io;
 use crate::lcd;
+
 use bus::CpuBus;
 
 use crate::cpu::bus::accessor::BusAccessor;
@@ -60,7 +62,8 @@ impl GBA {
         let palette = Ram::new(vec![0; 0x0400]);
         let oam = Ram::new(vec![0; 0x0400]);
         let lcdc = lcd::LCDController::new();
-        let bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam);
+        let key = io::Key::new();
+        let bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, key);
         let mut arm = cpu::ARM::new();
 
         arm.reset();
@@ -91,6 +94,10 @@ impl GBA {
         let oam = self.bus.borrow_oam();
         lcdc.render(vram, palette, oam)
     }
+
+    pub fn update_key(&mut self, key: io::Key) {
+        self.bus.update_key(key)
+    }
 }
 
 #[cfg(test)]
@@ -112,7 +119,8 @@ mod test {
         let palette = Ram::new(vec![0; 0x0400]);
         let oam = Ram::new(vec![0; 0x0400]);
         let lcdc = lcd::LCDController::new();
-        let mut bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam);
+        let key = io::Key::new();
+        let mut bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, key);
         let mut arm = cpu::ARM::new();
         for _ in 0..step {
             arm.step(&mut bus).expect("should step");

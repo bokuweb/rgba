@@ -130,7 +130,6 @@ impl LCDController {
     }
 
     pub fn render(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
-        dbg!(self.dispcnt.mode());
         match self.dispcnt.mode() {
             BgMode::Mode0 => self.render_with_mode0(vram, palette),
             BgMode::Mode3 => self.render_with_mode3(vram),
