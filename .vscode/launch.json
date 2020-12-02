@@ -19,7 +19,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["fixtures/lifegame/lifegame.gba"],
+            "args": ["fixtures/keyscan/keyscan.gba"],
             "cwd": "${workspaceFolder}"
         },
         {
