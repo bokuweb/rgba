@@ -14,11 +14,6 @@ use crate::types::*;
 
 pub const INITIAL_PIPELINE_WAIT: u8 = 2;
 
-enum Arm {
-    NOP,
-    NOP_RAW,
-}
-
 enum CpuMode {
     System,
     Supervisor,
@@ -164,7 +159,9 @@ impl ARM {
             CpuState::Thumb => {
                 let fetched = self.get_thumb_executable(bus);
                 // debug!("{:x}", fetched);
-                // dbg!(&self.gpr);
+                // if self.gpr[15] == 134218152 && self.gpr[5] == 1022{
+                //     dbg!(&self.gpr);
+                // }
                 let instruction = thumb::decode(fetched);
                 let cycle = cycle + self.execute_thumb(instruction, bus);
                 Ok(cycle)
@@ -258,6 +255,9 @@ impl ARM {
     where
         T: BusAccessor,
     {
+        assert!(self.gpr[15] %2 != 1);
+        let b = self.gpr.clone();
+
         let (cycle, pipeline_status) = {
             // dbg!(instruction);
             match instruction {
@@ -277,12 +277,7 @@ impl ARM {
                 thumb::Instruction::ADD1(dec) => exec_thumb_add1(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ADD2(dec) => exec_thumb_add2(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ADD3(dec) => exec_thumb_add3(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::ADD4(dec) => {
-                    // dbg!(dec.0);
-                    // Format 5
-                    // This instruction can change PC
-                    todo!("ADD4");
-                }
+                thumb::Instruction::ADDHiRegister(dec) => exec_thumb_add_hi_register(bus, dec, &mut self.gpr, &mut self.cpsr),
                 // THUMB.12 6 nad 5
                 thumb::Instruction::ADD6(dec) => exec_thumb_add_relative_address(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ADD7(dec) => exec_thumb_add7(bus, dec, &mut self.gpr, &mut self.cpsr),
@@ -331,6 +326,10 @@ impl ARM {
                 }
             }
         };
+
+        if self.gpr[15] %2 == 1 {
+            dbg!("aaaa!!!", &b, &self.gpr);
+        }
         match pipeline_status {
             PipelineStatus::Continue => {
                 self.increment_pc();

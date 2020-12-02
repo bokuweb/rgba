@@ -28,7 +28,7 @@ pub enum Instruction {
     ADD1(DataProcessing),
     ADD2(DataProcessing),
     ADD3(DataProcessing),
-    ADD4(DataProcessing),
+    ADDHiRegister(DataProcessing),
     // ADD5(DataProcessing),
     ADD6(DataProcessing), // 6 and 5
     ADD7(DataProcessing),
@@ -187,7 +187,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
             let dec = DataProcessing(v);
             // THUMB.5: Hi register operations
             match dec.get_op9_8() {
-                0b00 => Instruction::ADD4(dec),
+                0b00 => Instruction::ADDHiRegister(dec),
                 0b01 => Instruction::CMP3(dec),
                 0b10 => Instruction::MOV3(dec),
                 // 0b11 => Instruction::BX(dec),

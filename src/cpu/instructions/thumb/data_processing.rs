@@ -46,6 +46,14 @@ pub fn exec_thumb_add3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     (s, PipelineStatus::Continue)
 }
 
+pub fn exec_thumb_add_hi_register<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+    let rs = usize::from(dec.get_Rs6_3());
+    let rd = usize::from(if dec.get_msbd() { dec.get_Rd2_0() | 0x8 } else { dec.get_Rd2_0() });
+    gpr[rd] = gpr[rd] + gpr[rs];
+    let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    (s, PipelineStatus::Continue)
+}
+
 // THUMB.12: get relative address
 pub fn exec_thumb_add_relative_address<T: BusAccessor>(
     bus: &T,
@@ -367,12 +375,14 @@ pub fn exec_thumb_mov1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
 // Format 5 Hi register operations
 pub fn exec_thumb_mov3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let rs = dec.get_Rs6_3() as usize;
-    let rd = dec.get_Rd_7_2_0() as usize;
+    let rd = usize::from(if dec.get_msbd() { dec.get_Rd2_0() | 0x8 } else { dec.get_Rd2_0() });
+    // let rd = dec.get_Rd_7_2_0() as usize;
 
     gpr[rd] = gpr[rs];
     // dbg!("MOV3", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
 
     if rd == PC {
+        gpr[PC] = gpr[PC] & 0xFFFF_FFFE;
         (0, PipelineStatus::Flush)
     } else {
         let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));

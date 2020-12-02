@@ -47,26 +47,30 @@ fn main() {
                 Event::KeyDown { keycode: Some(code), .. } => {
                     dbg!("keydown", &code);
                     match code {
-                        Keycode::X => key.set_A(io::KeyStatus::ON),
-                        Keycode::Z => key.set_B(io::KeyStatus::ON),
-                        Keycode::A => key.set_SELECT(io::KeyStatus::ON),
-                        Keycode::S => key.set_START(io::KeyStatus::ON),
+                        Keycode::X => key.set_B(io::KeyStatus::ON),
+                        Keycode::Z => key.set_A(io::KeyStatus::ON),
+                        Keycode::Space => key.set_SELECT(io::KeyStatus::ON),
+                        Keycode::Return => key.set_START(io::KeyStatus::ON),
                         Keycode::Up => key.set_UP(io::KeyStatus::ON),
                         Keycode::Down => key.set_DOWN(io::KeyStatus::ON),
-                        Keycode::Left => key.set_L(io::KeyStatus::ON),
-                        Keycode::Right => key.set_R(io::KeyStatus::ON),
+                        Keycode::Left => key.set_LEFT(io::KeyStatus::ON),
+                        Keycode::Right => key.set_RIGHT(io::KeyStatus::ON),
+                        Keycode::A => key.set_L(io::KeyStatus::ON),
+                        Keycode::S => key.set_R(io::KeyStatus::ON),
                         _ => {}
                     }
                 }
                 Event::KeyUp { keycode: Some(code), .. } => match code {
-                    Keycode::X => key.set_A(io::KeyStatus::OFF),
-                    Keycode::Z => key.set_B(io::KeyStatus::OFF),
-                    Keycode::A => key.set_SELECT(io::KeyStatus::OFF),
-                    Keycode::S => key.set_START(io::KeyStatus::OFF),
+                    Keycode::X => key.set_B(io::KeyStatus::OFF),
+                    Keycode::Z => key.set_A(io::KeyStatus::OFF),
+                    Keycode::Space => key.set_SELECT(io::KeyStatus::OFF),
+                    Keycode::Return => key.set_START(io::KeyStatus::OFF),
                     Keycode::Up => key.set_UP(io::KeyStatus::OFF),
                     Keycode::Down => key.set_DOWN(io::KeyStatus::OFF),
-                    Keycode::Left => key.set_L(io::KeyStatus::OFF),
-                    Keycode::Right => key.set_R(io::KeyStatus::OFF),
+                    Keycode::Left => key.set_LEFT(io::KeyStatus::OFF),
+                    Keycode::Right => key.set_RIGHT(io::KeyStatus::OFF),
+                    Keycode::A => key.set_L(io::KeyStatus::OFF),
+                    Keycode::S => key.set_R(io::KeyStatus::OFF),
                     _ => {}
                 },
                 _ => {}
