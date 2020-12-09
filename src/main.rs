@@ -6,6 +6,7 @@ extern crate bitfield;
 
 mod cpu;
 mod gba;
+mod io;
 mod lcd;
 mod memory;
 mod types;
@@ -29,14 +30,11 @@ fn main() {
     let sdl_context = sdl2::init().unwrap();
     let mut event_pump = sdl_context.event_pump().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
-    let window = video_subsystem
-        .window("arm", WIDTH, HEIGHT)
-        .position_centered()
-        .build()
-        .unwrap();
+    let window = video_subsystem.window("arm", WIDTH, HEIGHT).position_centered().build().unwrap();
     let mut canvas = window.into_canvas().build().unwrap();
     let mut prev_time = SystemTime::now();
     let mut gba = gba::GBA::new();
+    let mut key = io::Key::new();
 
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -46,9 +44,40 @@ fn main() {
                     keycode: Some(Keycode::Escape),
                     ..
                 } => break 'running,
+                Event::KeyDown { keycode: Some(code), .. } => {
+                    dbg!("keydown", &code);
+                    match code {
+                        Keycode::X => key.set_B(io::KeyStatus::ON),
+                        Keycode::Z => key.set_A(io::KeyStatus::ON),
+                        Keycode::Space => key.set_SELECT(io::KeyStatus::ON),
+                        Keycode::Return => key.set_START(io::KeyStatus::ON),
+                        Keycode::Up => key.set_UP(io::KeyStatus::ON),
+                        Keycode::Down => key.set_DOWN(io::KeyStatus::ON),
+                        Keycode::Left => key.set_LEFT(io::KeyStatus::ON),
+                        Keycode::Right => key.set_RIGHT(io::KeyStatus::ON),
+                        Keycode::A => key.set_L(io::KeyStatus::ON),
+                        Keycode::S => key.set_R(io::KeyStatus::ON),
+                        _ => {}
+                    }
+                }
+                Event::KeyUp { keycode: Some(code), .. } => match code {
+                    Keycode::X => key.set_B(io::KeyStatus::OFF),
+                    Keycode::Z => key.set_A(io::KeyStatus::OFF),
+                    Keycode::Space => key.set_SELECT(io::KeyStatus::OFF),
+                    Keycode::Return => key.set_START(io::KeyStatus::OFF),
+                    Keycode::Up => key.set_UP(io::KeyStatus::OFF),
+                    Keycode::Down => key.set_DOWN(io::KeyStatus::OFF),
+                    Keycode::Left => key.set_LEFT(io::KeyStatus::OFF),
+                    Keycode::Right => key.set_RIGHT(io::KeyStatus::OFF),
+                    Keycode::A => key.set_L(io::KeyStatus::OFF),
+                    Keycode::S => key.set_R(io::KeyStatus::OFF),
+                    _ => {}
+                },
                 _ => {}
             }
         }
+
+        gba.update_key(key);
 
         let buf = gba.frame();
 

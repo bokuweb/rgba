@@ -1,23 +1,11 @@
 use crate::cpu::bus;
-use crate::cpu::constants;
-use crate::cpu::cpu;
-use crate::cpu::decoder;
-use crate::cpu::instructions;
-use crate::cpu::registers;
 use crate::cpu::types;
+use crate::io;
 use crate::lcd;
 use crate::types::*;
 
 pub(crate) use bus::accessor::*;
 
-// mod error;
-// mod instructions;
-// mod memory;
-// mod registers;
-// mod types;
-
-// use constants::*;
-// use error::*;
 use crate::memory::ram::Ram;
 use crate::memory::readable::*;
 use crate::memory::rom::Rom;
@@ -160,11 +148,12 @@ pub struct CpuBus {
     vram: Ram,
     palette: Ram,
     oam: Ram,
+    key: io::Key,
 }
 
 impl BusAccessor for CpuBus {
     fn read_byte(&self, addr: u32) -> Byte {
-        debug!("read byte addr = {:x}", addr);
+        dbg!("read byte addr = {:x}", addr);
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_byte(addr),
             0x0300_0000..=0x0300_7FFF => self.wram.read_byte(addr - 0x0300_0000),
@@ -182,6 +171,7 @@ impl BusAccessor for CpuBus {
             0x0000_0000..=0x0000_3FFF => self.bios.read_halfword(addr),
             0x0300_0000..=0x0300_7FFF => self.wram.read_halfword(addr - 0x0300_0000),
             0x0400_0000..=0x0400_005F => self.lcdc.read_halfword(addr - 0x0400_0000),
+            0x0400_0130 => self.key.read(),
             0x0400_0060..=0x0400_03FF => 0,
             0x0500_0000..=0x0500_03FF => self.palette.read_halfword(addr - 0x0500_0000),
             0x0600_0000..=0x0601_7FFF => self.vram.read_halfword(addr - 0x0600_0000),
@@ -278,7 +268,17 @@ impl BusAccessor for CpuBus {
 }
 
 impl CpuBus {
-    pub(crate) fn new(bios: Rom, lcdc: lcd::LCDController, rom: Rom, wram: Ram, eram: Ram, vram: Ram, palette: Ram, oam: Ram) -> CpuBus {
+    pub(crate) fn new(
+        bios: Rom,
+        lcdc: lcd::LCDController,
+        rom: Rom,
+        wram: Ram,
+        eram: Ram,
+        vram: Ram,
+        palette: Ram,
+        oam: Ram,
+        key: io::Key,
+    ) -> CpuBus {
         CpuBus {
             cycleLUT: CycleLUT::new(),
             lcdc,
@@ -289,7 +289,12 @@ impl CpuBus {
             vram,
             palette,
             oam,
+            key,
         }
+    }
+
+    pub(crate) fn update_key(&mut self, key: io::Key) {
+        self.key = key;
     }
 
     pub(crate) fn borrow_mut_lcdc(&mut self) -> &mut lcd::LCDController {

@@ -68,6 +68,8 @@ where
     let rm = dec.get_Rm() as usize;
 
     let addr = gpr[rn] + gpr[rm];
+
+    dbg!(addr, &gpr);
     let data = bus.read_byte(addr);
 
     // 1N + 1I cycle
@@ -116,7 +118,6 @@ where
 
     // dbg!(addr, "ldr4");
     let data = bus.read_word(addr);
-    // dbg!(data, rd, "ldr4");
 
     // 1N + 1I cycle
     let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
@@ -185,10 +186,6 @@ where
     let data = gpr[rd as usize];
     let addr = gpr[SP] + offset.wrapping_shl(2);
 
-    if addr == 0x0400_0006 {
-        dbg!("read 0x0400_0006", &gpr);
-    }
-
     bus.write_word(addr, data);
     let access_type = AccessType::NonSeq(AccessWidth::Word);
     let store_cycle = bus.compute_cycle(addr, access_type);
@@ -231,6 +228,7 @@ where
 
     // 1N + 1I cycle
     let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
+    dbg!(addr, &gpr);
 
     gpr[rd] = bus.read_byte(addr) as u32;
 
