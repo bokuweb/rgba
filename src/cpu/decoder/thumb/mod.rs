@@ -23,6 +23,7 @@ pub enum Instruction {
     STR3(SingleDataTransfer),
     STRH(SingleDataTransfer),
     STRB_IMM_OFFET(SingleDataTransfer),
+    STRRegOffset(SingleDataTransfer),
     STRBRegOffset(SingleDataTransfer),
     STRHRegOffset(SingleDataTransfer),
     ADD1(DataProcessing),
@@ -87,7 +88,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 }
             } else {
                 match dec.get_op11_10() {
-                    0b00 => todo!("str"),
+                    0b00 => Instruction::STRRegOffset(dec),
                     0b01 => Instruction::STRBRegOffset(dec),
                     0b10 => Instruction::LDRRegOffset(dec),
                     0b11 => Instruction::LDRBRegOffset(dec),
