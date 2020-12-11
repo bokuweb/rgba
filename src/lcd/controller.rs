@@ -133,7 +133,7 @@ impl LCDController {
         match self.dispcnt.mode() {
             BgMode::Mode0 => self.render_with_mode0(vram, palette),
             BgMode::Mode3 => self.render_with_mode3(vram),
-            BgMode::Mode4 => self.render_with_mode0(vram, palette),
+            BgMode::Mode4 => self.render_with_mode4(vram, palette),
             _ => todo!(),
         }
     }
@@ -142,6 +142,8 @@ impl LCDController {
         let mut buf = vec![0; 240 * 160 * 4];
         let tile_offset = self.bg0cnt.bg_tile_offset();
         let map_offset = self.bg0cnt.bg_map_offset();
+
+        dbg!(tile_offset, map_offset);
 
         // TODO: We need to consider about scroll?
         for tile_y in 0..DISPLAY_TILE_HEIGHT {
@@ -176,6 +178,12 @@ impl LCDController {
             buf.push((((p & 0xEC00).wrapping_shr(10) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
             buf.push(255);
         }
+        buf
+    }
+
+    fn render_with_mode4(&self, vram: &Ram, palette: &Ram) -> Vec<u8> {
+        let mut buf = vec![0; 240 * 160 * 4];
+ 
         buf
     }
 }

@@ -153,7 +153,6 @@ pub struct CpuBus {
 
 impl BusAccessor for CpuBus {
     fn read_byte(&self, addr: u32) -> Byte {
-        dbg!("read byte addr = {:x}", addr);
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_byte(addr),
             0x0300_0000..=0x0300_7FFF => self.wram.read_byte(addr - 0x0300_0000),
@@ -249,6 +248,9 @@ impl BusAccessor for CpuBus {
             0x0400_0000..=0x0400_005F => self.lcdc.write_word(addr - 0x0400_0000, data),
             0x0400_0060..=0x0400_03FF => {}
             0x0500_0000..=0x0500_03FF => self.palette.write_word(addr - 0x0500_0000, data),
+            0x0600_0000..=0x0601_7FFF => {
+                self.vram.write_word(addr - 0x0600_0000, data);
+            }
             _ => panic!("TODO: addr = {:x} data = {:x}", addr, data),
         };
     }
