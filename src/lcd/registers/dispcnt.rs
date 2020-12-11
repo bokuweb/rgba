@@ -25,8 +25,13 @@ bitfield! {
     pub forced_vlank, _: 7;
     pub obj_char_mapping, _: 6;
     pub hblank_interbal_free, _: 5;
-    pub display_frame_select, _: 4;
+    pub display_frame_select, _: 4; // frame 0 or 1 Modes 4, 5 only
     pub bg_mode, _: 2, 0;
+}
+
+pub enum Frame {
+    Frame0,
+    Frame1,
 }
 
 impl DISPCNT {
@@ -52,6 +57,14 @@ impl DISPCNT {
 
     pub fn read(&self) -> HalfWord {
         self.0
+    }
+
+    pub fn frame(&self) -> Frame {
+        if self.display_frame_select() {
+            Frame::Frame1
+        } else {
+            Frame::Frame0
+        }
     }
 }
 
