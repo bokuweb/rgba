@@ -182,8 +182,17 @@ impl LCDController {
     }
 
     fn render_with_mode4(&self, vram: &Ram, palette: &Ram) -> Vec<u8> {
-        let mut buf = vec![0; 240 * 160 * 4];
- 
+        let mut buf = vec![];
+        let is_frame1 = matches!(self.dispcnt.frame(), Frame::Frame1);
+        let offset = if is_frame1 { 0xA000 } else { 0x0000 };
+        for addr in 0..(240 * 160) {
+            let palette_index = vram.read_byte(addr + offset);
+            let color = BGR::new(palette.read_halfword(palette_index as Word * 2));
+            buf.push(color.red());
+            buf.push(color.green());
+            buf.push(color.blue());
+            buf.push(0xFF);
+        }
         buf
     }
 }
