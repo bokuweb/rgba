@@ -68,7 +68,6 @@ where
 
     let addr = gpr[rn] + gpr[rm];
 
-    dbg!(addr, &gpr);
     let data = bus.read_byte(addr);
 
     // 1N + 1I cycle
@@ -137,7 +136,8 @@ where
     let rn = dec.get_Rn() as usize;
     let offset = dec.get_off5() as u32;
 
-    let addr = gpr[rn] + offset;
+    let addr = gpr[rn] + offset.wrapping_shl(1);
+
     let data = bus.read_halfword(addr);
 
     // 1N + 1I cycle
@@ -227,7 +227,6 @@ where
 
     // 1N + 1I cycle
     let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
-    dbg!(addr, &gpr);
 
     gpr[rd] = bus.read_byte(addr) as u32;
 
@@ -271,9 +270,6 @@ where
     let store_cycle = bus.compute_cycle(addr, access_type);
     let fetch_cycle = bus.compute_cycle(gpr[PC], access_type);
     // dbg!("strB");
-    if addr == 0x0300_0200 {
-        let _a = "".to_owned();
-    }
     // Store consume 2N cycle
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
 }
