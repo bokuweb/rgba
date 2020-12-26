@@ -7,7 +7,7 @@ use crate::cpu::instructions::{helpers::*, ExecuteResult};
 use crate::cpu::registers::psr::PSR;
 use crate::types::*;
 
-pub fn exec_arm_mul<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_mul<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &mut PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -20,7 +20,7 @@ where
     Ok((cycle, PipelineStatus::Continue))
 }
 
-pub fn exec_arm_mla<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_mla<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &mut PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -34,7 +34,7 @@ where
     Ok((cycle, PipelineStatus::Continue))
 }
 
-pub fn exec_arm_umull<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_umull<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &mut PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -50,7 +50,7 @@ where
     Ok((cycle, PipelineStatus::Continue))
 }
 
-pub fn exec_arm_umlal<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_umlal<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &mut PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -68,7 +68,7 @@ where
     Ok((cycle, PipelineStatus::Continue))
 }
 
-pub fn exec_arm_smull<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_smull<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &mut PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -84,7 +84,7 @@ where
     Ok((cycle, PipelineStatus::Continue))
 }
 
-pub fn exec_arm_smlal<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_smlal<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: &mut PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
