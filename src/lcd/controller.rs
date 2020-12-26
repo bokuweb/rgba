@@ -2,23 +2,8 @@ use crate::memory::ram::Ram;
 use crate::memory::readable::*;
 use crate::types::*;
 
+use super::constants::*;
 use super::*;
-
-// Visible     240 dots,  57.221 us,    960 cycles - 78% of h-time
-// H-Blanking   68 dots,  16.212 us,    272 cycles - 22% of h-time
-// Total       308 dots,  73.433 us,   1232 cycles - ca. 13.620 kHz
-const CYCLES_PER_LINE: usize = 1232;
-// Visible (*) 160 lines, 11.749 ms, 197120 cycles - 70% of v-time
-// V-Blanking   68 lines,  4.994 ms,  83776 cycles - 30% of v-time
-// Total       228 lines, 16.743 ms, 280896 cycles - ca. 59.737 Hz
-const CYCLES_PER_FRAME: usize = 280896;
-const LINES_PER_FRAME: usize = 228;
-
-const DISPLAY_TILE_WIDTH: Word = 30;
-const DISPLAY_TILE_HEIGHT: Word = 20;
-
-const VIRTUAL_DISPLAY_TILE_WIDTH: Word = 32;
-const VIRTUAL_DISPLAY_TILE_HEIGHT: Word = 32;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 struct BGR(HalfWord);
@@ -46,6 +31,7 @@ pub struct LCDController {
     lines: usize,
     // registers
     dispcnt: DISPCNT,
+    dispstat: DISPSTAT,
     bg0cnt: BGCNT,
     bg1cnt: BGCNT,
     bg2cnt: BGCNT,
@@ -58,6 +44,7 @@ impl LCDController {
             cycles: 0,
             lines: 0,
             dispcnt: DISPCNT::new(),
+            dispstat: DISPSTAT::new(),
             bg0cnt: BGCNT::new(),
             bg1cnt: BGCNT::new(),
             bg2cnt: BGCNT::new(),
@@ -85,6 +72,7 @@ impl LCDController {
     pub fn read_halfword(&self, addr: Word) -> HalfWord {
         match addr {
             0x0000 => self.dispcnt.read(),
+            0x0004 => self.dispstat.read(self.cycles, self.lines),
             0x0006 => self.lines as HalfWord,
             0x0008 => self.bg0cnt.read(),
             0x000A => self.bg1cnt.read(),
@@ -97,6 +85,7 @@ impl LCDController {
     pub fn read_word(&self, addr: Word) -> Word {
         match addr {
             0x0000 => self.dispcnt.read() as Word,
+            0x0004 => self.dispstat.read(self.cycles, self.lines) as Word,
             0x0006 => self.lines as Word,
             0x0008 => self.bg0cnt.read() as Word,
             0x000A => self.bg1cnt.read() as Word,
@@ -142,8 +131,6 @@ impl LCDController {
         let mut buf = vec![0; 240 * 160 * 4];
         let tile_offset = self.bg0cnt.bg_tile_offset();
         let map_offset = self.bg0cnt.bg_map_offset();
-
-        dbg!(tile_offset, map_offset);
 
         // TODO: We need to consider about scroll?
         for tile_y in 0..DISPLAY_TILE_HEIGHT {

@@ -82,7 +82,6 @@ pub enum Instruction {
     // NOP,
 }
 
-
 // #[derive(Debug, PartialEq)]
 // pub enum Condition {
 //     EQ,
@@ -214,8 +213,8 @@ pub fn decode(raw: Word) -> Instruction {
 
     let instruction_type = match raw {
         v if ((v & 0x0ffffff0) == 0x012fff10) => InstructionType::BranchAndExchange,
-        v if (v & 0x0180_0000) == 0x0100_0000 && (v & 0x0010_0000) == 0x0 => InstructionType::PsrTransfer,
         v if (v & 0x0E00_0000) == 0x0A00_0000 => InstructionType::Branch,
+        v if (v & 0x0180_0000) == 0x0100_0000 && (v & 0x0010_0000) == 0x0 => InstructionType::PsrTransfer,
         v if (v & 0x0FC0_00F0) == 0x0000_0090 => InstructionType::Multiple,
         v if (v & 0x0F80_00F0) == 0x0080_0090 => InstructionType::Multiple,
         v if (v & 0x0E00_0010) == 0x0600_0010 => InstructionType::Undefined,
