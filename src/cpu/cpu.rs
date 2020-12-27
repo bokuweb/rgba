@@ -188,8 +188,7 @@ impl ARM {
     where
         T: BusAccessor,
     {
-        debug!("execute {:?}", &instruction);
-        // dbg!(&instruction);
+        // dbg!(&instruction, &self.gpr);
         let (cycle, pipeline_status) = {
             match instruction {
                 arm::Instruction::AND(dec) => exec_arm_and(bus, dec, &mut self.gpr, &mut self.cpsr)?,

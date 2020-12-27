@@ -11,6 +11,10 @@ pub fn exec_arm_mul<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: 
 where
     T: BusAccessor,
 {
+    let s = dec.get_S();
+    if s {
+        unimplemented!()
+    }
     let rd = dec.get_Rd() as usize;
     let rm = dec.get_Rm() as usize;
     let rs = dec.get_Rs() as usize;
@@ -24,6 +28,10 @@ pub fn exec_arm_mla<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr: 
 where
     T: BusAccessor,
 {
+    let s = dec.get_S();
+    if s {
+        unimplemented!()
+    }
     let rd = dec.get_Rd() as usize;
     let rm = dec.get_Rm() as usize;
     let rs = dec.get_Rs() as usize;
@@ -38,6 +46,10 @@ pub fn exec_arm_umull<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr
 where
     T: BusAccessor,
 {
+    let s = dec.get_S();
+    if s {
+        unimplemented!()
+    }
     let rd = dec.get_Rd() as usize;
     let rm = dec.get_Rm() as usize;
     let rs = dec.get_Rs() as usize;
@@ -54,6 +66,10 @@ pub fn exec_arm_umlal<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr
 where
     T: BusAccessor,
 {
+    let s = dec.get_S();
+    if s {
+        unimplemented!()
+    }
     let rd = dec.get_Rd() as usize;
     let rm = dec.get_Rm() as usize;
     let rs = dec.get_Rs() as usize;
@@ -72,6 +88,10 @@ pub fn exec_arm_smull<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr
 where
     T: BusAccessor,
 {
+    let s = dec.get_S();
+    if s {
+        unimplemented!()
+    }
     let rd = dec.get_Rd() as usize;
     let rm = dec.get_Rm() as usize;
     let rs = dec.get_Rs() as usize;
@@ -88,6 +108,10 @@ pub fn exec_arm_smlal<T>(bus: &mut T, dec: Multiple, gpr: &mut [Word; 16], _cspr
 where
     T: BusAccessor,
 {
+    let s = dec.get_S();
+    if s {
+        unimplemented!()
+    }
     let rd = dec.get_Rd() as usize;
     let rm = dec.get_Rm() as usize;
     let rs = dec.get_Rs() as usize;

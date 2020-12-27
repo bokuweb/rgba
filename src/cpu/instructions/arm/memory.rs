@@ -92,11 +92,12 @@ pub fn exec_arm_ldr<T>(bus: &mut T, dec: Memory, gpr: &mut [Word; 16]) -> Result
 where
     T: BusAccessor,
 {
+    dbg!(&gpr);
     let rd = dec.get_Rd() as usize;
     let res = exec_memory_load(bus, gpr, dec, |gpr, base| {
         gpr[rd] = bus.read_word(base);
+        dbg!(base);
     });
-    // dbg!("LDR", gpr);
     res
 }
 
