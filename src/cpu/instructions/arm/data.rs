@@ -168,12 +168,21 @@ where
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
     let c = cpsr.get_C();
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+    let result = exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+        let d = gpr[rn] as u64 + value as u64 + if c { 1 } else { 0 };
         if s {
-            unimplemented!()
+            if rd == PC {
+                unimplemented!("data processing Rd = PC with S flag.");
+            } else {
+                cpsr.set_N_from(d as u32);
+                cpsr.set_Z_from(d as u32);
+                cpsr.set_C_from(d);
+                cpsr.set_V_from(gpr[rd], d as u32);
+            }
         }
-        gpr[rd] = gpr[rn].wrapping_add(value).wrapping_add(if c { 1 } else { 0 });
-    })
+        gpr[rd] = d as u32;
+    });
+    result
 }
 
 pub fn exec_arm_sbc<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
