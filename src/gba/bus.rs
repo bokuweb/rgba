@@ -156,6 +156,7 @@ impl BusAccessor for CpuBus {
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_byte(addr),
             0x0300_0000..=0x0300_7FFF => self.wram.read_byte(addr - 0x0300_0000),
+            0x0300_8000..=0x03FF_FFFF => 0,
             0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
             0x0400_0060..=0x0400_03FF => 0,
             0x0500_0000..=0x0500_03FF => self.palette.read_byte(addr - 0x0500_0000),
@@ -172,6 +173,7 @@ impl BusAccessor for CpuBus {
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_halfword(addr),
             0x0300_0000..=0x0300_7FFF => self.wram.read_halfword(addr - 0x0300_0000),
+            0x0300_8000..=0x03FF_FFFF => 0,
             0x0400_0000..=0x0400_005F => self.lcdc.read_halfword(addr - 0x0400_0000),
             0x0400_0130 => self.key.read(),
             0x0400_0060..=0x0400_03FF => 0,
@@ -187,6 +189,7 @@ impl BusAccessor for CpuBus {
             0x0000_0000..=0x0000_3FFF => self.bios.read_word(addr),
             0x0200_0000..=0x0203_FFFF => self.eram.read_word(addr - 0x0200_0000),
             0x0300_0000..=0x0300_7FFF => self.wram.read_word(addr - 0x0300_0000),
+            0x0300_8000..=0x03FF_FFFF => 0,
             0x0400_0000..=0x0400_005F => self.lcdc.read_word(addr - 0x0400_0000),
             0x0400_0060..=0x0400_03FF => 0,
             0x0500_0000..=0x0500_03FF => self.palette.read_word(addr - 0x0500_0000),
