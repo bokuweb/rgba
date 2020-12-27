@@ -69,11 +69,18 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+    exec_data_processing(bus, gpr, dec, &mut |gpr, value, c| {
+        let d = gpr[rn] & value;
         if s {
-            unimplemented!()
+            if rd == PC {
+                unimplemented!("data processing Rd = PC with S flag.");
+            } else {
+                cpsr.set_N_from(d as u32);
+                cpsr.set_Z_from(d as u32);
+                cpsr.set_C(c);
+            }
         }
-        gpr[rd] = gpr[rn] & value;
+        gpr[rd] = d;
     })
 }
 
@@ -100,10 +107,17 @@ where
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
     exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+        let d = gpr[rn].wrapping_sub(value);
         if s {
-            unimplemented!()
+            if rd == PC {
+                unimplemented!("data processing Rd = PC with S flag.");
+            } else {
+                cpsr.set_N_from(d as u32);
+                cpsr.set_Z_from(d as u32);
+                cpsr.set_C(gpr[rn] >= value);
+            }
         }
-        gpr[rd] = gpr[rn].wrapping_sub(value);
+        gpr[rd] = d;
     })
 }
 

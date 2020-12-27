@@ -160,7 +160,10 @@ impl BusAccessor for CpuBus {
             0x0400_0060..=0x0400_03FF => 0,
             0x0500_0000..=0x0500_03FF => self.palette.read_byte(addr - 0x0500_0000),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_byte(addr - 0x0800_0000),
-            _ => panic!("TODO: "),
+            _ => {
+                let a = format!("read byte addr = {:x}", addr);
+                panic!("TODO: {:?}", a);
+            }
         }
     }
 
