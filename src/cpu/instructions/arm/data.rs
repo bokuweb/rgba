@@ -53,6 +53,7 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     // dbg!("arm mov");
+
     exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
         if s {
             unimplemented!()
@@ -81,6 +82,9 @@ where
             }
         }
         gpr[rd] = d;
+        if s {
+        //     dbg!("ANDS", &gpr, cpsr.get_C(), cpsr.get_Z(), cpsr.get_N());
+        }
     })
 }
 
@@ -91,11 +95,18 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+    exec_data_processing(bus, gpr, dec, &mut |gpr, value, carry| {
+        let d = gpr[rn] ^ value;
         if s {
-            unimplemented!()
+            if rd == PC {
+                unimplemented!("data processing Rd = PC with S flag.");
+            } else {
+                cpsr.set_N_from(d);
+                cpsr.set_Z_from(d);
+                cpsr.set_C(carry);
+            }
         }
-        gpr[rd] = gpr[rn] ^ value;
+        gpr[rd] = d;
     })
 }
 
@@ -115,6 +126,8 @@ where
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
                 cpsr.set_C(gpr[rn] >= value);
+                let (_, v) = (d as i32).overflowing_sub(value as i32);
+                cpsr.set_V(v);
             }
         }
         gpr[rd] = d;
@@ -226,9 +239,7 @@ where
         let tst = gpr[rn] & value;
         cpsr.set_N(tst >> 31 != 0);
         cpsr.set_Z(tst == 0);
-        if carry {
-            cpsr.set_C(true);
-        }
+        cpsr.set_C(carry);
     })
 }
 
@@ -241,9 +252,7 @@ where
         let teq = gpr[rn] ^ value;
         cpsr.set_N(teq >> 31 != 0);
         cpsr.set_Z(teq == 0);
-        if carry {
-            cpsr.set_C(true);
-        }
+        cpsr.set_C(carry);
     })
 }
 
@@ -254,10 +263,10 @@ where
     let rn = dec.get_Rn() as usize;
     exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
         let rn = gpr[rn];
-        let cmp = rn.wrapping_sub(value);
+        let (cmp, v) = rn.overflowing_sub(value);
         cpsr.set_N(cmp >> 31 != 0);
         cpsr.set_Z(cmp == 0);
-        let (_, v) = (rn as i32).overflowing_sub(value as i32);
+        // let (_, v) = (rn as i32).overflowing_sub(value as i32);
         cpsr.set_V(v);
         // NOTE: Should we consider to shifted carry?
         cpsr.set_C(rn >= value);
@@ -287,11 +296,18 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+    exec_data_processing(bus, gpr, dec, &mut |gpr, value, carry| {
+        let d = gpr[rn] | value;
         if s {
-            unimplemented!()
+            if rd == PC {
+                unimplemented!("data processing Rd = PC with S flag.");
+            } else {
+                cpsr.set_N_from(d);
+                cpsr.set_Z_from(d);
+                cpsr.set_C(carry);
+            }
         }
-        gpr[rd] = gpr[rn] | value;
+        gpr[rd] = d;
     })
 }
 
@@ -301,9 +317,15 @@ where
 {
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+    exec_data_processing(bus, gpr, dec, &mut |gpr, value, carry| {
         if s {
-            unimplemented!()
+            if rd == PC {
+                unimplemented!("data processing Rd = PC with S flag.");
+            } else {
+                cpsr.set_N_from(value);
+                cpsr.set_Z_from(value);
+                cpsr.set_C(carry);
+            }
         }
         gpr[rd] = value;
     })
@@ -316,11 +338,18 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+    exec_data_processing(bus, gpr, dec, &mut |gpr, value, carry| {
+        let d = gpr[rn] & !value;
         if s {
-            unimplemented!()
+            if rd == PC {
+                unimplemented!("data processing Rd = PC with S flag.");
+            } else {
+                cpsr.set_N_from(d);
+                cpsr.set_Z_from(d);
+                cpsr.set_C(carry);
+            }
         }
-        gpr[rd] = gpr[rn] & !value;
+        gpr[rd] = d;
     })
 }
 

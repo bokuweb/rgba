@@ -188,7 +188,11 @@ impl ARM {
     where
         T: BusAccessor,
     {
-        // dbg!(&instruction, &self.gpr);
+        dbg!(&instruction, &self.gpr);
+        if (self.gpr[15] == 134219092 && self.gpr[0] == 134233028 && self.gpr[14] == 134220136) {
+            dbg!(&self.gpr);
+            dbg!("0");
+        }
         let (cycle, pipeline_status) = {
             match instruction {
                 arm::Instruction::AND(dec) => exec_arm_and(bus, dec, &mut self.gpr, &mut self.cpsr)?,

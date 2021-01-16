@@ -200,6 +200,11 @@ impl BusAccessor for CpuBus {
 
     fn write_byte(&mut self, addr: u32, data: Byte) {
         debug!("write byte addr = 0x{:x} data = 0x{:x}", addr, data);
+        if addr == 0x0300_0008 {
+            dbg!(data);
+            dbg!("h");
+            // panic!();
+        }
         match addr {
             // 0x0000_0000...0x0007_FFFF => self.rom.borrow().read_word(addr),
             0x0300_0000..=0x0300_7FFF => {
@@ -217,6 +222,10 @@ impl BusAccessor for CpuBus {
 
     fn write_halfword(&mut self, addr: u32, data: HalfWord) {
         debug!("write half word addr = 0x{:x} data = 0x{:x}", addr, data);
+        if addr == 0x0300_0008 {
+            dbg!(data);
+            dbg!("h");
+        }
         match addr {
             // I/O Register
             0x0200_0000..=0x0203_FFFF => self.eram.write_halfword(addr - 0x0200_0000, data),
@@ -238,7 +247,11 @@ impl BusAccessor for CpuBus {
 
     fn write_word(&mut self, addr: u32, data: Word) {
         // dbg!(format!("write word addr 0x{:x} data = 0x{:x}", addr, data));
-
+        if addr == 0x0300_0008 {
+            dbg!(data);
+            dbg!("h");
+            // panic!();
+        }
         match addr {
             0x0000_0000..=0x0007_FFFF => panic!("illegal write access."),
             0x0200_0000..=0x0203_FFFF => self.eram.write_word(addr - 0x0200_0000, data),
