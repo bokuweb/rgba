@@ -22,19 +22,28 @@ where
         shift(sh, gpr[rm], shamt5)
     };
     let offset_base = if dec.get_U() {
+        dbg!("u");
         (base + offset) as Word
     } else {
+        dbg!("minus");
         (base - offset) as Word
     };
     if dec.get_P() {
         base = offset_base;
     }
 
+    dbg!("00000000");
+
     store(bus, gpr, base);
+    dbg!("00000000");
     let access_type = AccessType::NonSeq(AccessWidth::Word);
     let store_cycle = bus.compute_cycle(base, access_type);
 
+    dbg!("ppp!!!8787878");
+    dbg!(dec.get_P());
+
     if !dec.get_P() {
+        dbg!("ppp!!!", offset_base);
         gpr[dec.get_Rn() as usize] = offset_base;
     } else if dec.get_W() {
         gpr[dec.get_Rn() as usize] = base;
@@ -92,11 +101,14 @@ pub fn exec_arm_ldr<T>(bus: &mut T, dec: Memory, gpr: &mut [Word; 16]) -> Result
 where
     T: BusAccessor,
 {
-    dbg!(&gpr);
+    // dbg!(&gpr);
     let rd = dec.get_Rd() as usize;
     let res = exec_memory_load(bus, gpr, dec, |gpr, base| {
+        if base == 0x0300_0008 {
+            dbg!(base, bus.read_word(base), &gpr);
+        }
         gpr[rd] = bus.read_word(base);
-        dbg!(base);
+        //  dbg!(base);
     });
     res
 }
@@ -117,9 +129,18 @@ where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
-    exec_memory_store(bus, gpr, dec, |bus, gpr, base| {
+    let mut baseb = 0;
+    let res = exec_memory_store(bus, gpr, dec, |bus, gpr, base| {
+        dbg!("before str", base, gpr[rd], &gpr);
         bus.write_word(base, gpr[rd]);
-    })
+        baseb = base;
+        dbg!("after str", baseb, gpr[rd], &gpr);
+        if baseb == 0x0300_0008 && gpr[rd] == 0 {
+            panic!();
+        }
+    });
+
+    res
 }
 
 pub fn exec_arm_strb<T>(bus: &mut T, dec: Memory, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
@@ -129,5 +150,9 @@ where
     let rd = dec.get_Rd() as usize;
     exec_memory_store(bus, gpr, dec, |bus, gpr, base| {
         bus.write_byte(base, gpr[rd] as Byte);
+        if base == 0x0300_0008 {
+            dbg!(&gpr);
+            panic!()
+        }
     })
 }

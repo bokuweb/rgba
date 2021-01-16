@@ -27,10 +27,8 @@ where
     let register_list = dec.get_register_list();
     let offset: i64 = if dec.get_U() { 4 } else { -4 };
     for mut i in 0..0x10 {
-        if !dec.get_U() {
-            i = 0x0F - i;
-        }
-        if register_list & (1 << i) != 0 {
+        let reg = if !dec.get_U() { 0x0F - i } else { i } as usize;
+        if register_list & (1 << reg) != 0 {
             if dec.get_P() {
                 base = base.wrapping_add(offset);
             }
@@ -43,8 +41,7 @@ where
             };
             cycle += bus.compute_cycle(addr, access_type);
             let data = bus.read_word(addr & 0xFFFF_FFFC);
-            dbg!(i, base, data);
-            gpr[i as usize] = data;
+            gpr[reg] = data;
             if !dec.get_P() {
                 base = base.wrapping_add(offset);
             }
@@ -83,15 +80,10 @@ where
     let register_list = dec.get_register_list();
     let offset: i64 = if dec.get_U() { 4 } else { -4 };
 
-    dbg!(dec.get_U());
-
-    for mut i in 0..0x10 {
-        if !dec.get_U() {
-            i = 0x0F - i;
-        }
+    for i in 0..0x10 {
+        let reg = if !dec.get_U() { 0x0F - i } else { i } as usize;
         //    for i in 0..0x10 {
-        if register_list & (1 << i) != 0 {
-            dbg!(i, base);
+        if register_list & (1 << reg) != 0 {
             if dec.get_P() {
                 base = base.wrapping_add(offset);
             }
@@ -103,7 +95,7 @@ where
                 AccessType::Seq(AccessWidth::Word)
             };
             cycle += bus.compute_cycle(addr, access_type);
-            bus.write_word(addr, gpr[i as usize] as Word);
+            bus.write_word(addr, gpr[reg] as Word);
             if !dec.get_P() {
                 base = base.wrapping_add(offset);
             }
