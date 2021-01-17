@@ -81,8 +81,8 @@ where
 {
     let rd = dec.get_Rd() as usize;
     exec_ex_memory_load(bus, gpr, dec, |gpr, base| {
-        let data = bus.read_word(base);
-        gpr[rd] = data & 0xFFFF;
+        let data = bus.read_halfword(base);
+        gpr[rd] = data as u32;
     })
 }
 

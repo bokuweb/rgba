@@ -169,7 +169,7 @@ impl BusAccessor for CpuBus {
     }
 
     fn read_halfword(&self, addr: u32) -> HalfWord {
-        debug!("read half word addr = {:x}", addr);
+        // dbg!(format!("read half word addr = {:x}", addr));
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_halfword(addr),
             0x0300_0000..=0x0300_7FFF => self.wram.read_halfword(addr - 0x0300_0000),
