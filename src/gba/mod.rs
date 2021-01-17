@@ -96,6 +96,7 @@ impl GBA {
     }
 
     pub fn update_key(&mut self, key: io::Key) {
+        dbg!("update_key", key);
         self.bus.update_key(key)
     }
 }

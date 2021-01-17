@@ -77,6 +77,7 @@ fn main() {
             }
         }
 
+        dbg!(key);
         gba.update_key(key);
 
         let buf = gba.frame();

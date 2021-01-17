@@ -131,15 +131,9 @@ where
     let rd = dec.get_Rd() as usize;
     let mut baseb = 0;
     let res = exec_memory_store(bus, gpr, dec, |bus, gpr, base| {
-        dbg!("before str", base, gpr[rd], &gpr);
         bus.write_word(base, gpr[rd]);
         baseb = base;
-        dbg!("after str", baseb, gpr[rd], &gpr);
-        if baseb == 0x0300_0008 && gpr[rd] == 0 {
-            panic!();
-        }
     });
-
     res
 }
 
@@ -150,9 +144,5 @@ where
     let rd = dec.get_Rd() as usize;
     exec_memory_store(bus, gpr, dec, |bus, gpr, base| {
         bus.write_byte(base, gpr[rd] as Byte);
-        if base == 0x0300_0008 {
-            dbg!(&gpr);
-            panic!()
-        }
     })
 }
