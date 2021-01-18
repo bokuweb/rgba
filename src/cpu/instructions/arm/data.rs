@@ -8,34 +8,40 @@ use crate::cpu::instructions::ExecuteResult;
 use crate::cpu::registers::psr::PSR;
 use crate::types::*;
 
-pub fn exec_data_processing<T, F>(bus: &T, gpr: &mut [Word; 16], dec: DataProcessing, data_process: &mut F) -> Result<ExecuteResult, ()>
+pub fn exec_data_processing<T, F>(
+    bus: &T,
+    gpr: &mut [Word; 16],
+    dec: DataProcessing,
+    cpsr: &mut PSR,
+    data_process: &mut F,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
-    F: FnMut(&mut [Word; 16], Word, bool),
+    F: FnMut(&mut [Word; 16], Word, bool, &mut PSR),
 {
     let mut cycle = 0;
     let (value, carry) = if dec.get_I() {
         let shift_value = dec.get_rotate() * 2;
         (
             ror(dec.get_imm(), shift_value),
-            is_carry_over(dec.get_sh().into(), dec.get_imm(), shift_value),
+            is_carry_over(dec.get_sh().into(), dec.get_imm(), shift_value, cpsr.get_C()),
         )
     } else {
         let rm = dec.get_Rm() as usize;
         let shift_value = if dec.get_bit4() {
             // if shifted by register, consume 1I cycle.
             cycle += 1;
-            dec.get_Rs()
+            gpr[dec.get_Rs() as usize]
         } else {
             dec.get_shamt5()
         };
         (
             shift(dec.get_sh().into(), gpr[rm], shift_value),
-            is_carry_over(dec.get_sh().into(), gpr[rm], shift_value),
+            is_carry_over(dec.get_sh().into(), gpr[rm], shift_value, cpsr.get_C()),
         )
     };
 
-    data_process(gpr, value, carry);
+    data_process(gpr, value, carry, cpsr);
 
     if dec.get_Rd() == PC as u32 {
         // waiting for pipeline filled is executed by caller.
@@ -54,7 +60,7 @@ where
     let rd = dec.get_Rd() as usize;
     // dbg!("arm mov");
 
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         if s {
             unimplemented!()
         }
@@ -70,7 +76,7 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, c| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, c, cpsr| {
         let d = gpr[rn] & value;
         if s {
             if rd == PC {
@@ -82,9 +88,6 @@ where
             }
         }
         gpr[rd] = d;
-        if s {
-            //     dbg!("ANDS", &gpr, cpsr.get_C(), cpsr.get_Z(), cpsr.get_N());
-        }
     })
 }
 
@@ -95,7 +98,7 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, carry| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry, cpsr| {
         let d = gpr[rn] ^ value;
         if s {
             if rd == PC {
@@ -117,7 +120,7 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let d = gpr[rn].wrapping_sub(value);
         if s {
             if rd == PC {
@@ -141,7 +144,7 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         if s {
             unimplemented!()
         }
@@ -156,8 +159,9 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    let result = exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+    let result = exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let d = gpr[rn] as u64 + value as u64;
+        dbg!(d, gpr[rn], value);
         if s {
             if rd == PC {
                 unimplemented!("data processing Rd = PC with S flag.");
@@ -181,7 +185,7 @@ where
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
     let c = cpsr.get_C();
-    let result = exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+    let result = exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let d = gpr[rn] as u64 + value as u64 + if c { 1 } else { 0 };
         if s {
             if rd == PC {
@@ -206,7 +210,7 @@ where
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
     let c = cpsr.get_C();
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let c = if c { 0 } else { 1 };
         let d = gpr[rn].wrapping_sub(value).wrapping_sub(c);
         if s {
@@ -231,7 +235,7 @@ where
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
     let c = cpsr.get_C();
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let c = if c { 0 } else { 1 };
         let d = gpr[rn].wrapping_sub(value).wrapping_sub(c);
         if s {
@@ -253,7 +257,7 @@ where
     T: BusAccessor,
 {
     let rn = dec.get_Rn() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, carry| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry, cpsr| {
         let tst = gpr[rn] & value;
         cpsr.set_N(tst >> 31 != 0);
         cpsr.set_Z(tst == 0);
@@ -266,7 +270,7 @@ where
     T: BusAccessor,
 {
     let rn = dec.get_Rn() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, carry| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry, cpsr| {
         let teq = gpr[rn] ^ value;
         cpsr.set_N(teq >> 31 != 0);
         cpsr.set_Z(teq == 0);
@@ -279,7 +283,7 @@ where
     T: BusAccessor,
 {
     let rn = dec.get_Rn() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let rn = gpr[rn];
         let (cmp, v) = rn.overflowing_sub(value);
         cpsr.set_N(cmp >> 31 != 0);
@@ -296,7 +300,7 @@ where
     T: BusAccessor,
 {
     let rn = dec.get_Rn() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let rn = gpr[rn];
         let cmn = (rn as u64).wrapping_add(value as u64);
         cpsr.set_N((cmn as i32) < 0);
@@ -314,7 +318,7 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, carry| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry, cpsr| {
         let d = gpr[rn] | value;
         if s {
             if rd == PC {
@@ -335,7 +339,7 @@ where
 {
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, carry| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry, cpsr| {
         if s {
             if rd == PC {
                 unimplemented!("data processing Rd = PC with S flag.");
@@ -356,7 +360,7 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, carry| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry, cpsr| {
         let d = gpr[rn] & !value;
         if s {
             if rd == PC {
@@ -377,7 +381,7 @@ where
 {
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         if s {
             unimplemented!()
         }
@@ -391,7 +395,7 @@ where
 {
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
-    exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         if s {
             unimplemented!()
         }
