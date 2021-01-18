@@ -9,9 +9,9 @@ pub fn shift(shift_type: Shift, value: u32, shift: u32) -> u32 {
     }
 }
 
-pub fn is_carry_over(shift_type: Shift, value: u32, shift: u32) -> bool {
+pub fn is_carry_over(shift_type: Shift, value: u32, shift: u32, current: bool) -> bool {
     if shift == 0 {
-        false
+        current
     } else {
         match shift_type {
             Shift::LSL => value & (1 << (32 - shift)) != 0,
@@ -65,20 +65,20 @@ fn test_asr() {
 
 #[test]
 fn test_carry_lsl() {
-    assert_eq!(is_carry_over(Shift::LSL, 0x8000_0000, 1), true);
+    assert_eq!(is_carry_over(Shift::LSL, 0x8000_0000, 1, true), true);
 }
 
 #[test]
 fn test_without_carry_lsl() {
-    assert_eq!(is_carry_over(Shift::LSL, 0x8000_0000, 2), false);
+    assert_eq!(is_carry_over(Shift::LSL, 0x8000_0000, 2, false), false);
 }
 
 #[test]
 fn test_carry_ror() {
-    assert_eq!(is_carry_over(Shift::ROR, 0x0000_0001, 1), true);
+    assert_eq!(is_carry_over(Shift::ROR, 0x0000_0001, 1, true), true);
 }
 
 #[test]
 fn test_without_carry_ror() {
-    assert_eq!(is_carry_over(Shift::ROR, 0x0000_0001, 2), false);
+    assert_eq!(is_carry_over(Shift::ROR, 0x0000_0001, 2, false), false);
 }
