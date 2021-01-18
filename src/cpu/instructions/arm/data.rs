@@ -83,7 +83,7 @@ where
         }
         gpr[rd] = d;
         if s {
-        //     dbg!("ANDS", &gpr, cpsr.get_C(), cpsr.get_Z(), cpsr.get_N());
+            //     dbg!("ANDS", &gpr, cpsr.get_C(), cpsr.get_Z(), cpsr.get_N());
         }
     })
 }
@@ -207,10 +207,19 @@ where
     let rn = dec.get_Rn() as usize;
     let c = cpsr.get_C();
     exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+        let c = if c { 0 } else { 1 };
+        let d = gpr[rn].wrapping_sub(value).wrapping_sub(c);
         if s {
-            unimplemented!()
+            if rd == PC {
+                unimplemented!("data processing Rd = PC with S flag.");
+            } else {
+                cpsr.set_N_from(d as u32);
+                cpsr.set_Z_from(d as u32);
+                cpsr.set_C(gpr[rn] >= value + c);
+                cpsr.set_V_from(gpr[rd], d as u32);
+            }
         }
-        gpr[rd] = gpr[rn].wrapping_sub(value).wrapping_sub(if c { 0 } else { 1 });
+        gpr[rd] = d
     })
 }
 
@@ -223,10 +232,19 @@ where
     let rn = dec.get_Rn() as usize;
     let c = cpsr.get_C();
     exec_data_processing(bus, gpr, dec, &mut |gpr, value, _| {
+        let c = if c { 0 } else { 1 };
+        let d = gpr[rn].wrapping_sub(value).wrapping_sub(c);
         if s {
-            unimplemented!()
+            if rd == PC {
+                unimplemented!("data processing Rd = PC with S flag.");
+            } else {
+                cpsr.set_N_from(d as u32);
+                cpsr.set_Z_from(d as u32);
+                cpsr.set_C(gpr[rn] >= value + c);
+                cpsr.set_V_from(gpr[rd], d as u32);
+            }
         }
-        gpr[rd] = gpr[rn].wrapping_sub(value).wrapping_sub(if c { 0 } else { 1 });
+        gpr[rd] = d;
     })
 }
 
