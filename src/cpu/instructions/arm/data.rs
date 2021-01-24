@@ -21,23 +21,31 @@ where
 {
     let mut cycle = 0;
     let (value, carry) = if dec.get_I() {
-        let shift_value = dec.get_rotate() * 2;
-        (
-            ror(dec.get_imm(), shift_value),
-            is_carry_over(dec.get_sh().into(), dec.get_imm(), shift_value, cpsr.get_C()),
-        )
+        if dec.get_rotate() == 0 {
+            (dec.get_imm(), cpsr.get_C())
+        } else {
+            let shift_value = dec.get_rotate() * 2;
+            (
+                ror(dec.get_imm(), shift_value, cpsr.get_C(), true),
+                is_carry_over(dec.get_sh().into(), dec.get_imm(), shift_value, cpsr.get_C(), true),
+            )
+        }
     } else {
         let rm = dec.get_Rm() as usize;
+        let rm = gpr[rm] + if rm == PC { 0 } else { 0 };
         let shift_value = if dec.get_bit4() {
             // if shifted by register, consume 1I cycle.
             cycle += 1;
-            gpr[dec.get_Rs() as usize]
+            // only lower 8bit used.
+            let rs = dec.get_Rs() as usize;
+            (gpr[rs] + if rs == PC { 0 } else { 0 }) & 0xFF
         } else {
             dec.get_shamt5()
         };
+        // dbg!("shift", rm, shift_value);
         (
-            shift(dec.get_sh().into(), gpr[rm], shift_value),
-            is_carry_over(dec.get_sh().into(), gpr[rm], shift_value, cpsr.get_C()),
+            shift(dec.get_sh().into(), rm, shift_value, cpsr.get_C(), dec.get_bit4()),
+            is_carry_over(dec.get_sh().into(), rm, shift_value, cpsr.get_C(), dec.get_bit4()),
         )
     };
 
@@ -58,14 +66,11 @@ where
 {
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
-    // dbg!("arm mov");
-
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         if s {
             unimplemented!()
         }
         gpr[rd] = value;
-        // dbg!(&gpr, value, rd);
     })
 }
 
@@ -77,6 +82,7 @@ where
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, c, cpsr| {
+        // dbg!("and0");
         let d = gpr[rn] & value;
         if s {
             if rd == PC {
@@ -88,6 +94,7 @@ where
             }
         }
         gpr[rd] = d;
+        // dbg!("and1", value);
     })
 }
 
@@ -104,6 +111,7 @@ where
             if rd == PC {
                 unimplemented!("data processing Rd = PC with S flag.");
             } else {
+                // dbg!("EOR", carry, rd);
                 cpsr.set_N_from(d);
                 cpsr.set_Z_from(d);
                 cpsr.set_C(carry);
@@ -161,7 +169,7 @@ where
     let rn = dec.get_Rn() as usize;
     let result = exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let d = gpr[rn] as u64 + value as u64;
-        dbg!(d, gpr[rn], value);
+        // dbg!(d, gpr[rn], value);
         if s {
             if rd == PC {
                 unimplemented!("data processing Rd = PC with S flag.");
@@ -329,6 +337,7 @@ where
                 cpsr.set_C(carry);
             }
         }
+        // dbg!(d, rn, value, &gpr);
         gpr[rd] = d;
     })
 }

@@ -22,7 +22,7 @@ where
     T: BusAccessor,
 {
     let value = if dec.get_I() {
-        ror(dec.get_imm(), dec.get_rotate())
+        ror(dec.get_imm(), dec.get_rotate(), cpsr.get_C(), false)
     } else {
         // dbg!(&gpr, dec.get_Rm());
         gpr[dec.get_Rm() as usize]

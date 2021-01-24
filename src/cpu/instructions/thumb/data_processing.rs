@@ -151,8 +151,8 @@ pub fn exec_thumb_asr1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     if sh == 0 {
         gpr[rd] = gpr[rn];
     } else {
-        cpsr.set_C(is_carry_over(Shift::ASR, gpr[rn], sh, cpsr.get_C()));
-        gpr[rd] = asr(gpr[rn], sh);
+        cpsr.set_C(is_carry_over(Shift::ASR, gpr[rn], sh, cpsr.get_C(), true));
+        gpr[rd] = asr(gpr[rn], sh, true);
     }
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
@@ -169,7 +169,7 @@ pub fn exec_thumb_lsl2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     if sh == 0 {
         return (1, PipelineStatus::Continue);
     }
-    cpsr.set_C(is_carry_over(Shift::LSL, gpr[rd], sh, cpsr.get_C()));
+    cpsr.set_C(is_carry_over(Shift::LSL, gpr[rd], sh, cpsr.get_C(), true));
     gpr[rd] = lsl(gpr[rd], sh);
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
@@ -187,8 +187,8 @@ pub fn exec_thumb_lsr2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     if sh == 0 {
         return (1, PipelineStatus::Continue);
     }
-    cpsr.set_C(is_carry_over(Shift::LSR, gpr[rd], sh, cpsr.get_C()));
-    gpr[rd] = lsr(gpr[rd], sh);
+    cpsr.set_C(is_carry_over(Shift::LSR, gpr[rd], sh, cpsr.get_C(), true));
+    gpr[rd] = lsr(gpr[rd], sh, true);
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
@@ -218,8 +218,8 @@ pub fn exec_thumb_ror<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
     if sh == 0 {
         return (1, PipelineStatus::Continue);
     }
-    cpsr.set_C(is_carry_over(Shift::ROR, gpr[rd], sh, cpsr.get_C()));
-    gpr[rd] = ror(gpr[rd], sh);
+    cpsr.set_C(is_carry_over(Shift::ROR, gpr[rd], sh, cpsr.get_C(), true));
+    gpr[rd] = ror(gpr[rd], sh, cpsr.get_C(), true);
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
@@ -332,7 +332,7 @@ where
     if sh == 0 {
         gpr[rd] = gpr[rn];
     } else {
-        cpsr.set_C(is_carry_over(Shift::LSL, gpr[rn], sh, cpsr.get_C()));
+        cpsr.set_C(is_carry_over(Shift::LSL, gpr[rn], sh, cpsr.get_C(), true));
         gpr[rd] = lsl(gpr[rn], sh);
     }
     cpsr.set_N_from(gpr[rd]);
@@ -352,8 +352,8 @@ where
     if sh == 0 {
         gpr[rd] = gpr[rn];
     } else {
-        cpsr.set_C(is_carry_over(Shift::LSR, gpr[rn], sh, cpsr.get_C()));
-        gpr[rd] = lsr(gpr[rn], sh);
+        cpsr.set_C(is_carry_over(Shift::LSR, gpr[rn], sh, cpsr.get_C(), true));
+        gpr[rd] = lsr(gpr[rn], sh, true);
     }
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);

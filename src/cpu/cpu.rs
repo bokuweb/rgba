@@ -144,10 +144,14 @@ impl ARM {
             0
         };
         // dbg!(format!("registers = {:?} {:?}", self.gpr, self.cpsr.get_cpu_state()));
+        if self.gpr[15] == 134217900 {
+           // dbg!("-----");
+        }
         match self.cpsr.get_cpu_state() {
             CpuState::ARM => {
                 let fetched = self.get_arm_executable(bus);
                 let cond: Cond = fetched.wrapping_shr(28).into();
+                // dbg!(cond, self.cpsr.condition_ok(cond));
                 if !self.cpsr.condition_ok(cond) {
                     let s = bus.compute_cycle(self.gpr[PC], AccessType::Seq(AccessWidth::Word));
                     self.increment_pc();
@@ -222,10 +226,10 @@ impl ARM {
                 arm::Instruction::UMLAL(dec) => exec_arm_umlal(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::SMULL(dec) => exec_arm_smull(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::SMLAL(dec) => exec_arm_smlal(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                arm::Instruction::LDR(dec) => exec_arm_ldr(bus, dec, &mut self.gpr)?,
-                arm::Instruction::STR(dec) => exec_arm_str(bus, dec, &mut self.gpr)?,
-                arm::Instruction::LDRB(dec) => exec_arm_ldrb(bus, dec, &mut self.gpr)?,
-                arm::Instruction::STRB(dec) => exec_arm_strb(bus, dec, &mut self.gpr)?,
+                arm::Instruction::LDR(dec) => exec_arm_ldr(bus, dec, &mut self.gpr, &self.cpsr)?,
+                arm::Instruction::STR(dec) => exec_arm_str(bus, dec, &mut self.gpr, &self.cpsr)?,
+                arm::Instruction::LDRB(dec) => exec_arm_ldrb(bus, dec, &mut self.gpr, &self.cpsr)?,
+                arm::Instruction::STRB(dec) => exec_arm_strb(bus, dec, &mut self.gpr, &self.cpsr)?,
                 arm::Instruction::STRH(dec) => exec_arm_strh(bus, dec, &mut self.gpr)?,
                 arm::Instruction::LDRH(dec) => exec_arm_ldrh(bus, dec, &mut self.gpr)?,
                 arm::Instruction::LDRSB(dec) => exec_arm_ldrsb(bus, dec, &mut self.gpr)?,
@@ -334,7 +338,7 @@ impl ARM {
         };
 
         if self.gpr[15] % 2 == 1 {
-            dbg!("aaaa!!!", &b, &self.gpr);
+            // dbg!("aaaa!!!", &b, &self.gpr);
         }
         match pipeline_status {
             PipelineStatus::Continue => {
