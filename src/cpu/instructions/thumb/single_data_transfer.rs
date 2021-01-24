@@ -40,7 +40,7 @@ where
     let addr = gpr[rn] + gpr[rm];
 
     if addr == 0x0400_0006 {
-        dbg!("read 0x0400_0006", &gpr);
+        // dbg!("read 0x0400_0006", &gpr);
     }
 
     let data = bus.read_word(addr);

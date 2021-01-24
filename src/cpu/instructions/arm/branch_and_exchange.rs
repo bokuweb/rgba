@@ -9,7 +9,7 @@ pub fn exec_arm_bx(dec: BranchAndExchange, cpsr: &mut PSR, gpr: &mut [Word; 16])
     if addr & 0x01 == 0x01 {
         // Switch cpu mode to execute thumb instructions.
         cpsr.set_cpu_state(CpuState::Thumb);
-        dbg!("Switch cpu state to thumb");
+        // dbg!("Switch cpu state to thumb");
         gpr[PC] = addr & !0x1;
         // dbg!(gpr[PC]);
     } else {

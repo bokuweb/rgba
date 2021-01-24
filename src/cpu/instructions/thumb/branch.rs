@@ -36,7 +36,7 @@ pub fn exec_thumb_b2(dec: Branch, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Execu
     .wrapping_shl(1);
 
     if gpr[PC] as i64 + offset as i64 == 134221503 {
-        dbg!("0", &gpr);
+        // dbg!("0", &gpr);
     }
 
     let pc = gpr[PC] as i64 + offset as i64;
