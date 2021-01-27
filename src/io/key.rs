@@ -102,7 +102,7 @@ impl Key {
     }
 
     pub(crate) fn read(&self) -> HalfWord {
-        dbg!("----", self.0);
+        // dbg!("----", self.0);
         self.0
     }
 }

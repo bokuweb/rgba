@@ -162,7 +162,7 @@ where
     let addr = gpr[rn] + offset.wrapping_shl(2);
 
     if addr == 0x0400_0006 {
-        dbg!("read 0x0400_0006", &gpr);
+        // dbg!("read 0x0400_0006", &gpr);
     }
 
     bus.write_word(addr, gpr[rd]);

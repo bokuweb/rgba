@@ -36,7 +36,7 @@ where
     // dbg!("00000000");
 
     store(bus, gpr, base);
-    //bdbg!("00000000");
+    //b// dbg!("00000000");
     let access_type = AccessType::NonSeq(AccessWidth::Word);
     let store_cycle = bus.compute_cycle(base, access_type);
 
@@ -109,7 +109,7 @@ where
            // dbg!(base, bus.read_word(base), &gpr);
         }
         gpr[rd] = bus.read_word(base);
-        //  dbg!(base);
+        //  // dbg!(base);
     });
     res
 }
