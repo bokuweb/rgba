@@ -74,10 +74,12 @@ pub fn asr(value: u32, shift: u32, shift_by_reg: bool) -> u32 {
     }
     if value & (1 << 31) == 0 {
         value.wrapping_shr(shift)
-    } else if (shift < 32) {
+    } else if shift < 32 {
         value.wrapping_shr(shift) | ((0xFFFF_FFFF as u32).wrapping_shl(32 - shift))
+    } else if value & 0x8000_0000 == 0 {
+        return 0;
     } else {
-        0
+        return 0xFFFF_FFFF;
     }
 }
 

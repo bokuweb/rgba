@@ -19,10 +19,9 @@ where
     T: BusAccessor,
     F: FnMut(&mut [Word; 16], Word, bool, &mut PSR),
 {
-    if gpr[15] == 134218248 {
-        dbg!("aa");
-    }
     let mut cycle = 0;
+    let rm = dec.get_Rm() as usize;
+
     let (value, carry) = if dec.get_I() {
         if dec.get_rotate() == 0 {
             (dec.get_imm(), cpsr.get_C())
@@ -33,19 +32,22 @@ where
                 is_carry_over(dec.get_sh().into(), dec.get_imm(), shift_value, cpsr.get_C(), true),
             )
         }
-    } else {
-        let rm = dec.get_Rm() as usize;
-        let rm = gpr[rm] + if rm == PC { 0 } else { 0 };
-        let shift_value = if dec.get_bit4() {
-            // if shifted by register, consume 1I cycle.
-            cycle += 1;
-            // only lower 8bit used.
-            let rs = dec.get_Rs() as usize;
-            gpr[rs] & 0xFF
-        } else {
-            dec.get_shamt5()
-        };
+    } else if dec.get_bit4() {
+        let rm = gpr[rm] + if rm == PC { 4 } else { 0 };
+        // if shifted by register, consume 1I cycle.
+        cycle += 1;
+        // only lower 8bit used.
+        let rs = dec.get_Rs() as usize;
+        let rs = gpr[rs] + if rs == PC { 4 } else { 0 };
+        let shift_value = rs & 0xFF;
         // dbg!("shift", rm, shift_value);
+        (
+            shift(dec.get_sh().into(), rm, shift_value, cpsr.get_C(), true),
+            is_carry_over(dec.get_sh().into(), rm, shift_value, cpsr.get_C(), true),
+        )
+    } else {
+        let shift_value = dec.get_shamt5();
+        let rm = gpr[rm];
         (
             shift(dec.get_sh().into(), rm, shift_value, cpsr.get_C(), dec.get_bit4()),
             is_carry_over(dec.get_sh().into(), rm, shift_value, cpsr.get_C(), dec.get_bit4()),
@@ -248,17 +250,21 @@ where
     let c = cpsr.get_C();
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let c = if c { 0 } else { 1 };
-        let d = value.wrapping_sub(gpr[rn]).wrapping_sub(c).wrapping_sub(1);
+        dbg!(value, gpr[rn], c);
+        let d = value.wrapping_sub(gpr[rn]).wrapping_sub(c);
+        dbg!(d);
+
         if s {
             if rd == PC {
                 unimplemented!("data processing Rd = PC with S flag.");
             } else {
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
-                cpsr.set_C(gpr[rn] >= value + c);
+                cpsr.set_C(gpr[rn] >= d);
                 cpsr.set_V_from(gpr[rd], d as u32);
             }
         }
+        dbg!("RSC", &gpr, cpsr.get_N(), cpsr.get_Z(), cpsr.get_C(), cpsr.get_V());
         gpr[rd] = d;
     })
 }
