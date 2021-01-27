@@ -9,7 +9,7 @@ pub fn shift(shift_type: Shift, value: u32, shift: u32, c: bool, shift_by_reg: b
     }
 }
 
-pub fn is_carry_over(shift_type: Shift, value: u32, shift: u32, shift_by_reg: bool, current: bool) -> bool {
+pub fn is_carry_over(shift_type: Shift, value: u32, shift: u32, current: bool, shift_by_reg: bool) -> bool {
     if shift == 0 {
         if !shift_by_reg {
             match shift_type {
@@ -22,9 +22,19 @@ pub fn is_carry_over(shift_type: Shift, value: u32, shift: u32, shift_by_reg: bo
             current
         }
     } else {
-        // dbg!(shift_type, value, shift, value & (1 << (32 - shift)) != 0);
         match shift_type {
             Shift::LSL => value & (1 << (32 - shift)) != 0,
+            Shift::ASR => {
+                if shift == 0 {
+                    current
+                } else if shift < 32 {
+                    value & (1 << (shift - 1)) != 0
+                } else if value & 0x8000_0000 != 0 {
+                    true
+                } else {
+                    false
+                }
+            }
             _ => value & (1 << (shift - 1)) != 0,
         }
     }
@@ -64,8 +74,10 @@ pub fn asr(value: u32, shift: u32, shift_by_reg: bool) -> u32 {
     }
     if value & (1 << 31) == 0 {
         value.wrapping_shr(shift)
-    } else {
+    } else if (shift < 32) {
         value.wrapping_shr(shift) | ((0xFFFF_FFFF as u32).wrapping_shl(32 - shift))
+    } else {
+        0
     }
 }
 
@@ -73,9 +85,9 @@ pub fn ror(value: u32, shift: u32, c: bool, shift_by_reg: bool) -> u32 {
     if shift == 0 {
         if !shift_by_reg {
             if c {
-                return value | 0x8000_0000; // Op2 bit 31 set to old C
+                return value.wrapping_shr(1) | 0x8000_0000; // Op2 bit 31 set to old C
             } else {
-                return value;
+                return value.wrapping_shr(1);
             }
         } else {
             return value;

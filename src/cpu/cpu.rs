@@ -143,9 +143,10 @@ impl ARM {
         } else {
             0
         };
-        // dbg!(format!("registers = {:?} {:?}", self.gpr, self.cpsr.get_cpu_state()));
+        let log = format!("registers = {:?} {:?}", self.gpr, self.cpsr.get_cpu_state());
+        debug!("{}", log);
         if self.gpr[15] == 134217900 {
-           // dbg!("-----");
+            // dbg!("-----");
         }
         match self.cpsr.get_cpu_state() {
             CpuState::ARM => {
@@ -165,7 +166,7 @@ impl ARM {
                 let fetched = self.get_thumb_executable(bus);
                 // debug!("{:x}", fetched);
                 // if self.gpr[15] == 134218152 && self.gpr[5] == 1022{
-                //     dbg!(&self.gpr);
+                //     // dbg!(&self.gpr);
                 // }
                 let instruction = thumb::decode(fetched);
                 let cycle = cycle + self.execute_thumb(instruction, bus);
@@ -192,10 +193,10 @@ impl ARM {
     where
         T: BusAccessor,
     {
-        // dbg!(&instruction, &self.gpr);
+        // // dbg!(&instruction, &self.gpr);
         // if (self.gpr[15] == 134219092 && self.gpr[0] == 134233028 && self.gpr[14] == 134220136) {
-        //     dbg!(&self.gpr);
-        //     dbg!("0");
+        //     // dbg!(&self.gpr);
+        //     // dbg!("0");
         // }
         let (cycle, pipeline_status) = {
             match instruction {
@@ -268,7 +269,7 @@ impl ARM {
         let b = self.gpr.clone();
 
         let (cycle, pipeline_status) = {
-            // dbg!(instruction);
+            // // dbg!(instruction);
             match instruction {
                 thumb::Instruction::LDR1(dec) => exec_thumb_ldr_imm_offset(bus, dec, &mut self.gpr),
                 thumb::Instruction::LDRRegOffset(dec) => exec_thumb_ldr_reg_offset(bus, dec, &mut self.gpr),
@@ -292,7 +293,7 @@ impl ARM {
                 thumb::Instruction::ADD6(dec) => exec_thumb_add_relative_address(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ADD7(dec) => exec_thumb_add7(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::CMP3(dec) => {
-                    // dbg!(dec.0);
+                    // // dbg!(dec.0);
                     todo!("CMP3");
                 }
                 thumb::Instruction::MOV3(dec) => exec_thumb_mov3(bus, dec, &mut self.gpr, &mut self.cpsr),
@@ -331,14 +332,14 @@ impl ARM {
                 thumb::Instruction::PUSH(dec) => exec_thumb_push(bus, dec, &mut self.gpr),
                 thumb::Instruction::POP(dec) => exec_thumb_pop(bus, dec, &mut self.gpr),
                 _ => {
-                    dbg!(&instruction, &self.gpr);
+                    // dbg!(&instruction, &self.gpr);
                     unimplemented!();
                 }
             }
         };
 
         if self.gpr[15] % 2 == 1 {
-            // dbg!("aaaa!!!", &b, &self.gpr);
+            // // dbg!("aaaa!!!", &b, &self.gpr);
         }
         match pipeline_status {
             PipelineStatus::Continue => {

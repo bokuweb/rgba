@@ -19,6 +19,9 @@ where
     T: BusAccessor,
     F: FnMut(&mut [Word; 16], Word, bool, &mut PSR),
 {
+    if gpr[15] == 134218248 {
+        dbg!("aa");
+    }
     let mut cycle = 0;
     let (value, carry) = if dec.get_I() {
         if dec.get_rotate() == 0 {
@@ -38,7 +41,7 @@ where
             cycle += 1;
             // only lower 8bit used.
             let rs = dec.get_Rs() as usize;
-            (gpr[rs] + if rs == PC { 0 } else { 0 }) & 0xFF
+            gpr[rs] & 0xFF
         } else {
             dec.get_shamt5()
         };
@@ -245,7 +248,7 @@ where
     let c = cpsr.get_C();
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let c = if c { 0 } else { 1 };
-        let d = gpr[rn].wrapping_sub(value).wrapping_sub(c);
+        let d = value.wrapping_sub(gpr[rn]).wrapping_sub(c).wrapping_sub(1);
         if s {
             if rd == PC {
                 unimplemented!("data processing Rd = PC with S flag.");

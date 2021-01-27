@@ -45,7 +45,7 @@ fn main() {
                     ..
                 } => break 'running,
                 Event::KeyDown { keycode: Some(code), .. } => {
-                    dbg!("keydown", &code);
+                    // dbg!("keydown", &code);
                     match code {
                         Keycode::X => key.set_B(io::KeyStatus::ON),
                         Keycode::Z => key.set_A(io::KeyStatus::ON),
@@ -77,7 +77,7 @@ fn main() {
             }
         }
 
-        dbg!(key);
+        // dbg!(key);
         gba.update_key(key);
 
         let buf = gba.frame();
