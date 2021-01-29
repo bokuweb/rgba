@@ -30,6 +30,7 @@ pub enum InstructionType {
     Branch,
     BranchAndExchange,
     BlockDataTransfer,
+    Swi,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -76,7 +77,7 @@ pub enum Instruction {
     LDM(BlockDataTransfer),
     STM(BlockDataTransfer),
     Undefined,
-    // // SWI,
+    SWI,
     MSR(PsrTransfer),
     MRS(PsrTransfer),
     // NOP,
@@ -223,7 +224,7 @@ pub fn decode(raw: Word) -> Instruction {
         v if (v & 0x0E40_0090) == 0x0040_0090 => InstructionType::ExtraMemory,
         v if (v & 0x0C00_0000) == 0x0400_0000 => InstructionType::Memory,
         v if (v & 0x0C00_0000) == 0x0000_0000 => InstructionType::DataProcessing,
-        // v if (v & 0x0F00_0000) == 0x0F00_0000 => InstructionType::SWI,
+        v if (v & 0x0F00_0000) == 0x0F00_0000 => InstructionType::Swi,
         _ => panic!("Unsupported instruction"),
     };
 
@@ -237,7 +238,7 @@ pub fn decode(raw: Word) -> Instruction {
         InstructionType::Branch => decode_branch(raw),
         InstructionType::BranchAndExchange => Instruction::BX(BranchAndExchange(raw)),
         InstructionType::BlockDataTransfer => decode_block_data_transfer(raw),
-        // v if (v & 0x0F00_0000) == 0x0F00_0000 => Instruction::SWI,
+        InstructionType::Swi => Instruction::SWI,
         _ => panic!("unsupported instruction"),
     }
 

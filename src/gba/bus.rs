@@ -194,7 +194,12 @@ impl BusAccessor for CpuBus {
             0x0400_0060..=0x0400_03FF => 0,
             0x0500_0000..=0x0500_03FF => self.palette.read_word(addr - 0x0500_0000),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_word(addr - 0x0800_0000),
-            _ => panic!(format!("TODO: addr = 0x{:x}", addr)),
+            _ => {
+                if addr == 0xc8002489 {
+                    dbg!("aa");
+                }
+                panic!(format!("TODO: addr = 0x{:x}", addr))
+            }
         }
     }
 
