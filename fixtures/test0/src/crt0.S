@@ -9,22 +9,526 @@
     
     .arm
 __start:
-	stmfd sp!,{lr}
+
+	stmfd 	sp!,{lr}
+
+	ldr 	r0,=szLS1
+	mov 	r1,#52
+	mov 	r2,#1
+	mov 	r3,#4
+
+
+	@ LDR
 	
-	@ RSC
+	@ +#]
 	mov 	r1,#0
-	mov 	r2,#2
-	mov 	r3,#3
-	adds 	r9,r9,r9	@ clear carry
-	rscs 	r3,r2,r3
-	orrcc 	r1,r1,#1
-	orrmi 	r1,r1,#2
-	orrne 	r1,r1,#8
-	cmp 	r2,#2
+	ldr 	r0,=romvar
+	sub 	r2,r0,#3
+	mov 	r3,r2
+	ldr 	r0,[r0,#0]
+	cmp 	r0,#0x80
 	orrne 	r1,r1,#BAD_Rd
-	ldr 	r0,=szRSC
+	ldr 	r0,[r2,#3]
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r3
+	orrne 	r1,r1,#BAD_Rn
+	@ Test non word-aligned load
+	ldr 	r0,=romvar2
+	ldr 	r0,[r0,#1]
+	ldr 	r2,=0x00ff008f
+	cmp 	r0,r2
+	orrne 	r1,r1,#BAD_Rd
+	ldr 	r0,=romvar2
+	ldr 	r0,[r0,#2]
+	ldr 	r2,=0x8f00ff00
+	cmp 	r0,r2
+	orrne 	r1,r1,#BAD_Rd
+	ldr 	r0,=romvar2
+	ldr 	r0,[r0,#3]
+	ldr 	r2,=0x008f00ff
+	cmp 	r0,r2
+	orrne 	r1,r1,#BAD_Rd
+
+	mov 	r2,#0
+	orr 	r1,r1,#0x80000000
+	ldr 	r0,=szLDR
+	add 	r8,r8,#8
+
+
+	@ -#]
+	mov 	r1,#0
+	ldr 	r0,=romvar
+	mov 	r2,r0
+	mov 	r3,r2
+	add 	r0,r0,#206
+	ldr 	r0,[r0,#-206]
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	ldr 	r0,[r2,#-0]
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r3
+	orrne 	r1,r1,#BAD_Rn
+	@ Test non word-aligned load
+	ldr 	r0,=romvar2+4
+	ldr 	r0,[r0,#-2]
+	ldr 	r2,=0x8f00ff00
+	cmp 	r0,r2
+	orrne 	r1,r1,#BAD_Rd
+
+	mov 	r2,#1
+	orr 	r1,r1,#0x80000000
+	ldr 	r0,=szLDR
+	add 	r8,r8,#8
+
+
+	@ +#]!
+	mov 	r1,#0
+	ldr 	r0,=romvar
+	sub 	r2,r0,#3
+	mov 	r3,r0
+	ldr 	r0,[r0,#0]!
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	ldr 	r0,[r2,#3]!
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r3
+	orrne 	r1,r1,#BAD_Rn
+	@ Test non word-aligned load
+	ldr 	r0,=romvar2
+	ldr 	r0,[r0,#2]!
+	ldr 	r2,=0x8f00ff00
+	cmp 	r0,r2
+	orrne 	r1,r1,#BAD_Rd
+	
+	mov 	r2,#2
+	orr 	r1,r1,#0x80000000
+	ldr 	r0,=szLDR
+	add 	r8,r8,#8
+
+
+	@ -#]!
+	mov 	r1,#0
+	ldr 	r0,=romvar
+	add 	r2,r0,#1
+	mov 	r3,r0
+	add 	r0,r0,#206
+	ldr 	r0,[r0,#-206]!
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	ldr 	r0,[r2,#-1]!
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r3
+	orrne 	r1,r1,#BAD_Rn
+	@ Test non word-aligned load
+	ldr 	r0,=romvar2+4
+	ldr 	r0,[r0,#-2]!
+	ldr 	r2,=0x8f00ff00
+	cmp 	r0,r2
+	orrne 	r1,r1,#BAD_Rd
+	
+	mov 	r2,#3
+	orr 	r1,r1,#0x80000000
+	ldr 	r0,=szLDR
+	add 	r8,r8,#8
+
+
+	@ +R]
+	mov 	r1,#0
+	ldr 	r0,=romvar
+	sub 	r2,r0,#8
+	sub 	r0,r0,#1
+	mov 	r3,r2
+	mov 	r4,#2
+	ldr 	r0,[r0,r4, lsr #1]
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	ldr 	r0,[r2,r4, lsl #2]
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r3
+	orrne 	r1,r1,#BAD_Rn
+
+	ldr 	r2,=romvar
+	mov 	r2,r2,lsr#1
+	mov 	r3,#0xC0000000
+	ldr 	r0,[r2,r2]
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+
+	ldr 	r2,=romvar
+	mov 	r3,#0x8
+	ldr 	r0,[r2,r3, lsr #32]
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	
+	ldr 	r2,=romvar
+	add 	r2,r2,#1
+	mov 	r3,#0xC0000000
+	ldr 	r0,[r2,r3, asr #32]
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+
+	ldr 	r2,=romvar
+	add 	r2,r2,#2
+	ldr 	r3,=0xfffffffc
+	adds 	r4,r3,r3		@ set carry
+	ldr 	r0,[r2,r3, rrx]
+	orrcc 	r1,r1,#1
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+
+	@ Test non word-aligned load
+	ldr 	r0,=romvar2
+	mov 	r2,#2
+	ldr 	r0,[r0,r2]
+	ldr 	r2,=0x8f00ff00
+	cmp 	r0,r2
+	orrne 	r1,r1,#BAD_Rd
+	
+	mov 	r2,#4
+	orr 	r1,r1,#0x80000000
+	ldr 	r0,=szLDR
+	add 	r8,r8,#8
+
+
+	@ -R]
+	mov 	r1,#0
+	ldr 	r0,=romvar
+	add 	r2,r0,#8
+	add 	r0,r0,#1
+	mov 	r3,r2
+	mov 	r4,#2
+	ldr 	r0,[r0,-r4, lsr #1]
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	ldr 	r0,[r2,-r4, lsl #2]
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r3
+	orrne 	r1,r1,#BAD_Rn
+
+	ldr 	r2,=romvar
+	mov 	r3,#0x8
+	ldr 	r0,[r2,-r3, lsr #32]
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+
+	ldr 	r2,=romvar
+	sub 	r2,r2,#1
+	mov 	r3,#0x80000000
+	ldr 	r0,[r2,-r3, asr #32]
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	
+	ldr 	r2,=romvar
+	sub 	r2,r2,#4
+	ldr 	r3,=0xfffffff8
+	adds 	r4,r3,r3		@ set carry
+	ldr 	r0,[r2,-r3, rrx]
+	orrcc 	r1,r1,#1
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+
+	@ Test non word-aligned load
+	ldr 	r0,=romvar2+4
+	mov 	r2,#1
+	ldr 	r0,[r0,-r2, lsl #1]
+	ldr 	r2,=0x8f00ff00
+	cmp 	r0,r2
+	orrne 	r1,r1,#BAD_Rd
+	
+	mov 	r2,#5
+	orr 	r1,r1,#0x80000000
+	ldr 	r0,=szLDR
+	add 	r8,r8,#8
+	
+
+	@ +R]!
+	mov 	r1,#0
+	ldr 	r0,=romvar
+	mov 	r3,r0
+	sub 	r2,r0,#8
+	sub 	r0,r0,#1
+	mov 	r4,#2
+	ldr 	r0,[r0,r4, lsr #1]!
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	ldr 	r0,[r2,r4, lsl #2]!
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r3
+	orrne 	r1,r1,#BAD_Rn
+
+	ldr 	r2,=romvar
+	mov 	r4,r2
+	mov 	r2,r2,lsr#1
+	mov 	r3,#0xC0000000
+	ldr 	r0,[r2,r2]!
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r4
+	orrne 	r1,r1,#BAD_Rn
+	
+	ldr 	r2,=romvar
+	mov 	r4,r2
+	add 	r2,r2,#1
+	mov 	r3,#0xC0000000
+	ldr 	r0,[r2,r3, asr #32]!
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r4
+	orrne 	r1,r1,#BAD_Rn
+
+	ldr 	r2,=romvar
+	mov 	r5,r2
+	add 	r2,r2,#2
+	ldr 	r3,=0xfffffffc
+	adds 	r4,r3,r3		@ set carry
+	ldr 	r0,[r2,r3, rrx]!
+	orrcc 	r1,r1,#1
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r5
+	orrne 	r1,r1,#BAD_Rn
+
+	@ Test non word-aligned load
+	ldr 	r0,=romvar2
+	mov 	r2,#2
+	ldr 	r0,[r0,r2]!
+	ldr 	r2,=0x8f00ff00
+	cmp 	r0,r2
+	orrne 	r1,r1,#BAD_Rd
+	
+	mov 	r2,#6
+	orr 	r1,r1,#0x80000000
+	ldr 	r0,=szLDR
+	add 	r8,r8,#8
+
+
+	@ -R]!
+	mov 	r1,#0
+	ldr 	r0,=romvar
+	mov 	r3,r0
+	add 	r2,r0,#8
+	add 	r0,r0,#1
+	mov 	r4,#2
+	ldr 	r0,[r0,-r4, lsr #1]!
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	ldr 	r0,[r2,-r4, lsl #2]!
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r3
+	orrne 	r1,r1,#BAD_Rn
+
+	ldr 	r2,=romvar
+	mov 	r4,r2
+	sub 	r2,r2,#1
+	mov 	r3,#0x80000000
+	ldr 	r0,[r2,-r3, asr #32]!
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r4
+	orrne 	r1,r1,#BAD_Rn
+	
+	ldr 	r2,=romvar
+	mov 	r5,r2
+	sub 	r2,r2,#4
+	ldr 	r3,=0xfffffff8
+	adds 	r4,r3,r3		@ set carry
+	ldr 	r0,[r2,-r3, rrx]!
+	orrcc 	r1,r1,#1
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r5
+	orrne 	r1,r1,#BAD_Rn
+
+	@ Test non word-aligned load
+	ldr 	r0,=romvar2+4
+	mov 	r2,#2
+	ldr 	r0,[r0,-r2]!
+	ldr 	r2,=0x8f00ff00
+	cmp 	r0,r2
+	orrne 	r1,r1,#BAD_Rd
+	
+	mov 	r2,#7
+	orr 	r1,r1,#0x80000000
+	ldr 	r0,=szLDR
+	add 	r8,r8,#8
+	
+
+	@ ]+#
+	mov 	r1,#0
+	ldr 	r0,=romvar
+	add 	r3,r0,#3
+	mov 	r2,r0
+	ldr 	r0,[r0],#3
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	ldr 	r0,[r2],#3
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r3
+	orrne 	r1,r1,#BAD_Rn
+	@ Test non word-aligned load
+	ldr 	r0,=romvar2+2
+	ldr 	r0,[r0],#5
+	ldr 	r2,=0x8f00ff00
+	cmp 	r0,r2
+	orrne 	r1,r1,#BAD_Rd
+	mov 	r2,#8
+	orr 	r1,r1,#0x80000000
+	ldr 	r0,=szLDR
+	add 	r8,r8,#8
+
+	@ ]-#
+	mov 	r1,#0
+	ldr 	r0,=romvar
+	mov 	r2,r0
+	sub 	r3,r0,#0xff
+	ldr 	r0,[r0],#-0xff
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	ldr 	r0,[r2],#-0xff
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r3
+	orrne 	r1,r1,#BAD_Rn
+	@ Test non word-aligned load
+	ldr 	r0,=romvar2+2
+	ldr 	r0,[r0],#-5
+	ldr 	r2,=0x8f00ff00
+	cmp 	r0,r2
+	orrne 	r1,r1,#BAD_Rd
+	mov 	r2,#9
+	orr 	r1,r1,#0x80000000
+	ldr 	r0,=szLDR
+	add 	r8,r8,#8
+
+
+	@ ]+R
+	mov 	r1,#0
+	ldr 	r0,=romvar
+	mov 	r2,r0
+	add 	r5,r0,#8
+	mov 	r3,r0
+	mov 	r4,#2
+	ldr 	r0,[r0],r4, lsr #1
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	ldr 	r0,[r2],r4, lsl #2
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r5
+	orrne 	r1,r1,#BAD_Rn
+
+	ldr 	r2,=romvar
+	mov 	r0,#123
+	add 	r3,r2,r0
+	ldr 	r0,[r2],r0
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r3
+	orrne 	r1,r1,#BAD_Rn
+	
+	ldr 	r2,=romvar
+	sub 	r4,r2,#1
+	mov 	r3,#0xC0000000
+	ldr 	r0,[r2],r3, asr #32
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r4
+	orrne 	r1,r1,#BAD_Rn
+
+	ldr 	r2,=romvar
+	sub 	r4,r2,#2
+	ldr 	r3,=0xfffffffc
+	adds 	r5,r3,r3		@ set carry
+	ldr 	r0,[r2],r3, rrx
+	orrcc 	r1,r1,#1
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r4
+	orrne 	r1,r1,#BAD_Rn
+
+	@ Test non word-aligned load
+	ldr 	r0,=romvar2+2
+	mov 	r2,#1
+	ldr 	r0,[r0],r2
+	ldr 	r2,=0x8f00ff00
+	cmp 	r0,r2
+	orrne 	r1,r1,#BAD_Rd
+	
+	mov 	r2,#10
+	orr 	r1,r1,#0x80000000
+	ldr 	r0,=szLDR
 	bl 	DrawResult
 	add 	r8,r8,#8
+
+
+	@ ]-R
+	mov 	r1,#0
+	ldr 	r0,=romvar
+	mov 	r2,r0
+	sub 	r5,r0,#16
+	mov 	r3,r0
+	mov 	r4,#2
+	ldr 	r0,[r0],-r4, lsr #1
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	ldr 	r0,[r2],-r4, lsl #3
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r5
+	orrne 	r1,r1,#BAD_Rn
+
+	ldr	r2,=romvar
+	mov 	r0,#123
+	sub 	r3,r2,r0
+	ldr 	r0,[r2],-r0
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r3
+	orrne 	r1,r1,#BAD_Rn
+	
+	ldr 	r2,=romvar
+	add 	r4,r2,#1
+	mov 	r3,#0xC0000000
+	ldr 	r0,[r2],-r3, asr #32
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r4
+	orrne 	r1,r1,#BAD_Rn
+
+	ldr 	r2,=romvar
+	add 	r4,r2,#2
+	ldr 	r3,=0xfffffffc
+	adds 	r5,r3,r3		@ set carry
+	ldr 	r0,[r2],-r3, rrx
+	orrcc 	r1,r1,#1
+	cmp 	r0,#0x80
+	orrne 	r1,r1,#BAD_Rd
+	cmp 	r2,r4
+	orrne 	r1,r1,#BAD_Rn
+
+	@ Test non word-aligned load
+	ldr 	r0,=romvar2+2
+	mov 	r2,#5
+	ldr 	r0,[r0],-r2
+	ldr 	r2,=0x8f00ff00
+	cmp 	r0,r2
+	orrne 	r1,r1,#BAD_Rd
+	
+	mov 	r2,#11
+	orr 	r1,r1,#0x80000000
+	ldr 	r0,=szLDR
+	
+	swi    #0x900001 
+
 
 .pool
 .align

@@ -144,7 +144,7 @@ impl ARM {
             0
         };
         let log = format!("registers = {:?} {:?}", self.gpr, self.cpsr.get_cpu_state());
-        // dbg!(log);
+        dbg!(log);
         if self.gpr[15] == 134217900 {
             // dbg!("-----");
         }
@@ -243,8 +243,7 @@ impl ARM {
                 arm::Instruction::MRS(dec) => exec_arm_mrs(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr)?,
                 arm::Instruction::MSR(dec) => exec_arm_msr(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr)?,
                 arm::Instruction::Undefined => unimplemented!(),
-                //arm::Opcode::NOP => unimplemented!(),
-                //// arm::Opcode::SWI => unimplemented!(),
+                arm::Instruction::SWI => unimplemented!(),
                 // ArmOpcode::Unknown => self.execute_unknown(dec),
                 _ => unimplemented!(),
             }

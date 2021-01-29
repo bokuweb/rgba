@@ -250,10 +250,7 @@ where
     let c = cpsr.get_C();
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let c = if c { 0 } else { 1 };
-        dbg!(value, gpr[rn], c);
         let d = value.wrapping_sub(gpr[rn]).wrapping_sub(c);
-        dbg!(d);
-
         if s {
             if rd == PC {
                 unimplemented!("data processing Rd = PC with S flag.");
@@ -264,7 +261,6 @@ where
                 cpsr.set_V_from(gpr[rd], d as u32);
             }
         }
-        dbg!("RSC", &gpr, cpsr.get_N(), cpsr.get_Z(), cpsr.get_C(), cpsr.get_V());
         gpr[rd] = d;
     })
 }
