@@ -302,6 +302,7 @@ where
         cpsr.set_N(cmp >> 31 != 0);
         cpsr.set_Z(cmp == 0);
         // let (_, v) = (rn as i32).overflowing_sub(value as i32);
+        let v = rn >> 31 != value >> 31 && rn >> 31 != cmp >> 31;
         cpsr.set_V(v);
         // NOTE: Should we consider to shifted carry?
         cpsr.set_C(rn >= value);
