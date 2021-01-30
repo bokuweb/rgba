@@ -777,10 +777,10 @@ mod test {
         let mut bus = MockBus::new();
         &bus.set(0x0, 0xE1A0_2061);
         let mut arm = ARM::new();
-        arm.set_gpr(1, 0x00AA_AA55);
-        arm.cpsr.set_C(true);
+        arm.set_gpr(1, 0x0000_007b);
+        arm.cpsr.set_C(false);
         arm.run_immediately(&mut bus);
-        assert_eq!(arm.get_gpr(2), 0x8055_552A);
+        assert_eq!(arm.get_gpr(2), 0x0000_003d);
     }
 
     #[test]
