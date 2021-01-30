@@ -413,6 +413,7 @@ where
         if s {
             unimplemented!()
         }
-        gpr[rd] = value >> 1 | (if cpsr.get_C() { 0x8000_0000 } else { 0 })
+        gpr[rd] = value;
+        dbg!(&gpr);
     })
 }
