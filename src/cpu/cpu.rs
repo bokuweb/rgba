@@ -144,7 +144,7 @@ impl ARM {
             0
         };
         let log = format!("registers = {:?} {:?}", self.gpr, self.cpsr.get_cpu_state());
-        dbg!(log);
+        // dbg!(log);
         if self.gpr[15] == 134217900 {
             // dbg!("-----");
         }
