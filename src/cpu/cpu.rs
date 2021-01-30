@@ -438,8 +438,8 @@ mod test {
         setup();
         let mut bus = MockBus::new();
         let mut arm = ARM::new();
-        arm.step(&mut bus);
-        assert_eq!(arm.get_gpr(PC), 0x0000_0008);
+        let _ = arm.step(&mut bus);
+        assert_eq!(arm.get_gpr(PC), 0x0000_000C);
     }
 
     #[test]
