@@ -143,11 +143,8 @@ impl ARM {
         } else {
             0
         };
-        let log = format!("registers = {:?} {:?}", self.gpr, self.cpsr.get_cpu_state());
+        // let log = format!("registers = {:?} {:?}", self.gpr, self.cpsr.get_cpu_state());
         // dbg!(log);
-        if self.gpr[15] == 134217900 {
-            // dbg!("-----");
-        }
         match self.cpsr.get_cpu_state() {
             CpuState::ARM => {
                 let fetched = self.get_arm_executable(bus);
