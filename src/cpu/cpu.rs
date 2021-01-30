@@ -544,7 +544,7 @@ mod test {
     fn sbc_r3_r1_r2_with_set_c() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE0E1_3002);
+        &bus.set(0x0, 0xE0C1_3002);
         let mut arm = ARM::new();
         arm.cpsr.set_C(true);
         arm.set_gpr(1, 0x2345_6789);
@@ -559,7 +559,7 @@ mod test {
     fn sbc_r3_r1_r2_with_cleared_c() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE0E1_3002);
+        &bus.set(0x0, 0xE0C1_3002);
         let mut arm = ARM::new();
         arm.cpsr.set_C(false);
         arm.set_gpr(1, 0x2345_6789);
