@@ -916,7 +916,7 @@ mod test {
         &bus.set(0x4, 0x0000_0010);
         let mut arm = ARM::new();
         arm.run_immediately(&mut bus);
-        assert_eq!(arm.get_gpr(PC), 0x0000_0018);
+        assert_eq!(arm.get_gpr(PC), 0x0000_0020);
     }
 
     #[test]
@@ -1091,7 +1091,7 @@ mod test {
         let mut arm = ARM::new();
         arm.set_gpr(0, 0x100);
         arm.run_immediately(&mut bus);
-        assert_eq!(arm.get_gpr(PC), 0x0000_000C);
+        assert_eq!(arm.get_gpr(PC), 0x0000_0014);
         assert_eq!(arm.get_gpr(0), 0x0000_0120);
         assert_eq!(arm.get_gpr(4), 0xA000_0000);
         assert_eq!(arm.get_gpr(5), 0xA000_0001);
@@ -1117,7 +1117,7 @@ mod test {
             arm.set_gpr(4 + i, 0xA000_0000 + i as u32);
         }
         arm.run_immediately(&mut bus);
-        assert_eq!(arm.get_gpr(PC), 0x0000_000C);
+        assert_eq!(arm.get_gpr(PC), 0x0000_0014);
         assert_eq!(arm.get_gpr(0), 0x0000_0120);
         assert_eq!(bus.get_mem(0x0000_0100), 0xA000_0000);
         assert_eq!(bus.get_mem(0x0000_0104), 0xA000_0001);
