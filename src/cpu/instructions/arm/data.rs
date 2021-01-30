@@ -224,7 +224,7 @@ where
     let rn = dec.get_Rn() as usize;
     let c = cpsr.get_C();
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
-        let c = if c { 0 } else { 1 };
+        let c = u32::from(!c);
         let d = gpr[rn].wrapping_sub(value).wrapping_sub(c);
         if s {
             if rd == PC {
