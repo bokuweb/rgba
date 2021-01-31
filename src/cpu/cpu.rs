@@ -143,8 +143,8 @@ impl ARM {
         } else {
             0
         };
-        // let log = format!("registers = {:?} {:?}", self.gpr, self.cpsr.get_cpu_state());
-        // dbg!(log);
+        // let log = format!("{:?}", self.gpr);
+        debug!("tick {:?}", &self.gpr);
         match self.cpsr.get_cpu_state() {
             CpuState::ARM => {
                 let fetched = self.get_arm_executable(bus);

@@ -71,9 +71,15 @@ where
 {
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
-    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, c, cpsr| {
         if s {
-            unimplemented!()
+            if rd == PC {
+                unimplemented!("data processing Rd = PC with S flag.");
+            } else {
+                cpsr.set_N_from(value as u32);
+                cpsr.set_Z_from(value as u32);
+                cpsr.set_C(c);
+            }
         }
         gpr[rd] = value;
     })
