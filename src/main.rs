@@ -24,7 +24,7 @@ const WIDTH: u32 = 240;
 const HEIGHT: u32 = 160;
 
 fn main() {
-    std::env::set_var("RUST_LOG", "info");
+    // std::env::set_var("RUST_LOG", "debug");
     pretty_env_logger::init();
 
     let sdl_context = sdl2::init().unwrap();
@@ -50,7 +50,10 @@ fn main() {
                         Keycode::X => key.set_B(io::KeyStatus::ON),
                         Keycode::Z => key.set_A(io::KeyStatus::ON),
                         Keycode::Space => key.set_SELECT(io::KeyStatus::ON),
-                        Keycode::Return => key.set_START(io::KeyStatus::ON),
+                        Keycode::Return => {
+                            // std::env::set_var("RUST_LOG", "debug");
+                            key.set_START(io::KeyStatus::ON)
+                        }
                         Keycode::Up => key.set_UP(io::KeyStatus::ON),
                         Keycode::Down => key.set_DOWN(io::KeyStatus::ON),
                         Keycode::Left => key.set_LEFT(io::KeyStatus::ON),

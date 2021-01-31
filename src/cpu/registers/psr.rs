@@ -17,13 +17,25 @@ pub enum Mode {
     System,
 }
 
-const RAW_DEFAULT: u32 = MODE_SUPERVISOR | (1 << IRQ_DISABLE_BIT) | (1 << FIQ_DISABLE_BIT);
+const RAW_DEFAULT: u32 = MODE_SYSTEM; // | (1 << IRQ_DISABLE_BIT) | (1 << FIQ_DISABLE_BIT);
 
 const IRQ_DISABLE_BIT: u32 = 7;
 const FIQ_DISABLE_BIT: u32 = 6;
 
 const MODE_SUPERVISOR: u32 = 0b1_0011;
+const MODE_SYSTEM: u32 = 0b1_1111;
 
+// Bit   Expl.
+// 31    N - Sign Flag       (0=Not Signed, 1=Signed)               ;\
+// 30    Z - Zero Flag       (0=Not Zero, 1=Zero)                   ; Condition
+// 29    C - Carry Flag      (0=Borrow/No Carry, 1=Carry/No Borrow) ; Code Flags
+// 28    V - Overflow Flag   (0=No Overflow, 1=Overflow)            ;/
+// 27    Q - Sticky Overflow (1=Sticky Overflow, ARMv5TE and up only)
+// 26-8  Reserved            (For future use) - Do not change manually!
+// 7     I - IRQ disable     (0=Enable, 1=Disable)                     ;\
+// 6     F - FIQ disable     (0=Enable, 1=Disable)                     ; Control
+// 5     T - State Bit       (0=ARM, 1=THUMB) - Do not change manually!; Bits
+// 4-0   M4-M0 - Mode Bits   (See below)                               ;/
 bitfield! {
     #[derive(Debug, PartialEq, Clone, Copy)]
     pub struct PSR(u32);
