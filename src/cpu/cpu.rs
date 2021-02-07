@@ -8,7 +8,7 @@ use crate::cpu::instructions::arm::{
 use crate::cpu::instructions::thumb::*;
 
 use crate::cpu::instructions::PipelineStatus;
-use crate::cpu::registers::psr::{CpuState, PSR};
+use crate::cpu::registers::{BankGpr, BankSpsr, CpuState, PSR};
 use crate::cpu::types::*;
 use crate::types::*;
 
@@ -22,18 +22,12 @@ enum CpuMode {
 
 pub struct ARM {
     pub gpr: [u32; 16],
-    /// - 0-4:   r8_fiq - r12_fiq
-    /// - 5-6:   r13_fiq & r14_fiq
-    /// - 7-8:   r13_svc & r14_svc
-    /// - 9-10:  r13_abt & r14_abt
-    /// - 11-12: r13_irq & r14_irq
-    /// - 13-14: r13_und & r14_und
-    bank_gpr: [u32; 15],
+    bank_gpr: BankGpr,
     pipeline_wait: u8,
     cpsr: PSR,
     spsr: PSR,
 
-    bank_spsr: [PSR; 5],
+    bank_spsr: BankSpsr,
     mode: CpuMode,
     irq_disable: bool,
     fiq_disable: bool,
@@ -45,10 +39,10 @@ impl ARM {
         ARM {
             pipeline_wait: INITIAL_PIPELINE_WAIT,
             gpr: [0; 16],
-            bank_gpr: [0; 15],
+            bank_gpr: BankGpr::default(),
             cpsr: PSR::default(),
             spsr: PSR::default(),
-            bank_spsr: [PSR::default(); 5],
+            bank_spsr: BankSpsr::default(),
             mode: CpuMode::System,
             irq_disable: false,
             fiq_disable: false,
@@ -191,10 +185,13 @@ impl ARM {
         T: BusAccessor,
     {
         // // dbg!(&instruction, &self.gpr);
-        // if (self.gpr[15] == 134219092 && self.gpr[0] == 134233028 && self.gpr[14] == 134220136) {
-        //     // dbg!(&self.gpr);
-        //     // dbg!("0");
-        // }
+        if (self.gpr[15] >= 134221712 && self.gpr[15] <= 134221748) {
+            dbg!(&self.gpr);
+            //     // dbg!("0");
+            if self.gpr[15] == 134221720 {
+                let a = 1;
+            }
+        }
         let (cycle, pipeline_status) = {
             match instruction {
                 arm::Instruction::AND(dec) => exec_arm_and(bus, dec, &mut self.gpr, &mut self.cpsr)?,
@@ -238,7 +235,15 @@ impl ARM {
                 arm::Instruction::LDM(dec) => exec_arm_ldm(bus, dec, &mut self.gpr)?,
                 arm::Instruction::STM(dec) => exec_arm_stm(bus, dec, &mut self.gpr)?,
                 arm::Instruction::MRS(dec) => exec_arm_mrs(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr)?,
-                arm::Instruction::MSR(dec) => exec_arm_msr(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr)?,
+                arm::Instruction::MSR(dec) => exec_arm_msr(
+                    bus,
+                    dec,
+                    &mut self.gpr,
+                    &mut self.cpsr,
+                    &mut self.spsr,
+                    &mut self.bank_gpr,
+                    &mut self.bank_spsr,
+                )?,
                 arm::Instruction::Undefined => unimplemented!(),
                 arm::Instruction::SWI => unimplemented!(),
                 // ArmOpcode::Unknown => self.execute_unknown(dec),
