@@ -8,13 +8,28 @@ pub enum CpuState {
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Mode {
-    User = 0,
-    FIQ,
-    IRQ,
-    Supervisor,
-    Abort,
-    Undefined,
-    System,
+    User = 0x10,
+    FIQ = 0x11,
+    IRQ = 0x12,
+    Supervisor = 0x13,
+    Abort = 0x17,
+    Undefined = 0x1B,
+    System = 0x1F,
+}
+
+impl From<u32> for Mode {
+    fn from(f: u32) -> Mode {
+        match f {
+            0x10 => Mode::User,
+            0x11 => Mode::FIQ,
+            0x12 => Mode::IRQ,
+            0x13 => Mode::Supervisor,
+            0x17 => Mode::Abort,
+            0x1B => Mode::Undefined,
+            0x1F => Mode::System,
+            _ => panic!("illegal mode value detected."),
+        }
+    }
 }
 
 const RAW_DEFAULT: u32 = MODE_SYSTEM; // | (1 << IRQ_DISABLE_BIT) | (1 << FIQ_DISABLE_BIT);
@@ -100,6 +115,10 @@ impl PSR {
         }
     }
 
+    pub fn set_mode(&mut self, mode: Mode) {
+        self.set_M(mode as u32);
+    }
+
     pub fn set_flags(&mut self, value: u32) {
         self.set_flag_bits(value >> 28);
     }
@@ -125,8 +144,8 @@ impl PSR {
         match cond {
             Cond::EQ => self.get_Z(),
             Cond::NE => !self.get_Z(),
-            Cond::CS_HS => self.get_C(),
-            Cond::CC_LO => !self.get_C(),
+            Cond::CS => self.get_C(),
+            Cond::CC => !self.get_C(),
             Cond::MI => self.get_N(),
             Cond::PL => !self.get_N(),
             Cond::VS => self.get_V(),

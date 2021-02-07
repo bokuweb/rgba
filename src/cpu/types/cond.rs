@@ -2,8 +2,8 @@
 pub enum Cond {
     EQ = 0b0000,
     NE = 0b0001,
-    CS_HS = 0b0010,
-    CC_LO = 0b0011,
+    CS = 0b0010,
+    CC = 0b0011,
     MI = 0b0100,
     PL = 0b0101,
     VS = 0b0110,
@@ -22,8 +22,8 @@ impl Into<Cond> for u32 {
         match self {
             0b0000 => Cond::EQ,
             0b0001 => Cond::NE,
-            0b0010 => Cond::CS_HS,
-            0b0011 => Cond::CC_LO,
+            0b0010 => Cond::CS,
+            0b0011 => Cond::CC,
             0b0100 => Cond::MI,
             0b0101 => Cond::PL,
             0b0110 => Cond::VS,
@@ -45,8 +45,8 @@ impl Into<Cond> for u16 {
         match self {
             0b0000 => Cond::EQ,
             0b0001 => Cond::NE,
-            0b0010 => Cond::CS_HS,
-            0b0011 => Cond::CC_LO,
+            0b0010 => Cond::CS,
+            0b0011 => Cond::CC,
             0b0100 => Cond::MI,
             0b0101 => Cond::PL,
             0b0110 => Cond::VS,
