@@ -8,6 +8,7 @@ pub struct BankSpsr {
     abt: PSR,
     irq: PSR,
     und: PSR,
+    escaped: PSR,
 }
 
 impl BankSpsr {
@@ -33,5 +34,13 @@ impl BankSpsr {
             Mode::Undefined => self.und,
             Mode::System => panic!("system has no bank spsr"),
         }
+    }
+
+    pub fn push(&mut self, value: PSR) {
+        self.escaped = value
+    }
+
+    pub fn pop(&mut self) -> PSR {
+        self.escaped
     }
 }

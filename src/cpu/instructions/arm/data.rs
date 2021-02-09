@@ -304,7 +304,8 @@ where
     let rn = dec.get_Rn() as usize;
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let rn = gpr[rn];
-        let (cmp, v) = rn.overflowing_sub(value);
+        let cmp = rn.wrapping_sub(value);
+        dbg!(cmp);
         cpsr.set_N(cmp >> 31 != 0);
         cpsr.set_Z(cmp == 0);
         // let (_, v) = (rn as i32).overflowing_sub(value as i32);
