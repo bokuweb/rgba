@@ -14,7 +14,7 @@
 .equ MENU, 	10
 
 .equ BAD_Rd,	0x10
-.equ BAD_Rn,	0x20
+.equ BAD_Rn,	0x20\
 
 .global main
 
@@ -252,7 +252,7 @@ DrawHex:
 @ r3: color
 	stmfd 	sp!,{r4-r10}
 
-	ldr 	r10,=palette
+	@ LDR 	r10,=palette
 	mov 	r3,r3,lsl#1
 	ldrh 	r3,[r10,r3]
 	
