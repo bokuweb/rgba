@@ -6,6 +6,7 @@ mod extra_memory;
 mod memory;
 mod multiple;
 mod psr_transfer;
+mod single_data_swap;
 
 pub use block_data_transfer::*;
 pub use branch::*;
@@ -15,6 +16,7 @@ pub use extra_memory::*;
 pub use memory::*;
 pub use multiple::*;
 pub use psr_transfer::*;
+pub use single_data_swap::*;
 
 use crate::cpu::types::Cond;
 use crate::types::Word;
@@ -30,6 +32,7 @@ pub enum InstructionType {
     Branch,
     BranchAndExchange,
     BlockDataTransfer,
+    SingleDataSwap,
     Swi,
 }
 
@@ -80,6 +83,8 @@ pub enum Instruction {
     SWI,
     MSR(PsrTransfer),
     MRS(PsrTransfer),
+    SWP(SingleDataSwap),
+    SWPB(SingleDataSwap),
     // NOP,
 }
 
@@ -127,6 +132,14 @@ fn decode_psr_transfer(raw: Word) -> Instruction {
     match raw {
         v if (v & 0x00b0_f000) == 0x0020_f000 => Instruction::MSR(PsrTransfer(raw)),
         _ => Instruction::MRS(PsrTransfer(raw)),
+    }
+}
+
+fn decode_single_data_swap(raw: Word) -> Instruction {
+    let dec = SingleDataSwap(raw);
+    match dec.get_B() {
+        true => Instruction::SWPB(dec),
+        false => Instruction::SWP(dec),
     }
 }
 
@@ -214,6 +227,7 @@ pub fn decode(raw: Word) -> Instruction {
 
     let instruction_type = match raw {
         v if ((v & 0x0ffffff0) == 0x012fff10) => InstructionType::BranchAndExchange,
+        v if (v & 0x0F80_0FF0) == 0x0100_0090 => InstructionType::SingleDataSwap,
         v if (v & 0x0E00_0000) == 0x0A00_0000 => InstructionType::Branch,
         v if (v & 0x0E00_0000) == 0x0800_0000 => InstructionType::BlockDataTransfer, // LDM and STM,
         v if (v & 0x0180_0000) == 0x0100_0000 && (v & 0x0010_0000) == 0x0 => InstructionType::PsrTransfer,
@@ -231,6 +245,7 @@ pub fn decode(raw: Word) -> Instruction {
     match instruction_type {
         InstructionType::Undefined => Instruction::Undefined,
         InstructionType::PsrTransfer => decode_psr_transfer(raw),
+        InstructionType::SingleDataSwap => decode_single_data_swap(raw),
         InstructionType::Multiple => decode_multiple(raw),
         InstructionType::Memory => decode_memory(raw),
         InstructionType::ExtraMemory => decode_extra_memory(raw),
