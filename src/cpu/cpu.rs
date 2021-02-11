@@ -3,6 +3,7 @@ use crate::cpu::constants::*;
 use crate::cpu::decoder::{arm, thumb};
 use crate::cpu::instructions::arm::{
     block_data_transfer::*, branch::*, branch_and_exchange::*, data::*, extra_memory::*, memory::*, multiple::*, psr_transfer::*,
+    single_data_swap::*,
 };
 
 use crate::cpu::instructions::thumb::*;
@@ -187,10 +188,10 @@ impl ARM {
         // // dbg!(&instruction, &self.gpr);
         //if (self.gpr[15] >= 134221712 && self.gpr[15] <= 134221748) {
         //    dbg!(&self.gpr);
-            //     // dbg!("0");
-            if self.gpr[15] == 134221768 {
-                let a = 1;
-            }
+        //     // dbg!("0");
+        if self.gpr[15] == 134221768 {
+            let a = 1;
+        }
         // }
         let (cycle, pipeline_status) = {
             match instruction {
@@ -244,6 +245,8 @@ impl ARM {
                     &mut self.bank_gpr,
                     &mut self.bank_spsr,
                 )?,
+                arm::Instruction::SWP(dec) => exec_arm_swp(bus, dec, &mut self.gpr)?,
+                arm::Instruction::SWPB(dec) => exec_arm_swpb(bus, dec, &mut self.gpr)?,
                 arm::Instruction::Undefined => unimplemented!(),
                 arm::Instruction::SWI => unimplemented!(),
                 // ArmOpcode::Unknown => self.execute_unknown(dec),
