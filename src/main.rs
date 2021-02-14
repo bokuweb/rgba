@@ -52,6 +52,7 @@ fn main() {
                         Keycode::Space => key.set_SELECT(io::KeyStatus::ON),
                         Keycode::Return => {
                             // std::env::set_var("RUST_LOG", "debug");
+                            // pretty_env_logger::init();
                             key.set_START(io::KeyStatus::ON)
                         }
                         Keycode::Up => key.set_UP(io::KeyStatus::ON),

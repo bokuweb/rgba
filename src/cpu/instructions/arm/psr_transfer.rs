@@ -15,20 +15,7 @@ where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
-    gpr[rd] = if dec.get_Pd() {
-        spsr.get()
-    } else {
-        dbg!(
-            cpsr.get_M(),
-            cpsr.get_T(),
-            cpsr.get_F(),
-            cpsr.get_I(),
-            cpsr.get_Z(),
-            cpsr.get_C(),
-            cpsr.get_V()
-        );
-        cpsr.get()
-    };
+    gpr[rd] = if dec.get_Pd() { spsr.get() } else { cpsr.get() };
     let cycle = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     Ok((cycle, PipelineStatus::Continue))
 }

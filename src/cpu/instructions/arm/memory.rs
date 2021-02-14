@@ -20,14 +20,12 @@ where
         let rm = dec.get_Rm() as usize;
         let sh = dec.get_sh().into();
         let shamt5 = dec.get_shamt5();
-        shift(sh, gpr[rm], shamt5, cpsr.get_C(), true)
+        shift(sh, gpr[rm], shamt5, cpsr.get_C(), false)
     };
     let offset_base = if dec.get_U() {
-        // dbg!("u");
-        (base + offset) as Word
+        (base.wrapping_add(offset) & 0x0FFF_FFFF) as Word
     } else {
-        // dbg!("minus");
-        (base - offset) as Word
+        (base.wrapping_sub(offset) & 0x0FFF_FFFF) as Word
     };
     if dec.get_P() {
         base = offset_base;
@@ -67,12 +65,12 @@ where
         let rm = dec.get_Rm() as usize;
         let sh = dec.get_sh().into();
         let shamt5 = dec.get_shamt5();
-        shift(sh, gpr[rm], shamt5, cpsr.get_C(), true)
+        shift(sh, gpr[rm], shamt5, cpsr.get_C(), false)
     };
     let offset_base = if dec.get_U() {
-        (base + offset) as Word
+        (base.wrapping_add(offset) & 0x0FFF_FFFF) as Word
     } else {
-        (base - offset) as Word
+        (base.wrapping_sub(offset) & 0x0FFF_FFFF) as Word
     };
     if dec.get_P() {
         base = offset_base;
@@ -102,15 +100,24 @@ pub fn exec_arm_ldr<T>(bus: &mut T, dec: Memory, gpr: &mut [Word; 16], cpsr: &PS
 where
     T: BusAccessor,
 {
-    // dbg!(&gpr);
+    if gpr[15] >= 134222536 {
+        dbg!("before LDR", &gpr);
+    }
+    if gpr[15] == 134222588 {
+        debug!("h");
+    }
     let rd = dec.get_Rd() as usize;
     let res = exec_memory_load(bus, gpr, dec, cpsr, |gpr, base| {
-        if base == 0x0300_0008 {
-           // dbg!(base, bus.read_word(base), &gpr);
-        }
         gpr[rd] = bus.read_word(base);
-        //  // dbg!(base);
     });
+    debug!("after LDR {:?}", &gpr);
+    if gpr[15] >= 134222536 {
+        dbg!("after LDR", &gpr);
+    }
+
+    if gpr[15] == 134222588 {
+        // panic!();
+    }
     res
 }
 
@@ -130,10 +137,8 @@ where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
-    let mut baseb = 0;
     let res = exec_memory_store(bus, gpr, dec, cpsr, |bus, gpr, base| {
         bus.write_word(base, gpr[rd]);
-        baseb = base;
     });
     res
 }
