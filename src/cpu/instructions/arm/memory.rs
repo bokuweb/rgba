@@ -100,15 +100,13 @@ pub fn exec_arm_ldr<T>(bus: &mut T, dec: Memory, gpr: &mut [Word; 16], cpsr: &PS
 where
     T: BusAccessor,
 {
-    if gpr[15] >= 134222536 {
-        dbg!("before LDR", &gpr);
-    }
-    if gpr[15] == 134222588 {
-        debug!("h");
-    }
     let rd = dec.get_Rd() as usize;
     let res = exec_memory_load(bus, gpr, dec, cpsr, |gpr, base| {
-        gpr[rd] = bus.read_word(base);
+        let data = bus.read_word(base & 0xFFFF_FFFC);
+        // The loaded data is rotated right by one, two or three bytes according to bits [1:0] of the address.
+        // https://www.keil.com/support/man/docs/armasm/armasm_dom1359731171041.htm
+        let rotate = base & 0x03;
+        gpr[rd] = data.rotate_right(rotate.wrapping_shl(3));
     });
     debug!("after LDR {:?}", &gpr);
     if gpr[15] >= 134222536 {
