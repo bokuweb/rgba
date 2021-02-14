@@ -204,7 +204,7 @@ impl BusAccessor for CpuBus {
     }
 
     fn write_byte(&mut self, addr: u32, data: Byte) {
-        debug!("write byte addr = 0x{:x} data = 0x{:x}", addr, data);
+        // debug!("write byte addr = 0x{:x} data = 0x{:x}", addr, data);
         if addr == 0x0300_0008 {
             // dbg!(data);
             // dbg!("h");
@@ -226,7 +226,7 @@ impl BusAccessor for CpuBus {
     }
 
     fn write_halfword(&mut self, addr: u32, data: HalfWord) {
-        debug!("write half word addr = 0x{:x} data = 0x{:x}", addr, data);
+        // debug!("write half word addr = 0x{:x} data = 0x{:x}", addr, data);
         if addr == 0x0300_0008 {
             // dbg!(data);
             // dbg!("h");
