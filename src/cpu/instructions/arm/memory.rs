@@ -57,6 +57,10 @@ where
     T: BusAccessor,
     F: FnOnce(&mut [u32; 16], u32),
 {
+    // if gpr[15] == g {
+    //     info!("");
+    //     // panic!();
+    // }
     let mut base = gpr[dec.get_Rn() as usize];
     // INFO: Treat as imm12 if not I.
     let offset = if !dec.get_I() {
@@ -76,16 +80,18 @@ where
         base = offset_base;
     }
 
-    load(gpr, base);
-
-    // 1N + 1I cycle
-    let cycle = bus.compute_cycle(base, AccessType::NonSeq(AccessWidth::Word)) + 1;
-
     if !dec.get_P() {
         gpr[dec.get_Rn() as usize] = offset_base;
     } else if dec.get_W() {
         gpr[dec.get_Rn() as usize] = base;
     }
+
+    load(gpr, base);
+
+    // 1N + 1I cycle
+    let cycle = bus.compute_cycle(base, AccessType::NonSeq(AccessWidth::Word)) + 1;
+
+    
     if dec.get_Rd() as usize == PC && dec.get_L() {
         Ok((cycle, PipelineStatus::Flush))
     } else {
@@ -100,6 +106,9 @@ pub fn exec_arm_ldr<T>(bus: &mut T, dec: Memory, gpr: &mut [Word; 16], cpsr: &PS
 where
     T: BusAccessor,
 {
+    if gpr[15] >= 134222536 {
+        dbg!("before LDR", &gpr);
+    }
     let rd = dec.get_Rd() as usize;
     let res = exec_memory_load(bus, gpr, dec, cpsr, |gpr, base| {
         let data = bus.read_word(base & 0xFFFF_FFFC);
@@ -113,9 +122,6 @@ where
         dbg!("after LDR", &gpr);
     }
 
-    if gpr[15] == 134222588 {
-        // panic!();
-    }
     res
 }
 
