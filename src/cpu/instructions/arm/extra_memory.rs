@@ -15,21 +15,22 @@ where
 
     let offset = if dec.get_I() { dec.get_imm8() } else { gpr[dec.get_Rm() as usize] };
     let offset_base = if dec.get_U() {
-        (base + offset) as Word
+        (base.wrapping_add(offset) & 0x0FFF_FFFF) as Word
     } else {
-        (base - offset) as Word
+        (base.wrapping_sub(offset) & 0x0FFF_FFFF) as Word
     };
     if dec.get_P() {
         base = offset_base;
     }
-    load(gpr, base);
-    let access_type = AccessType::NonSeq(AccessWidth::Word);
-    let load_cycle = bus.compute_cycle(base, access_type);
     if !dec.get_P() {
         gpr[dec.get_Rn() as usize] = offset_base;
     } else if dec.get_W() {
         gpr[dec.get_Rn() as usize] = base;
     }
+
+    load(gpr, base);
+    let access_type = AccessType::NonSeq(AccessWidth::Word);
+    let load_cycle = bus.compute_cycle(base, access_type);
 
     // load cycle + 1I cycle
     let cycle = load_cycle + 1;
@@ -55,9 +56,9 @@ where
     let mut base = gpr[dec.get_Rn() as usize];
     let offset = if dec.get_I() { dec.get_imm8() } else { gpr[dec.get_Rm() as usize] };
     let offset_base = if dec.get_U() {
-        (base + offset) as Word
+        (base.wrapping_add(offset) & 0x0FFF_FFFF) as Word
     } else {
-        (base - offset) as Word
+        (base.wrapping_sub(offset) & 0x0FFF_FFFF) as Word
     };
     if dec.get_P() {
         base = offset_base;
