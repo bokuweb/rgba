@@ -32,47 +32,24 @@ pub fn exec_arm_msr<T>(
 where
     T: BusAccessor,
 {
-    dbg!("Before msr", &gpr);
     let value = if dec.get_I() {
-        dbg!(&dec, dec.get_imm(), dec.get_rotate(), dec.get_C());
         ror(dec.get_imm(), dec.get_rotate().wrapping_shl(1), cpsr.get_C(), false)
     } else {
-        // dbg!(&gpr, dec.get_Rm());
         gpr[dec.get_Rm() as usize]
     };
-    dbg!(value);
 
     let mut mask = 0;
     if dec.get_F() {
         mask |= 0xff << 24;
     }
-    // if dec.get_S() {
-    //     mask |= 0xff << 16;
-    // }
-    // if dec.get_X() {
-    //     mask |= 0xff << 8;
-    // }
     if dec.get_C() {
         mask |= 0xff;
     }
 
-    //let current_mode = cpsr.get_mode();
-    //match current_mode {
-    //    Mode::User => {
-    //        dbg!("user");
-    //        cpsr.set_flags(value);
-    //    }
-    //    _ => {
     if dec.get_Pd() {
-        dbg!("get_pd");
         spsr.set(spsr.get() & !mask | value & mask)
-    // spsr.set(value);
     } else {
         if mask & 0xF000_0000 != 0 {
-            dbg!(value & 0x2000_0000 != 0);
-            dbg!(value & 0x8000_0000 != 0);
-            dbg!(value & 0x4000_0000 != 0);
-            dbg!(format!("0x{:x}", value));
             cpsr.set_N(value & 0x8000_0000 != 0);
             cpsr.set_Z(value & 0x4000_0000 != 0);
             cpsr.set_C(value & 0x2000_0000 != 0);
@@ -93,7 +70,6 @@ where
             if current_mode != new_mode {
                 // TODO: support FIQ
                 if current_mode == Mode::FIQ {
-                    dbg!(&gpr, current_mode);
                     bank_gpr.write(current_mode, 8, gpr[8]);
                     bank_gpr.write(current_mode, 9, gpr[9]);
                     bank_gpr.write(current_mode, 10, gpr[10]);
@@ -108,7 +84,6 @@ where
                 }
 
                 if new_mode == Mode::FIQ {
-                    dbg!(&gpr, new_mode);
                     bank_gpr.push(8, gpr[8]);
                     bank_gpr.push(9, gpr[9]);
                     bank_gpr.push(10, gpr[10]);

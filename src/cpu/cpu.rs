@@ -144,7 +144,9 @@ impl ARM {
             CpuState::ARM => {
                 let fetched = self.get_arm_executable(bus);
                 let cond: Cond = fetched.wrapping_shr(28).into();
-                // dbg!(cond, self.cpsr.condition_ok(cond));
+                if self.gpr[15] >= 134224832 && self.gpr[15] <= 134224892 {
+                    dbg!("🔥", &self.gpr, self.cpsr.condition_ok(cond));
+                }
                 if !self.cpsr.condition_ok(cond) {
                     let s = bus.compute_cycle(self.gpr[PC], AccessType::Seq(AccessWidth::Word));
                     self.increment_pc();
@@ -189,8 +191,11 @@ impl ARM {
         //if (self.gpr[15] >= 134221712 && self.gpr[15] <= 134221748) {
         //    dbg!(&self.gpr);
         //     // dbg!("0");
-        if self.gpr[15] == 134221768 {
+        if self.gpr[15] == 134224848 {
             let a = 1;
+        }
+        if self.gpr[15] >= 134224832 && self.gpr[15] <= 134224860 {
+            dbg!('🔥', &instruction, &self.gpr);
         }
         // }
         let (cycle, pipeline_status) = {

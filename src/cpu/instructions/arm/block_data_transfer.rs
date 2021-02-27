@@ -24,9 +24,10 @@ where
     let mut cycle: Cycle = 0;
     let mut is_n_cycle = true;
 
+    dbg!("before LDM", &gpr);
     let register_list = dec.get_register_list();
     let offset: i64 = if dec.get_U() { 4 } else { -4 };
-    for mut i in 0..0x10 {
+    for i in 0..0x10 {
         let reg = if !dec.get_U() { 0x0F - i } else { i } as usize;
         if register_list & (1 << reg) != 0 {
             if dec.get_P() {
@@ -41,14 +42,15 @@ where
             };
             cycle += bus.compute_cycle(addr, access_type);
             let data = bus.read_word(addr & 0xFFFF_FFFC);
+            dbg!("LDM", addr, data);
+
             gpr[reg] = data;
             if !dec.get_P() {
                 base = base.wrapping_add(offset);
             }
         }
     }
-    // TODO: Handle S flag.
-    if dec.get_W() {
+    if dec.get_W() && register_list & (1 << dec.get_Rn()) == 0 {
         gpr[dec.get_Rn() as usize] = base as u32;
     }
 
@@ -59,6 +61,7 @@ where
     // Consume 1I cycle.
     let cycle = cycle + 1;
 
+    dbg!("after LDM", &gpr);
     // If PC is loaded
     if register_list & 0x8000 != 0 {
         Ok((cycle, PipelineStatus::Flush))
@@ -73,6 +76,7 @@ pub fn exec_arm_stm<T>(bus: &mut T, dec: BlockDataTransfer, gpr: &mut [Word; 16]
 where
     T: BusAccessor,
 {
+    dbg!("before STM", &gpr);
     let mut base: i64 = gpr[dec.get_Rn() as usize] as i64;
     let mut cycle: Cycle = 0;
     let mut is_n_cycle = true;
@@ -101,9 +105,12 @@ where
             }
         }
     }
-    // TODO: Handle S flag.
     if dec.get_W() {
         gpr[dec.get_Rn() as usize] = base as u32;
+    }
+
+    if dec.get_S() {
+        unimplemented!();
     }
 
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));

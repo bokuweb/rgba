@@ -91,7 +91,6 @@ where
     // 1N + 1I cycle
     let cycle = bus.compute_cycle(base, AccessType::NonSeq(AccessWidth::Word)) + 1;
 
-    
     if dec.get_Rd() as usize == PC && dec.get_L() {
         Ok((cycle, PipelineStatus::Flush))
     } else {
@@ -106,9 +105,9 @@ pub fn exec_arm_ldr<T>(bus: &mut T, dec: Memory, gpr: &mut [Word; 16], cpsr: &PS
 where
     T: BusAccessor,
 {
-    if gpr[15] >= 134222536 {
-        dbg!("before LDR", &gpr);
-    }
+    // if gpr[15] >= 134222536 {
+    //     dbg!("before LDR", &gpr);
+    // }
     let rd = dec.get_Rd() as usize;
     let res = exec_memory_load(bus, gpr, dec, cpsr, |gpr, base| {
         let data = bus.read_word(base & 0xFFFF_FFFC);
@@ -117,10 +116,10 @@ where
         let rotate = base & 0x03;
         gpr[rd] = data.rotate_right(rotate.wrapping_shl(3));
     });
-    debug!("after LDR {:?}", &gpr);
-    if gpr[15] >= 134222536 {
-        dbg!("after LDR", &gpr);
-    }
+    // debug!("after LDR {:?}", &gpr);
+    // if gpr[15] >= 134222536 {
+    //     dbg!("after LDR", &gpr);
+    // }
 
     res
 }
@@ -141,7 +140,9 @@ where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
+    dbg!("Before STR", &gpr);
     let res = exec_memory_store(bus, gpr, dec, cpsr, |bus, gpr, base| {
+        dbg!(format!("{:X}", base));
         bus.write_word(base, gpr[rd]);
     });
     res
