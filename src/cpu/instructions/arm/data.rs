@@ -305,7 +305,6 @@ where
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let rn = gpr[rn];
         let cmp = rn.wrapping_sub(value);
-        dbg!(cmp);
         cpsr.set_N(cmp >> 31 != 0);
         cpsr.set_Z(cmp == 0);
         // let (_, v) = (rn as i32).overflowing_sub(value as i32);
@@ -313,6 +312,7 @@ where
         cpsr.set_V(v);
         // NOTE: Should we consider to shifted carry?
         cpsr.set_C(rn >= value);
+        dbg!("CMP", cmp >> 31 != 0, cmp == 0, v, rn >= value, cmp, value, rn);
     })
 }
 
