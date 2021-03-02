@@ -23,9 +23,12 @@ where
     let mut base: i64 = gpr[dec.get_Rn() as usize] as i64;
     let mut cycle: Cycle = 0;
     let mut is_n_cycle = true;
+    let mut is_first_entry = true;
+    let mut is_rn_skipped = false;
 
     dbg!("before LDM", &gpr);
     let register_list = dec.get_register_list();
+    dbg!(register_list);
     let offset: i64 = if dec.get_U() { 4 } else { -4 };
     for i in 0..0x10 {
         let reg = if !dec.get_U() { 0x0F - i } else { i } as usize;
@@ -34,23 +37,33 @@ where
                 base = base.wrapping_add(offset);
             }
             let addr = base as Word;
-            let access_type = if is_n_cycle {
-                is_n_cycle = false;
-                AccessType::NonSeq(AccessWidth::Word)
-            } else {
-                AccessType::Seq(AccessWidth::Word)
-            };
-            cycle += bus.compute_cycle(addr, access_type);
-            let data = bus.read_word(addr & 0xFFFF_FFFC);
-            dbg!("LDM", addr, data);
 
-            gpr[reg] = data;
+            if !(dec.get_W() && (reg == dec.get_Rn() as usize) && is_first_entry) {
+                let access_type = if is_n_cycle {
+                    is_n_cycle = false;
+                    AccessType::NonSeq(AccessWidth::Word)
+                } else {
+                    AccessType::Seq(AccessWidth::Word)
+                };
+                cycle += bus.compute_cycle(addr, access_type);
+                let data = bus.read_word(addr & 0xFFFF_FFFC);
+                dbg!("LDM", addr, data);
+
+                gpr[reg] = data;
+            } else {
+                is_rn_skipped = true;
+            }
+
+            is_first_entry = false;
+
             if !dec.get_P() {
                 base = base.wrapping_add(offset);
             }
         }
     }
-    if dec.get_W() && register_list & (1 << dec.get_Rn()) == 0 {
+
+    dbg!(dec.get_Rn(), base);
+    if dec.get_W() && ((register_list & (1 << dec.get_Rn()) == 0) || is_rn_skipped) {
         gpr[dec.get_Rn() as usize] = base as u32;
     }
 

@@ -81,6 +81,9 @@ where
                 cpsr.set_C(c);
             }
         }
+        if gpr[15] >= 134224832 && gpr[15] <= 134224892 {
+            dbg!("🔥value", value);
+        }
         gpr[rd] = value;
     })
 }
