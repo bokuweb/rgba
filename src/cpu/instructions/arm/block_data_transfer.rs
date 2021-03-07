@@ -30,6 +30,9 @@ where
     let register_list = dec.get_register_list();
     dbg!(register_list);
     let offset: i64 = if dec.get_U() { 4 } else { -4 };
+    if gpr[15] == 134225100 {
+        let a = 0;
+    }
     for i in 0..0x10 {
         let reg = if !dec.get_U() { 0x0F - i } else { i } as usize;
         if register_list & (1 << reg) != 0 {
@@ -38,7 +41,7 @@ where
             }
             let addr = base as Word;
 
-            if !(dec.get_W() && (reg == dec.get_Rn() as usize) && is_first_entry) {
+            if !(dec.get_W() && (i == dec.get_Rn() as usize) && is_first_entry) {
                 let access_type = if is_n_cycle {
                     is_n_cycle = false;
                     AccessType::NonSeq(AccessWidth::Word)
@@ -93,6 +96,8 @@ where
     let mut base: i64 = gpr[dec.get_Rn() as usize] as i64;
     let mut cycle: Cycle = 0;
     let mut is_n_cycle = true;
+    let mut is_first_entry = true;
+    let mut is_rn_skipped = false;
 
     let register_list = dec.get_register_list();
     let offset: i64 = if dec.get_U() { 4 } else { -4 };
@@ -105,17 +110,23 @@ where
                 base = base.wrapping_add(offset);
             }
             let addr = base as Word;
-            let access_type = if is_n_cycle {
-                is_n_cycle = false;
-                AccessType::NonSeq(AccessWidth::Word)
+
+            if !(dec.get_W() && (i == dec.get_Rn() as usize) && is_first_entry) {
+                let access_type = if is_n_cycle {
+                    is_n_cycle = false;
+                    AccessType::NonSeq(AccessWidth::Word)
+                } else {
+                    AccessType::Seq(AccessWidth::Word)
+                };
+                cycle += bus.compute_cycle(addr, access_type);
+                bus.write_word(addr, gpr[reg] as Word);
+                if !dec.get_P() {
+                    base = base.wrapping_add(offset);
+                }
             } else {
-                AccessType::Seq(AccessWidth::Word)
-            };
-            cycle += bus.compute_cycle(addr, access_type);
-            bus.write_word(addr, gpr[reg] as Word);
-            if !dec.get_P() {
-                base = base.wrapping_add(offset);
+                is_rn_skipped = true;
             }
+            is_first_entry = false;
         }
     }
     if dec.get_W() {
@@ -125,6 +136,8 @@ where
     if dec.get_S() {
         unimplemented!();
     }
+
+    dbg!("after STM", &gpr);
 
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));
     Ok((cycle, PipelineStatus::Continue))
