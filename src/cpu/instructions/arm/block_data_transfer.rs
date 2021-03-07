@@ -15,59 +15,95 @@ use crate::types::*;
 // S = Restore force user bit. S specifies if banked register access should occur when in privileged modes [or if R15 and 26 bit and user mode, if the PSR should be written while PC is updated]
 // W = 1: Auto Index
 // L = 0: Store / 1: Load
-
 pub fn exec_arm_ldm<T>(bus: &mut T, dec: BlockDataTransfer, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
-    let mut base: i64 = gpr[dec.get_Rn() as usize] as i64;
     let mut cycle: Cycle = 0;
     let mut is_n_cycle = true;
-    let mut is_first_entry = true;
-    let mut is_rn_skipped = false;
+    // let mut is_first_entry = true;
+    // let mut is_rn_skipped = false;
 
     dbg!("before LDM", &gpr);
-    let register_list = dec.get_register_list();
+    let mut register_list = dec.get_register_list();
     dbg!(register_list);
-    let offset: i64 = if dec.get_U() { 4 } else { -4 };
-    if gpr[15] == 134225100 {
-        let a = 0;
-    }
-    for i in 0..0x10 {
-        let reg = if !dec.get_U() { 0x0F - i } else { i } as usize;
-        if register_list & (1 << reg) != 0 {
-            if dec.get_P() {
-                base = base.wrapping_add(offset);
+
+    // let mut address = 0;
+    let mut immediate = 0;
+    let mut offset = 0;
+    if dec.get_U() {
+        if dec.get_P() {
+            immediate = 4;
+        }
+        // for let m = 0x01, i = 0; i < 16; m <<= 1, ++i) {
+        for i in 1..0x10 {
+            let m = 0x01 << i;
+            if register_list & m != 0 {
+                if dec.get_W() && i == dec.get_Rn() && offset == 0 {
+                    register_list &= !m;
+                    immediate += 4;
+                }
+                offset += 4;
             }
-            let addr = base as Word;
-
-            if !(dec.get_W() && (i == dec.get_Rn() as usize) && is_first_entry) {
-                let access_type = if is_n_cycle {
-                    is_n_cycle = false;
-                    AccessType::NonSeq(AccessWidth::Word)
-                } else {
-                    AccessType::Seq(AccessWidth::Word)
-                };
-                cycle += bus.compute_cycle(addr, access_type);
-                let data = bus.read_word(addr & 0xFFFF_FFFC);
-                dbg!("LDM", addr, data);
-
-                gpr[reg] = data;
-            } else {
-                is_rn_skipped = true;
-            }
-
-            is_first_entry = false;
-
-            if !dec.get_P() {
-                base = base.wrapping_add(offset);
+        }
+    } else {
+        if !dec.get_P() {
+            immediate = 4;
+        }
+        for i in 1..0x10 {
+            let m = 0x01 << i;
+            if register_list & m != 0 {
+                if dec.get_W() && i == dec.get_Rn() && offset == 0 {
+                    register_list &= !m;
+                    immediate += 4;
+                }
+                immediate -= 4;
+                offset -= 4;
             }
         }
     }
 
-    dbg!(dec.get_Rn(), base);
-    if dec.get_W() && ((register_list & (1 << dec.get_Rn()) == 0) || is_rn_skipped) {
-        gpr[dec.get_Rn() as usize] = base as u32;
+    dbg!(register_list);
+
+    let base: i64 = gpr[dec.get_Rn() as usize] as i64;
+    let mut address = base.wrapping_add(immediate) as Word;
+
+    if dec.get_W() {
+        let v = gpr[dec.get_Rn() as usize] as i64 + offset as i64;
+        gpr[dec.get_Rn() as usize] = v as u32;
+    }
+
+    // let offset: i64 = if dec.get_U() { 4 } else { -4 };
+    for i in 0..0x10 {
+        // let reg = if !dec.get_U() { 0x0F - i } else { i } as usize;
+        if register_list & (1 << i) != 0 {
+            //if dec.get_P() {
+            //    base = base.wrapping_add(offset);
+            //}
+            //let addr = base as Word;
+            //if !(dec.get_W() && (i == dec.get_Rn() as usize) && is_first_entry) {
+            let access_type = if is_n_cycle {
+                is_n_cycle = false;
+                AccessType::NonSeq(AccessWidth::Word)
+            } else {
+                AccessType::Seq(AccessWidth::Word)
+            };
+            cycle += bus.compute_cycle(address, access_type);
+            let data = bus.read_word(address & 0xFFFF_FFFC);
+            dbg!("LDM", address, data);
+            //
+            gpr[i] = data;
+            address = address.wrapping_add(4);
+            //} else {
+            //    is_rn_skipped = true;
+            //}
+            //
+            //is_first_entry = false;
+            //
+            //if !dec.get_P() {
+            //    base = base.wrapping_add(offset);
+            //}
+        }
     }
 
     if dec.get_S() {
