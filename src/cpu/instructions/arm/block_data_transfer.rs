@@ -4,6 +4,10 @@ use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::*;
 use crate::cpu::instructions::*;
+use crate::cpu::registers::{
+    psr::{Mode, PSR},
+    BankGpr, BankSpsr,
+};
 use crate::types::*;
 
 // 31    28 27  25 24  23  22  21  20 19    16 15                      0
@@ -15,7 +19,15 @@ use crate::types::*;
 // S = Restore force user bit. S specifies if banked register access should occur when in privileged modes [or if R15 and 26 bit and user mode, if the PSR should be written while PC is updated]
 // W = 1: Auto Index
 // L = 0: Store / 1: Load
-pub fn exec_arm_ldm<T>(bus: &mut T, dec: BlockDataTransfer, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
+pub fn exec_arm_ldm<T>(
+    bus: &mut T,
+    dec: BlockDataTransfer,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -67,10 +79,19 @@ where
 
     let base: i64 = gpr[dec.get_Rn() as usize] as i64;
     let mut address = base.wrapping_add(immediate) as Word;
+    let current_mode = cpsr.get_mode();
 
     if dec.get_W() {
         let v = gpr[dec.get_Rn() as usize] as i64 + offset as i64;
         gpr[dec.get_Rn() as usize] = v as u32;
+    }
+    // The lowest Register in Rlist (R0 if its in the list) will be loaded/stored to/from the lowest memory address.
+    // Internally, the rlist register are always processed with INCREASING addresses
+    // (ie. for DECREASING addressing modes, the CPU does first calculate the lowest address,
+    // and does then process rlist with increasing addresses; this detail can be important when accessing memory mapped I/O ports).
+
+    if dec.get_S() {
+        cpsr.switch_mode(Mode::System, gpr, spsr, bank_gpr, bank_spsr);
     }
 
     // let offset: i64 = if dec.get_U() { 4 } else { -4 };
@@ -107,7 +128,7 @@ where
     }
 
     if dec.get_S() {
-        unimplemented!();
+        cpsr.switch_mode(current_mode, gpr, spsr, bank_gpr, bank_spsr);
     }
 
     // Consume 1I cycle.
