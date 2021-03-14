@@ -114,16 +114,15 @@ where
             // dbg!("LDM", address, data);
             //
             gpr[i] = data;
-            address = address.wrapping_add(4);
-            //} else {
-            //    is_rn_skipped = true;
-            //}
-            //
-            //is_first_entry = false;
-            //
-            //if !dec.get_P() {
-            //    base = base.wrapping_add(offset);
-            //}
+            address = address.wrapping_add(4); //} else {
+                                               //    is_rn_skipped = true;
+                                               //}
+                                               //
+                                               //is_first_entry = false;
+                                               //
+                                               //if !dec.get_P() {
+                                               //    base = base.wrapping_add(offset);
+                                               //}
         }
     }
 
@@ -156,38 +155,69 @@ where
     let mut is_first_entry = true;
     let mut is_rn_skipped = false;
 
-    let register_list = dec.get_register_list();
-    let offset: i64 = if dec.get_U() { 4 } else { -4 };
-
-    for i in 0..0x10 {
-        let reg = if !dec.get_U() { 0x0F - i } else { i } as usize;
-        //    for i in 0..0x10 {
-        if register_list & (1 << reg) != 0 {
-            if dec.get_P() {
-                base = base.wrapping_add(offset);
-            }
-            let addr = base as Word;
-
-            if !(dec.get_W() && (i == dec.get_Rn() as usize) && is_first_entry) {
-                let access_type = if is_n_cycle {
-                    is_n_cycle = false;
-                    AccessType::NonSeq(AccessWidth::Word)
-                } else {
-                    AccessType::Seq(AccessWidth::Word)
-                };
-                cycle += bus.compute_cycle(addr, access_type);
-                bus.write_word(addr, gpr[reg] as Word);
-                if !dec.get_P() {
-                    base = base.wrapping_add(offset);
+    let mut register_list = dec.get_register_list();
+    let mut immediate = 0;
+    let mut offset = 0;
+    let mut overwrap = false;
+    if dec.get_U() {
+        if dec.get_P() {
+            immediate = 4;
+        }
+        // for let m = 0x01, i = 0; i < 16; m <<= 1, ++i) {
+        for i in 0..0x10 {
+            let m = 0x01 << i;
+            if register_list & m != 0 {
+                if dec.get_W() && i == dec.get_Rn() && offset == 0 {
+                    register_list &= !m;
+                    immediate += 4;
                 }
-            } else {
-                is_rn_skipped = true;
+                offset += 4;
             }
-            is_first_entry = false;
+        }
+    } else {
+        if !dec.get_P() {
+            immediate = 4;
+        }
+        for i in 0..0x10 {
+            let m = 0x01 << i;
+            if register_list & m != 0 {
+                if dec.get_W() && i == dec.get_Rn() && offset == 0 {
+                    register_list &= !m;
+                    immediate += 4;
+                    overwrap = true;
+                }
+                immediate -= 4;
+                offset -= 4;
+            }
         }
     }
+
+    let base: i64 = gpr[dec.get_Rn() as usize] as i64;
+    let mut address = base.wrapping_add(immediate) as Word;
+    // let current_mode = cpsr.get_mode();
+
     if dec.get_W() {
-        gpr[dec.get_Rn() as usize] = base as u32;
+        let v = gpr[dec.get_Rn() as usize] as i64 + offset as i64;
+        gpr[dec.get_Rn() as usize] = v as u32;
+        if overwrap {
+            bus.write_word(address - 4, gpr[dec.get_Rn() as usize] as Word);
+        }
+    }
+
+    for i in 0..0x10 {
+        // let reg = if !dec.get_U() { 0x0F - i } else { i } as usize;
+        //    for i in 0..0x10 {
+        if register_list & (1 << i) != 0 {
+            let access_type = if is_n_cycle {
+                is_n_cycle = false;
+                AccessType::NonSeq(AccessWidth::Word)
+            } else {
+                AccessType::Seq(AccessWidth::Word)
+            };
+            cycle += bus.compute_cycle(address, access_type);
+            bus.write_word(address, gpr[i] as Word);
+            address = address.wrapping_add(4);
+        }
     }
 
     if dec.get_S() {
