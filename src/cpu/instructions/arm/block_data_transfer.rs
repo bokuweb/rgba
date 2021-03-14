@@ -36,9 +36,9 @@ where
     // let mut is_first_entry = true;
     // let mut is_rn_skipped = false;
 
-    dbg!("before LDM", &gpr);
+    // dbg!("before LDM", &gpr);
     let mut register_list = dec.get_register_list();
-    dbg!(register_list);
+    // dbg!(register_list);
 
     // let mut address = 0;
     let mut immediate = 0;
@@ -48,7 +48,7 @@ where
             immediate = 4;
         }
         // for let m = 0x01, i = 0; i < 16; m <<= 1, ++i) {
-        for i in 1..0x10 {
+        for i in 0..0x10 {
             let m = 0x01 << i;
             if register_list & m != 0 {
                 if dec.get_W() && i == dec.get_Rn() && offset == 0 {
@@ -62,7 +62,7 @@ where
         if !dec.get_P() {
             immediate = 4;
         }
-        for i in 1..0x10 {
+        for i in 0..0x10 {
             let m = 0x01 << i;
             if register_list & m != 0 {
                 if dec.get_W() && i == dec.get_Rn() && offset == 0 {
@@ -75,7 +75,7 @@ where
         }
     }
 
-    dbg!(register_list);
+    // dbg!(register_list);
 
     let base: i64 = gpr[dec.get_Rn() as usize] as i64;
     let mut address = base.wrapping_add(immediate) as Word;
@@ -111,7 +111,7 @@ where
             };
             cycle += bus.compute_cycle(address, access_type);
             let data = bus.read_word(address & 0xFFFF_FFFC);
-            dbg!("LDM", address, data);
+            // dbg!("LDM", address, data);
             //
             gpr[i] = data;
             address = address.wrapping_add(4);
@@ -134,7 +134,7 @@ where
     // Consume 1I cycle.
     let cycle = cycle + 1;
 
-    dbg!("after LDM", &gpr);
+    // dbg!("after LDM", &gpr);
     // If PC is loaded
     if register_list & 0x8000 != 0 {
         Ok((cycle, PipelineStatus::Flush))

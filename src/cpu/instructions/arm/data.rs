@@ -315,7 +315,6 @@ where
         cpsr.set_V(v);
         // NOTE: Should we consider to shifted carry?
         cpsr.set_C(rn >= value);
-        dbg!("CMP", cmp >> 31 != 0, cmp == 0, v, rn >= value, cmp, value, rn);
     })
 }
 
@@ -425,6 +424,5 @@ where
             unimplemented!()
         }
         gpr[rd] = value;
-        dbg!(&gpr);
     })
 }
