@@ -31,6 +31,9 @@ pub fn exec_arm_ldm<T>(
 where
     T: BusAccessor,
 {
+    if 134219024 <= gpr[15] && 134218980 >= gpr[15] {
+        dbg!("Before ldm", &gpr);
+    }
     let mut cycle: Cycle = 0;
     let mut is_n_cycle = true;
     // let mut is_first_entry = true;
@@ -133,6 +136,10 @@ where
     // Consume 1I cycle.
     let cycle = cycle + 1;
 
+    if 134219024 <= gpr[15] && 134218980 >= gpr[15] {
+        dbg!("After ldm", &gpr);
+    }
+
     // dbg!("after LDM", &gpr);
     // If PC is loaded
     if register_list & 0x8000 != 0 {
@@ -155,6 +162,10 @@ where
     let mut is_first_entry = true;
     let mut is_rn_skipped = false;
 
+    if dec.get_S() {
+        unimplemented!();
+    }
+
     let mut register_list = dec.get_register_list();
     let mut immediate = 0;
     let mut offset = 0;
@@ -170,6 +181,7 @@ where
                 if dec.get_W() && i == dec.get_Rn() && offset == 0 {
                     register_list &= !m;
                     immediate += 4;
+                    overwrap = true;
                 }
                 offset += 4;
             }
@@ -198,10 +210,15 @@ where
 
     if dec.get_W() {
         let v = gpr[dec.get_Rn() as usize] as i64 + offset as i64;
-        gpr[dec.get_Rn() as usize] = v as u32;
+        dbg!(overwrap);
         if overwrap {
-            bus.write_word(address - 4, gpr[dec.get_Rn() as usize] as Word);
+            dbg!((gpr[dec.get_Rn() as usize] as i64 + immediate - 4), gpr[dec.get_Rn() as usize], immediate);
+            bus.write_word(
+                (gpr[dec.get_Rn() as usize] as i64 + immediate - 4) as Word,
+                gpr[dec.get_Rn() as usize] as Word,
+            );
         }
+        gpr[dec.get_Rn() as usize] = v as u32;
     }
 
     for i in 0..0x10 {

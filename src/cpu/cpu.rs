@@ -192,7 +192,7 @@ impl ARM {
         //    dbg!(&self.gpr);
         //     // dbg!("0");
 
-        if self.gpr[15] >= 134224832 && self.gpr[15] <= 134224860 {
+        if self.gpr[15] >= 134225848 && self.gpr[15] <= 134225892 {
             dbg!('🔥', &instruction, &self.gpr);
         }
         // }

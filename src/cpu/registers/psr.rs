@@ -143,59 +143,65 @@ impl PSR {
     }
 
     pub fn switch_mode(&mut self, new_mode: Mode, gpr: &mut [Word; 16], spsr: &mut PSR, bank_gpr: &mut BankGpr, bank_spsr: &mut BankSpsr) {
+        if new_mode == self.get_mode() {
+            return;
+        }
+
         // TODO: move to PSR?
         //       switch mode
         // let current_value = cpsr.get();
-        let current_mode = self.get_mode();
-        // let new_mode = self.get_mode();
-        if current_mode != new_mode {
-            // TODO: support FIQ
-            if current_mode == Mode::FIQ {
-                bank_gpr.write(current_mode, 8, gpr[8]);
-                bank_gpr.write(current_mode, 9, gpr[9]);
-                bank_gpr.write(current_mode, 10, gpr[10]);
-                bank_gpr.write(current_mode, 11, gpr[11]);
-                bank_gpr.write(current_mode, 12, gpr[12]);
+        if new_mode != Mode::User || new_mode != Mode::System {
+            let current_mode = self.get_mode();
+            // let new_mode = self.get_mode();
+            if current_mode != new_mode {
+                // TODO: support FIQ
+                if current_mode == Mode::FIQ {
+                    bank_gpr.write(current_mode, 8, gpr[8]);
+                    bank_gpr.write(current_mode, 9, gpr[9]);
+                    bank_gpr.write(current_mode, 10, gpr[10]);
+                    bank_gpr.write(current_mode, 11, gpr[11]);
+                    bank_gpr.write(current_mode, 12, gpr[12]);
 
-                gpr[8] = bank_gpr.pop(8);
-                gpr[9] = bank_gpr.pop(9);
-                gpr[10] = bank_gpr.pop(10);
-                gpr[11] = bank_gpr.pop(11);
-                gpr[12] = bank_gpr.pop(12);
-            }
+                    gpr[8] = bank_gpr.pop(8);
+                    gpr[9] = bank_gpr.pop(9);
+                    gpr[10] = bank_gpr.pop(10);
+                    gpr[11] = bank_gpr.pop(11);
+                    gpr[12] = bank_gpr.pop(12);
+                }
 
-            if new_mode == Mode::FIQ {
-                bank_gpr.push(8, gpr[8]);
-                bank_gpr.push(9, gpr[9]);
-                bank_gpr.push(10, gpr[10]);
-                bank_gpr.push(11, gpr[11]);
-                bank_gpr.push(12, gpr[12]);
+                if new_mode == Mode::FIQ {
+                    bank_gpr.push(8, gpr[8]);
+                    bank_gpr.push(9, gpr[9]);
+                    bank_gpr.push(10, gpr[10]);
+                    bank_gpr.push(11, gpr[11]);
+                    bank_gpr.push(12, gpr[12]);
 
-                gpr[8] = bank_gpr.read(new_mode, 8);
-                gpr[9] = bank_gpr.read(new_mode, 9);
-                gpr[10] = bank_gpr.read(new_mode, 10);
-                gpr[11] = bank_gpr.read(new_mode, 11);
-                gpr[12] = bank_gpr.read(new_mode, 12);
-            }
+                    gpr[8] = bank_gpr.read(new_mode, 8);
+                    gpr[9] = bank_gpr.read(new_mode, 9);
+                    gpr[10] = bank_gpr.read(new_mode, 10);
+                    gpr[11] = bank_gpr.read(new_mode, 11);
+                    gpr[12] = bank_gpr.read(new_mode, 12);
+                }
 
-            if current_mode != Mode::System && current_mode != Mode::User {
-                bank_gpr.write(current_mode, SP, gpr[SP]);
-                bank_gpr.write(current_mode, LR, gpr[LR]);
-                bank_spsr.write(current_mode, *spsr);
+                if current_mode != Mode::System && current_mode != Mode::User {
+                    bank_gpr.write(current_mode, SP, gpr[SP]);
+                    bank_gpr.write(current_mode, LR, gpr[LR]);
+                    bank_spsr.write(current_mode, *spsr);
 
-                gpr[SP] = bank_gpr.pop(SP);
-                gpr[LR] = bank_gpr.pop(LR);
-                *spsr = bank_spsr.pop()
-            }
+                    gpr[SP] = bank_gpr.pop(SP);
+                    gpr[LR] = bank_gpr.pop(LR);
+                    *spsr = bank_spsr.pop()
+                }
 
-            if new_mode != Mode::System && new_mode != Mode::User {
-                bank_gpr.push(SP, gpr[SP]);
-                bank_gpr.push(LR, gpr[LR]);
-                bank_spsr.push(*spsr);
+                if new_mode != Mode::System && new_mode != Mode::User {
+                    bank_gpr.push(SP, gpr[SP]);
+                    bank_gpr.push(LR, gpr[LR]);
+                    bank_spsr.push(*spsr);
 
-                gpr[SP] = bank_gpr.read(new_mode, SP);
-                gpr[LR] = bank_gpr.read(new_mode, LR);
-                *spsr = bank_spsr.read(new_mode);
+                    gpr[SP] = bank_gpr.read(new_mode, SP);
+                    gpr[LR] = bank_gpr.read(new_mode, LR);
+                    *spsr = bank_spsr.read(new_mode);
+                }
             }
         }
         self.set_mode(new_mode);

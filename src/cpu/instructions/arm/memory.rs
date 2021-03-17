@@ -111,6 +111,9 @@ where
     let rd = dec.get_Rd() as usize;
     let res = exec_memory_load(bus, gpr, dec, cpsr, |gpr, base| {
         let data = bus.read_word(base & 0xFFFF_FFFC);
+        if gpr[15] == 134225876 {
+            dbg!(base & 0xFFFF_FFFC, data);
+        }
         // The loaded data is rotated right by one, two or three bytes according to bits [1:0] of the address.
         // https://www.keil.com/support/man/docs/armasm/armasm_dom1359731171041.htm
         let rotate = base & 0x03;
