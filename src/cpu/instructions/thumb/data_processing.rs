@@ -147,9 +147,17 @@ pub fn exec_thumb_eor<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
 pub fn exec_thumb_asr1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let rd = dec.get_Rd2_0() as usize;
     let rn = dec.get_Rn5_3() as usize;
+    let rm = dec.get_Rm8_6() as usize;
     let sh = dec.get_sh() as u32;
     if sh == 0 {
         gpr[rd] = gpr[rn];
+        let c = gpr[rm] >> 31 != 0;
+        cpsr.set_C(c);
+        if c {
+            gpr[rd] = 0xFFFF_FFFF;
+        } else {
+            gpr[rd] = 0x0;
+        }
     } else {
         cpsr.set_C(is_carry_over(Shift::ASR, gpr[rn], sh, cpsr.get_C(), true));
         gpr[rd] = asr(gpr[rn], sh, true);
