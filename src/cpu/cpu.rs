@@ -192,7 +192,7 @@ impl ARM {
         //    dbg!(&self.gpr);
         //     // dbg!("0");
 
-        if self.gpr[15] >= 134225848 && self.gpr[15] <= 134225892 {
+        if self.gpr[15] >= 134225848 && self.gpr[15] <= 134224860 {
             dbg!('🔥', &instruction, &self.gpr);
         }
         // }
@@ -318,7 +318,7 @@ impl ARM {
                 thumb::Instruction::EOR(dec) => exec_thumb_eor(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::LSL2(dec) => exec_thumb_lsl2(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::LSR2(dec) => exec_thumb_lsr2(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::ASR1(dec) => exec_thumb_asr1(bus, dec, &mut self.gpr, &mut self.cpsr),
+                thumb::Instruction::ASRMoveShiftedReg(dec) => exec_thumb_asr_move_shifted_reg(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ASR2(dec) => {
                     // exec_thumb_asr2(dec, &mut self.gpr, &mut self.cpsr)
                     todo!("asr2")
@@ -335,7 +335,7 @@ impl ARM {
                 thumb::Instruction::BIC(dec) => exec_thumb_bic(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::MVN(dec) => exec_thumb_mvn(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::LSL1(dec) => exec_thumb_lsl1(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::LSR1(dec) => exec_thumb_lsr1(bus, dec, &mut self.gpr, &mut self.cpsr),
+                thumb::Instruction::LSRMoveShiftedReg(dec) => exec_thumb_lsr_move_shifted_reg(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::MOV1(dec) => exec_thumb_mov1(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::SUB2(dec) => exec_thumb_sub2(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::B(dec) => exec_thumb_b(dec, &mut self.gpr, &mut self.cpsr),

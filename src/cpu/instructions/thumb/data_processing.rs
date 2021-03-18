@@ -144,7 +144,12 @@ pub fn exec_thumb_eor<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
     (s, PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_asr1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+pub fn exec_thumb_asr_move_shifted_reg<T: BusAccessor>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+) -> ExecuteResult {
     let rd = dec.get_Rd2_0() as usize;
     let rn = dec.get_Rn5_3() as usize;
     let rm = dec.get_Rm8_6() as usize;
@@ -349,16 +354,18 @@ where
     (s, PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_lsr1<T>(bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult
+pub fn exec_thumb_lsr_move_shifted_reg<T>(bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult
 where
     T: BusAccessor,
 {
     let rd = dec.get_Rd2_0() as usize;
     let rn = dec.get_Rn5_3() as usize;
+    let rm = dec.get_Rm8_6() as usize;
     let sh = dec.get_sh() as u32;
 
     if sh == 0 {
-        gpr[rd] = gpr[rn];
+        cpsr.set_C(gpr[rm] >> 31 != 0);
+        gpr[rd] = 0x0;
     } else {
         cpsr.set_C(is_carry_over(Shift::LSR, gpr[rn], sh, cpsr.get_C(), true));
         gpr[rd] = lsr(gpr[rn], sh, true);

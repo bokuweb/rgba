@@ -54,8 +54,8 @@ pub enum Instruction {
     BIC(DataProcessing),
     MVN(DataProcessing),
     LSL1(DataProcessing),
-    LSR1(DataProcessing),
-    ASR1(DataProcessing),
+    LSRMoveShiftedReg(DataProcessing),
+    ASRMoveShiftedReg(DataProcessing),
     MOV1(DataProcessing),
     SUB2(DataProcessing),
     B(Branch),
@@ -167,8 +167,8 @@ pub fn decode(raw: HalfWord) -> Instruction {
             let dec = DataProcessing(v);
             match dec.get_op12_11() {
                 0b00 => Instruction::LSL1(dec),
-                0b01 => Instruction::LSR1(dec),
-                0b10 => Instruction::ASR1(dec),
+                0b01 => Instruction::LSRMoveShiftedReg(dec),
+                0b10 => Instruction::ASRMoveShiftedReg(dec),
                 _ => unreachable!("unknown thumb data processing instruction {}", dec.get_op12_11()),
             }
         }
