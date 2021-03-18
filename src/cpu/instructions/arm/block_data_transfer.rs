@@ -31,26 +31,15 @@ pub fn exec_arm_ldm<T>(
 where
     T: BusAccessor,
 {
-    if 134219024 <= gpr[15] && 134218980 >= gpr[15] {
-        dbg!("Before ldm", &gpr);
-    }
     let mut cycle: Cycle = 0;
     let mut is_n_cycle = true;
-    // let mut is_first_entry = true;
-    // let mut is_rn_skipped = false;
-
-    // dbg!("before LDM", &gpr);
     let mut register_list = dec.get_register_list();
-    // dbg!(register_list);
-
-    // let mut address = 0;
     let mut immediate = 0;
     let mut offset = 0;
     if dec.get_U() {
         if dec.get_P() {
             immediate = 4;
         }
-        // for let m = 0x01, i = 0; i < 16; m <<= 1, ++i) {
         for i in 0..0x10 {
             let m = 0x01 << i;
             if register_list & m != 0 {
@@ -77,8 +66,6 @@ where
             }
         }
     }
-
-    // dbg!(register_list);
 
     let base: i64 = gpr[dec.get_Rn() as usize] as i64;
     let mut address = base.wrapping_add(immediate) as Word;
@@ -114,8 +101,6 @@ where
             };
             cycle += bus.compute_cycle(address, access_type);
             let data = bus.read_word(address & 0xFFFF_FFFC);
-            // dbg!("LDM", address, data);
-            //
             gpr[i] = data;
             address = address.wrapping_add(4); //} else {
                                                //    is_rn_skipped = true;
@@ -136,11 +121,6 @@ where
     // Consume 1I cycle.
     let cycle = cycle + 1;
 
-    if 134219024 <= gpr[15] && 134218980 >= gpr[15] {
-        dbg!("After ldm", &gpr);
-    }
-
-    // dbg!("after LDM", &gpr);
     // If PC is loaded
     if register_list & 0x8000 != 0 {
         Ok((cycle, PipelineStatus::Flush))
@@ -155,7 +135,6 @@ pub fn exec_arm_stm<T>(bus: &mut T, dec: BlockDataTransfer, gpr: &mut [Word; 16]
 where
     T: BusAccessor,
 {
-    dbg!("before STM", &gpr);
     let mut base: i64 = gpr[dec.get_Rn() as usize] as i64;
     let mut cycle: Cycle = 0;
     let mut is_n_cycle = true;
@@ -210,9 +189,7 @@ where
 
     if dec.get_W() {
         let v = gpr[dec.get_Rn() as usize] as i64 + offset as i64;
-        dbg!(overwrap);
         if overwrap {
-            dbg!((gpr[dec.get_Rn() as usize] as i64 + immediate - 4), gpr[dec.get_Rn() as usize], immediate);
             bus.write_word(
                 (gpr[dec.get_Rn() as usize] as i64 + immediate - 4) as Word,
                 gpr[dec.get_Rn() as usize] as Word,
@@ -240,8 +217,6 @@ where
     if dec.get_S() {
         unimplemented!();
     }
-
-    dbg!("after STM", &gpr);
 
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));
     Ok((cycle, PipelineStatus::Continue))
