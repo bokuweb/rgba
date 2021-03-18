@@ -316,9 +316,9 @@ impl ARM {
                 thumb::Instruction::SUB3(dec) => exec_thumb_sub3(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::AND(dec) => exec_thumb_and(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::EOR(dec) => exec_thumb_eor(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::LSL2(dec) => exec_thumb_lsl2(bus, dec, &mut self.gpr, &mut self.cpsr),
+                thumb::Instruction::LSLThumb4(dec) => exec_thumb4_lsl(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::LSR2(dec) => exec_thumb_lsr2(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::ASRMoveShiftedReg(dec) => exec_thumb_asr_move_shifted_reg(bus, dec, &mut self.gpr, &mut self.cpsr),
+                thumb::Instruction::ASRThumb1(dec) => exec_thumb1_asr(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ASR2(dec) => {
                     // exec_thumb_asr2(dec, &mut self.gpr, &mut self.cpsr)
                     todo!("asr2")
@@ -334,8 +334,8 @@ impl ARM {
                 thumb::Instruction::MUL(dec) => exec_thumb_mul(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::BIC(dec) => exec_thumb_bic(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::MVN(dec) => exec_thumb_mvn(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::LSL1(dec) => exec_thumb_lsl1(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::LSRMoveShiftedReg(dec) => exec_thumb_lsr_move_shifted_reg(bus, dec, &mut self.gpr, &mut self.cpsr),
+                thumb::Instruction::LSLThumb1(dec) => exec_thumb1_lsl(bus, dec, &mut self.gpr, &mut self.cpsr),
+                thumb::Instruction::LSRThumb1(dec) => exec_thumb1_lsr(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::MOV1(dec) => exec_thumb_mov1(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::SUB2(dec) => exec_thumb_sub2(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::B(dec) => exec_thumb_b(dec, &mut self.gpr, &mut self.cpsr),

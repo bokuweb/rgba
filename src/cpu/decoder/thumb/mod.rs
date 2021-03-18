@@ -40,7 +40,7 @@ pub enum Instruction {
     MOV3(DataProcessing),
     AND(DataProcessing),
     EOR(DataProcessing),
-    LSL2(DataProcessing),
+    LSLThumb4(DataProcessing),
     LSR2(DataProcessing),
     ASR2(DataProcessing),
     SBC(DataProcessing),
@@ -53,9 +53,9 @@ pub enum Instruction {
     MUL(DataProcessing),
     BIC(DataProcessing),
     MVN(DataProcessing),
-    LSL1(DataProcessing),
-    LSRMoveShiftedReg(DataProcessing),
-    ASRMoveShiftedReg(DataProcessing),
+    LSLThumb1(DataProcessing),
+    LSRThumb1(DataProcessing),
+    ASRThumb1(DataProcessing),
     MOV1(DataProcessing),
     SUB2(DataProcessing),
     B(Branch),
@@ -146,7 +146,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
             match dec.get_op9_6() {
                 0b0000 => Instruction::AND(dec),
                 0b0001 => Instruction::EOR(dec),
-                0b0010 => Instruction::LSL2(dec),
+                0b0010 => Instruction::LSLThumb4(dec),
                 0b0011 => Instruction::LSR2(dec),
                 0b0100 => Instruction::ASR2(dec),
                 0b0110 => Instruction::SBC(dec),
@@ -162,13 +162,13 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 _ => unreachable!("unknown thumb data processing instruction {}", dec.get_op9_6()),
             }
         }
-        // THUMB.1: move shift register
+        // THUMB.1: move shifted register
         v if ((v & 0xE000) == 0x0000) => {
             let dec = DataProcessing(v);
             match dec.get_op12_11() {
-                0b00 => Instruction::LSL1(dec),
-                0b01 => Instruction::LSRMoveShiftedReg(dec),
-                0b10 => Instruction::ASRMoveShiftedReg(dec),
+                0b00 => Instruction::LSLThumb1(dec),
+                0b01 => Instruction::LSRThumb1(dec),
+                0b10 => Instruction::ASRThumb1(dec),
                 _ => unreachable!("unknown thumb data processing instruction {}", dec.get_op12_11()),
             }
         }
