@@ -187,7 +187,7 @@ pub fn exec_thumb4_lsl<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
         // return (1, PipelineStatus::Continue);
     }
     // cpsr.set_C(is_carry_over(Shift::LSL, gpr[rd], sh, cpsr.get_C(), true));
-    gpr[rd] = lsl(gpr[rd], sh);
+    // gpr[rd] = lsl(gpr[rd], sh);
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
     let s = if sh != 0 {
@@ -202,14 +202,23 @@ pub fn exec_thumb4_lsl<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
 pub fn exec_thumb_lsr2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let rd = dec.get_Rd2_0() as usize;
     let rs = dec.get_Rs() as usize;
-    let sh = gpr[rs];
+    let sh = gpr[rs] & 0xFF;
 
-    // dbg!("lsr2", sh);
-    if sh == 0 {
-        return (1, PipelineStatus::Continue);
+    if sh != 0 {
+        if sh < 32 {
+            cpsr.set_C(gpr[rd] & (1 << (rs - 1)) != 0);
+            gpr[rd].wrapping_shr(sh);
+        } else {
+            if rs > 32 {
+                cpsr.set_C(false);
+            } else {
+                cpsr.set_C(gpr[rd].wrapping_shr(31) != 0);
+            }
+            gpr[rd] = 0;
+        }
     }
-    cpsr.set_C(is_carry_over(Shift::LSR, gpr[rd], sh, cpsr.get_C(), true));
-    gpr[rd] = lsr(gpr[rd], sh, true);
+    // cpsr.set_C(is_carry_over(Shift::LSR, gpr[rd], sh, cpsr.get_C(), true));
+    // gpr[rd] = lsr(gpr[rd], sh, true);
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
@@ -233,14 +242,20 @@ pub fn exec_thumb_sbc<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
     (s, PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_ror<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+pub fn exec_thumb4_ror<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let rd = dec.get_Rd2_0() as usize;
-    let sh = dec.get_Rs() as u32;
-    if sh == 0 {
-        return (1, PipelineStatus::Continue);
+    let sh = dec.get_Rs() as u32 & 0xFF;
+    if sh != 0 {
+        let r = sh & 0x1F;
+        if r > 0 {
+            cpsr.set_C(gpr[rd] & (1 << (r - 1)) != 0);
+            gpr[rd] = gpr[rd].rotate_right(r);
+        } else {
+            cpsr.set_C(gpr[rd] >> 31 != 0)
+        }
     }
-    cpsr.set_C(is_carry_over(Shift::ROR, gpr[rd], sh, cpsr.get_C(), true));
-    gpr[rd] = ror(gpr[rd], sh, cpsr.get_C(), true);
+    // cpsr.set_C(is_carry_over(Shift::ROR, gpr[rd], sh, cpsr.get_C(), true));
+    // gpr[rd] = ror(gpr[rd], sh, cpsr.get_C(), true);
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));

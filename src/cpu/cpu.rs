@@ -324,7 +324,7 @@ impl ARM {
                     todo!("asr2")
                 }
                 thumb::Instruction::SBC(dec) => exec_thumb_sbc(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::ROR(dec) => exec_thumb_ror(bus, dec, &mut self.gpr, &mut self.cpsr),
+                thumb::Instruction::RORThumb4(dec) => exec_thumb4_ror(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::TST(dec) => exec_thumb_tst(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::NEG(dec) => exec_thumb_neg(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::CMP1(dec) => exec_thumb_cmp1(bus, dec, &mut self.gpr, &mut self.cpsr),
