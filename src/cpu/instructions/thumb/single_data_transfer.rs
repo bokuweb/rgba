@@ -127,6 +127,69 @@ where
     (cycle, PipelineStatus::Continue)
 }
 
+pub fn exec_thumb8_ldrh<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
+where
+    T: BusAccessor,
+{
+    let rd = dec.get_Rd2_0() as usize;
+    let rn = dec.get_Rn() as usize;
+    let rm = dec.get_Rm() as usize;
+
+    let addr = gpr[rn].wrapping_add(gpr[rm]);
+    let data = bus.read_halfword(addr);
+
+    // 1N + 1I cycle
+    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
+
+    gpr[rd] = data as u32;
+
+    // Add merged I + S cycle.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+    (cycle, PipelineStatus::Continue)
+}
+
+pub fn exec_thumb8_ldsh<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
+where
+    T: BusAccessor,
+{
+    let rd = dec.get_Rd2_0() as usize;
+    let rn = dec.get_Rn() as usize;
+    let rm = dec.get_Rm() as usize;
+
+    let addr = gpr[rn].wrapping_add(gpr[rm]);
+    let data = bus.read_halfword(addr) as i16;
+
+    // 1N + 1I cycle
+    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
+
+    gpr[rd] = data as u32;
+
+    // Add merged I + S cycle.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+    (cycle, PipelineStatus::Continue)
+}
+
+pub fn exec_thumb8_ldsb<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
+where
+    T: BusAccessor,
+{
+    let rd = dec.get_Rd2_0() as usize;
+    let rn = dec.get_Rn() as usize;
+    let rm = dec.get_Rm() as usize;
+
+    let addr = gpr[rn].wrapping_add(gpr[rm]);
+    let data = bus.read_byte(addr) as i8;
+
+    // 1N + 1I cycle
+    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
+
+    gpr[rd] = data as u32;
+
+    // Add merged I + S cycle.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+    (cycle, PipelineStatus::Continue)
+}
+
 // THUMB.10
 pub fn exec_thumb_ldrh<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
 where
