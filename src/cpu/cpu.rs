@@ -159,9 +159,9 @@ impl ARM {
             CpuState::Thumb => {
                 let fetched = self.get_thumb_executable(bus);
                 // debug!("{:x}", fetched);
-                // if self.gpr[15] == 134218152 && self.gpr[5] == 1022{
-                //     // dbg!(&self.gpr);
-                // }
+                if self.gpr[15] >= 134234172 && self.gpr[15] <= 134234196 {
+                    dbg!(&self.gpr);
+                }
                 let instruction = thumb::decode(fetched);
                 let cycle = cycle + self.execute_thumb(instruction, bus);
                 Ok(cycle)

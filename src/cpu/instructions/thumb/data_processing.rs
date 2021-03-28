@@ -243,12 +243,16 @@ pub fn exec_thumb_sbc<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
 }
 
 pub fn exec_thumb4_ror<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+    dbg!("beforeROR", &gpr);
+    if gpr[15] == 134234196 {
+        // panic!()
+    }
     let rd = dec.get_Rd2_0() as usize;
-    let sh = dec.get_Rs() as u32 & 0xFF;
+    let sh = gpr[dec.get_Rs() as usize] & 0xFF;
     if sh != 0 {
         let r = sh & 0x1F;
         if r > 0 {
-            cpsr.set_C(gpr[rd] & (1 << (r - 1)) != 0);
+            cpsr.set_C((gpr[rd] & (1 << (r - 1))) != 0);
             gpr[rd] = gpr[rd].rotate_right(r);
         } else {
             cpsr.set_C(gpr[rd] >> 31 != 0)
@@ -259,6 +263,7 @@ pub fn exec_thumb4_ror<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    dbg!("afterROR", &gpr);
     // Consume S + 1 cycle
     (s + 1, PipelineStatus::Continue)
 }
