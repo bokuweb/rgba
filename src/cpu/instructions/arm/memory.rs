@@ -1,10 +1,10 @@
 use super::super::PipelineStatus;
 
-use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::*;
 use crate::cpu::instructions::{shift::*, ExecuteResult};
 use crate::cpu::registers::psr::PSR;
+use crate::cpu::{bus::accessor::*, instructions::helpers::read_ldr_data};
 use crate::types::*;
 
 fn exec_memory_store<T, F>(bus: &mut T, gpr: &mut [u32; 16], dec: Memory, cpsr: &PSR, store: F) -> Result<ExecuteResult, ()>
@@ -96,11 +96,8 @@ where
 {
     let rd = dec.get_Rd() as usize;
     let res = exec_memory_load(bus, gpr, dec, cpsr, |gpr, base| {
-        let data = bus.read_word(base & 0xFFFF_FFFC);
-        // The loaded data is rotated right by one, two or three bytes according to bits [1:0] of the address.
-        // https://www.keil.com/support/man/docs/armasm/armasm_dom1359731171041.htm
-        let rotate = base & 0x03;
-        gpr[rd] = data.rotate_right(rotate.wrapping_shl(3));
+        let data = read_ldr_data(bus, base);
+        gpr[rd] = data;
     });
     res
 }

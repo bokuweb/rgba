@@ -129,7 +129,7 @@ impl ARM {
         return next + cycle;
     }
 
-    pub fn step<T>(&mut self, bus: &mut T) -> Result<Cycle, ()>
+    pub fn step<T>(&mut self, bus: &mut T, started: bool) -> Result<Cycle, ()>
     where
         T: BusAccessor,
     {
@@ -145,7 +145,7 @@ impl ARM {
                 let fetched = self.get_arm_executable(bus);
                 let cond: Cond = fetched.wrapping_shr(28).into();
                 if self.gpr[15] >= 134224832 && self.gpr[15] <= 134224892 {
-                    dbg!("🔥", &self.gpr, self.cpsr.condition_ok(cond));
+                    // dbg!("🔥", &self.gpr, self.cpsr.condition_ok(cond));
                 }
                 if !self.cpsr.condition_ok(cond) {
                     let s = bus.compute_cycle(self.gpr[PC], AccessType::Seq(AccessWidth::Word));
@@ -159,11 +159,11 @@ impl ARM {
             CpuState::Thumb => {
                 let fetched = self.get_thumb_executable(bus);
                 // debug!("{:x}", fetched);
-                if self.gpr[15] >= 134234172 && self.gpr[15] <= 134234196 {
-                    dbg!(&self.gpr);
+                if self.gpr[15] >= 134234652 {
+                    // dbg!(&self.gpr);
                 }
                 let instruction = thumb::decode(fetched);
-                let cycle = cycle + self.execute_thumb(instruction, bus);
+                let cycle = cycle + self.execute_thumb(instruction, bus, started);
                 Ok(cycle)
             }
         }
@@ -276,7 +276,7 @@ impl ARM {
         }
     }
 
-    fn execute_thumb<T>(&mut self, instruction: thumb::Instruction, bus: &mut T) -> Cycle
+    fn execute_thumb<T>(&mut self, instruction: thumb::Instruction, bus: &mut T, started: bool) -> Cycle
     where
         T: BusAccessor,
     {
@@ -286,7 +286,7 @@ impl ARM {
         let (cycle, pipeline_status) = {
             // // dbg!(instruction);
             match instruction {
-                thumb::Instruction::LDR1(dec) => exec_thumb_ldr_imm_offset(bus, dec, &mut self.gpr),
+                thumb::Instruction::LDR1(dec) => exec_thumb_ldr_imm_offset(bus, dec, &mut self.gpr, started),
                 thumb::Instruction::LDRRegOffset(dec) => exec_thumb_ldr_reg_offset(bus, dec, &mut self.gpr),
                 thumb::Instruction::LDR3(dec) => exec_thumb_ldr3(bus, dec, &mut self.gpr),
                 thumb::Instruction::LDR4(dec) => exec_thumb_load_sp_relative(bus, dec, &mut self.gpr),
@@ -379,7 +379,7 @@ mod test {
 
     use super::*;
     use byteorder::{ByteOrder, LittleEndian};
-    // use ctare::memory::readable::*;
+
     trait CpuTest {
         fn run_immediately<T>(&mut self, bus: &mut T)
         where
@@ -440,7 +440,7 @@ mod test {
             T: BusAccessor,
         {
             for _ in 0..(INITIAL_PIPELINE_WAIT + 1) {
-                self.step(bus);
+                self.step(bus, false);
             }
         }
     }
@@ -457,7 +457,7 @@ mod test {
         setup();
         let mut bus = MockBus::new();
         let mut arm = ARM::new();
-        let _ = arm.step(&mut bus);
+        let _ = arm.step(&mut bus, false);
         assert_eq!(arm.get_gpr(PC), 0x0000_000C);
     }
 

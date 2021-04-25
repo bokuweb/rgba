@@ -79,9 +79,9 @@ impl GBA {
         Ok(buf)
     }
 
-    pub fn frame(&mut self) -> Vec<u8> {
+    pub fn frame(&mut self, started: bool) -> Vec<u8> {
         loop {
-            let cycles = self.arm.step(&mut self.bus).unwrap();
+            let cycles = self.arm.step(&mut self.bus, started).unwrap();
             let lcdc = self.bus.borrow_mut_lcdc();
             let ready = lcdc.run(cycles);
             if ready {
@@ -124,7 +124,7 @@ mod test {
         let mut bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, key);
         let mut arm = cpu::ARM::new();
         for _ in 0..step {
-            arm.step(&mut bus).expect("should step");
+            arm.step(&mut bus, false).expect("should step");
         }
         (arm, bus)
     }

@@ -3,26 +3,22 @@ use super::super::PipelineStatus;
 use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::thumb::*;
-use crate::cpu::instructions::ExecuteResult;
+use crate::cpu::instructions::{helpers::read_ldr_data, ExecuteResult};
 use crate::types::*;
 
-pub fn exec_thumb_ldr_imm_offset<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
+pub fn exec_thumb_ldr_imm_offset<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16], started: bool) -> ExecuteResult
 where
     T: BusAccessor,
 {
     let rd = dec.get_Rd2_0() as usize;
-    let rb = dec.get_Rn() as usize;
+    let rn = dec.get_Rn() as usize;
     let offset = dec.get_off5() as u32;
-    let addr = gpr[rb] + offset.wrapping_shl(2);
-
-    let data = bus.read_word(addr);
-
+    let addr = gpr[rn].wrapping_add(offset.wrapping_shl(2));
+    let data = read_ldr_data(bus, addr);
     // 1N + 1I cycle
     let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
 
     gpr[rd] = data;
-
-    // dbg!("ldr1", &gpr);
 
     // Add merged I + S cycle.
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
@@ -33,28 +29,21 @@ pub fn exec_thumb_ldr_reg_offset<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &
 where
     T: BusAccessor,
 {
+    // dbg!("before ldr2", &gpr);
     let rd = dec.get_Rd2_0() as usize;
     let rn = dec.get_Rn() as usize;
     let rm = dec.get_Rm() as usize;
 
-    let addr = gpr[rn] + gpr[rm];
-
-    if addr == 0x0400_0006 {
-        // dbg!("read 0x0400_0006", &gpr);
-    }
-
-    let data = bus.read_word(addr);
+    let addr = gpr[rn].wrapping_add(gpr[rm]);
+    let data = read_ldr_data(bus, addr);
 
     // 1N + 1I cycle
     let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
 
     gpr[rd] = data;
 
-    // dbg!("ldr1", &gpr);
-
     // Add merged I + S cycle.
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
-    // dbg!("after ldr", &gpr);
     (cycle, PipelineStatus::Continue)
 }
 
@@ -75,11 +64,8 @@ where
 
     gpr[rd] = data as u32;
 
-    // dbg!("ldr1", &gpr);
-
     // Add merged I + S cycle.
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
-    // dbg!("after ldrb", &gpr);
     (cycle, PipelineStatus::Continue)
 }
 
@@ -91,14 +77,12 @@ where
     let offset = dec.get_off8() as u32;
     let pc = gpr[PC];
     let addr = (pc & 0xFFFF_FFFC) + offset.wrapping_shl(2);
-    let data = bus.read_word(addr);
+    let data = read_ldr_data(bus, addr);
 
     // 1N + 1I cycle
     let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
 
     gpr[rd] = data;
-
-    // dbg!("ldr3", &gpr);
 
     // Add merged I + S cycle.
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
@@ -110,12 +94,11 @@ pub fn exec_thumb_load_sp_relative<T>(bus: &mut T, dec: SingleDataTransfer, gpr:
 where
     T: BusAccessor,
 {
+
     let rd = dec.get_Rd10_8() as usize;
     let offset = dec.get_off8() as u32;
     let addr = gpr[SP] + offset.wrapping_shl(2);
-
-    // dbg!(addr, "ldr4");
-    let data = bus.read_word(addr);
+    let data = read_ldr_data(bus, addr);
 
     // 1N + 1I cycle
     let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
