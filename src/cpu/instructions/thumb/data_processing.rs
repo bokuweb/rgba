@@ -207,9 +207,9 @@ pub fn exec_thumb_lsr2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     if sh != 0 {
         if sh < 32 {
             cpsr.set_C(gpr[rd] & (1 << (rs - 1)) != 0);
-            gpr[rd].wrapping_shr(sh);
+            gpr[rd] = gpr[rd].wrapping_shr(sh);
         } else {
-            if rs > 32 {
+            if sh > 32 {
                 cpsr.set_C(false);
             } else {
                 cpsr.set_C(gpr[rd].wrapping_shr(31) != 0);

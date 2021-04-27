@@ -139,7 +139,7 @@ impl ARM {
             0
         };
         // let log = format!("{:?}", self.gpr);
-        // debug!("tick {:?}", &self.gpr);
+        // dbg!("tick {:?}", &self.gpr);
         match self.cpsr.get_cpu_state() {
             CpuState::ARM => {
                 let fetched = self.get_arm_executable(bus);
@@ -280,11 +280,7 @@ impl ARM {
     where
         T: BusAccessor,
     {
-        assert!(self.gpr[15] % 2 != 1);
-        let b = self.gpr.clone();
-
         let (cycle, pipeline_status) = {
-            // // dbg!(instruction);
             match instruction {
                 thumb::Instruction::LDR1(dec) => exec_thumb_ldr_imm_offset(bus, dec, &mut self.gpr, started),
                 thumb::Instruction::LDRRegOffset(dec) => exec_thumb_ldr_reg_offset(bus, dec, &mut self.gpr),
@@ -346,7 +342,7 @@ impl ARM {
                 thumb::Instruction::BL(dec) => exec_thumb_bl1(bus, dec, &mut self.gpr),
                 thumb::Instruction::BX(dec) => exec_thumb_bx(bus, dec, &mut self.cpsr, &mut self.gpr),
                 thumb::Instruction::STMIA(dec) => exec_thumb_stmia(bus, dec, &mut self.gpr),
-                thumb::Instruction::LDMIA(dec) => exec_thumb_ldmia(bus, dec, &mut self.gpr),
+                thumb::Instruction::LDMIA(dec) => exec_thumb_ldmia(bus, dec, &mut self.gpr, started),
                 thumb::Instruction::PUSH(dec) => exec_thumb_push(bus, dec, &mut self.gpr),
                 thumb::Instruction::POP(dec) => exec_thumb_pop(bus, dec, &mut self.gpr),
                 _ => {

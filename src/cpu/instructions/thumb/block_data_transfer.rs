@@ -36,11 +36,13 @@ where
     (cycle, PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_ldmia<T>(bus: &T, dec: BlockDataTransfer, gpr: &mut [Word; 16]) -> ExecuteResult
+pub fn exec_thumb_ldmia<T>(bus: &T, dec: BlockDataTransfer, gpr: &mut [Word; 16], started: bool) -> ExecuteResult
 where
     T: BusAccessor,
 {
-    // dbg!("before ldmia", &gpr);
+    if started {
+        dbg!("before ldmia", &gpr);
+    }
     let rn = dec.get_Rn();
     let mut base = gpr[rn as usize];
     let register_list = dec.get_register_list();
@@ -50,7 +52,7 @@ where
 
     for i in 0..0x8 {
         if register_list & (1 << i) != 0 {
-            let d = bus.read_word(base);
+            let d = bus.read_word(base & 0xFFFF_FFFC);
             // dbg!(base, d);
             gpr[i] = d;
             let access_type = if is_n_cycle {
@@ -67,14 +69,15 @@ where
     if (1 << rn) & register_list == 0 {
         gpr[rn as usize] = base;
     }
-    // dbg!("after ldmia", &gpr);
+
+    if started {
+        dbg!("after ldmia", &gpr);
+    }
 
     // Consume 1I cycle.
     let cycle = cycle + 1;
     // consume merged I-S cycle
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
-
-    // dbg!("LDMIA", &gpr);
 
     (cycle, PipelineStatus::Continue)
 }
@@ -97,7 +100,7 @@ where
     for i in 0..0x8 {
         let i = 7 - i;
         if register_list & (1 << i) != 0 {
-            bus.write_word(addr, gpr[i]);
+            bus.write_word(addr & 0xFFFF_FFFC, gpr[i]);
 
             let access_type = if is_n_cycle {
                 is_n_cycle = false;
@@ -132,7 +135,7 @@ where
 
     for i in 0..0x8 {
         if register_list & (1 << i) != 0 {
-            let data = bus.read_word(addr);
+            let data = bus.read_word(addr & 0xFFFF_FFFC);
             let access_type = if is_n_cycle {
                 is_n_cycle = false;
                 AccessType::NonSeq(AccessWidth::Word)
