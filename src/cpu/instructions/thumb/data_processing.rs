@@ -23,11 +23,14 @@ pub fn exec_thumb_add1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
 
 pub fn exec_thumb_add2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let rn_rd = dec.get_Rd10_8() as usize;
-    let d = gpr[rn_rd] as u64 + dec.get_imm8() as u64;
+    let imm = dec.get_imm8() as u32;
+    let d = gpr[rn_rd] as u64 + imm as u64;
     cpsr.set_N_from(d as u32);
     cpsr.set_Z_from(d as u32);
     cpsr.set_C_from(d);
-    cpsr.set_V_from(gpr[rn_rd], d as u32);
+    let v = gpr[rn_rd] >> 31 == 0 && (gpr[rn_rd] as u32 ^ d as u32) >> 31 != 0 && (imm ^ d as u32) >> 31 != 0;
+    // cpsr.set_V_from(gpr[rn_rd], d as u32);
+    cpsr.set_V(v);
     gpr[rn_rd] = d as u32;
     // dbg!("ADD2", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
