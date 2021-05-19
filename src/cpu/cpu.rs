@@ -139,14 +139,10 @@ impl ARM {
             0
         };
         // let log = format!("{:?}", self.gpr);
-        // dbg!("tick {:?}", &self.gpr);
         match self.cpsr.get_cpu_state() {
             CpuState::ARM => {
                 let fetched = self.get_arm_executable(bus);
                 let cond: Cond = fetched.wrapping_shr(28).into();
-                if self.gpr[15] >= 134224832 && self.gpr[15] <= 134224892 {
-                    // dbg!("🔥", &self.gpr, self.cpsr.condition_ok(cond));
-                }
                 if !self.cpsr.condition_ok(cond) {
                     let s = bus.compute_cycle(self.gpr[PC], AccessType::Seq(AccessWidth::Word));
                     self.increment_pc();
@@ -158,9 +154,9 @@ impl ARM {
             }
             CpuState::Thumb => {
                 let fetched = self.get_thumb_executable(bus);
-                // debug!("{:x}", fetched);
-                if self.gpr[15] >= 134234652 {
-                    // dbg!(&self.gpr);
+                // dbg!(&self.gpr);
+                if self.gpr[15] == 134218436 {
+                    dbg!("hello");
                 }
                 let instruction = thumb::decode(fetched);
                 let cycle = cycle + self.execute_thumb(instruction, bus, started);
@@ -189,12 +185,12 @@ impl ARM {
     {
         // // dbg!(&instruction, &self.gpr);
         //if (self.gpr[15] >= 134221712 && self.gpr[15] <= 134221748) {
-        //    dbg!(&self.gpr);
+        //         dbg!(&self.gpr);
         //     // dbg!("0");
 
-        if self.gpr[15] >= 134225848 && self.gpr[15] <= 134224860 {
-            dbg!('🔥', &instruction, &self.gpr);
-        }
+        // if self.gpr[15] >= 134225848 && self.gpr[15] <= 134224860 {
+        //     dbg!('🔥', &instruction, &self.gpr);
+        // }
         // }
         let (cycle, pipeline_status) = {
             match instruction {
@@ -318,10 +314,7 @@ impl ARM {
                 thumb::Instruction::LSLThumb4(dec) => exec_thumb4_lsl(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::LSR2(dec) => exec_thumb_lsr2(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ASRThumb1(dec) => exec_thumb1_asr(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::ASR2(dec) => {
-                    // exec_thumb_asr2(dec, &mut self.gpr, &mut self.cpsr)
-                    todo!("asr2")
-                }
+                thumb::Instruction::ASRThumb4(dec) => exec_thumb4_asr(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::SBC(dec) => exec_thumb_sbc(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::RORThumb4(dec) => exec_thumb4_ror(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::TST(dec) => exec_thumb_tst(bus, dec, &mut self.gpr, &mut self.cpsr),

@@ -174,7 +174,7 @@ pub fn exec_thumb4_lsl<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     let sh = gpr[rs] & 0xFF;
     if sh != 0 {
         if sh < 32 {
-            cpsr.set_C(gpr[rd] & (1 << (32 - rs)) != 0);
+            cpsr.set_C(gpr[rd] & (1 << (32 - sh)) != 0);
             gpr[rd] = gpr[rd].wrapping_shl(sh);
         } else {
             if sh > 32 {
@@ -188,6 +188,39 @@ pub fn exec_thumb4_lsl<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     }
     // cpsr.set_C(is_carry_over(Shift::LSL, gpr[rd], sh, cpsr.get_C(), true));
     // gpr[rd] = lsl(gpr[rd], sh);
+    cpsr.set_N_from(gpr[rd]);
+    cpsr.set_Z_from(gpr[rd]);
+    let s = if sh != 0 {
+        bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word))
+    } else {
+        0
+    };
+    // Consume S + 1 cycle
+    (s + 1, PipelineStatus::Continue)
+}
+
+pub fn exec_thumb4_asr<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+    let rd = dec.get_Rd2_0() as usize;
+    let rs = dec.get_Rs() as usize;
+    let sh = gpr[rs] & 0xFF;
+    if sh != 0 {
+        if sh < 32 {
+            cpsr.set_C(gpr[rd] & (1 << (sh - 1)) != 0);
+            gpr[rd] = gpr[rd].wrapping_shr(sh)
+                | if gpr[rd] & 0x8000_0000 != 0 {
+                    ((0xFFFF_FFFF as u32).wrapping_shl(32 - sh))
+                } else {
+                    0
+                };
+        } else {
+            cpsr.set_C(gpr[rd].wrapping_shr(31) != 0);
+            if cpsr.get_C() {
+                gpr[rd] = 0xFFFF_FFFF;
+            } else {
+                gpr[rd] = 0;
+            }
+        }
+    }
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
     let s = if sh != 0 {
