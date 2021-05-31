@@ -107,7 +107,9 @@ pub fn exec_thumb_sub2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     cpsr.set_N_from(d as u32);
     cpsr.set_Z_from(d as u32);
     cpsr.set_C(gpr[rn as usize] >= imm);
-    cpsr.set_V_from(gpr[dec.get_Rd10_8() as usize], d as u32);
+    cpsr.set_V((gpr[rn as usize] as i32).overflowing_sub(imm as i32).1);
+    // let v = gpr[rn_rd] >> 31 == 0 && (gpr[rn_rd] as u32 ^ d as u32) >> 31 != 0 && (imm ^ d as u32) >> 31 != 0;
+    // cpsr.set_V_from(gpr[rn_rd], d as u32);
     gpr[dec.get_Rd10_8() as usize] = d as u32;
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
