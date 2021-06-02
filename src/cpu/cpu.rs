@@ -302,10 +302,7 @@ impl ARM {
                 // THUMB.12 6 nad 5
                 thumb::Instruction::ADD6(dec) => exec_thumb_add_relative_address(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ADD7(dec) => exec_thumb_add7(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::CMP3(dec) => {
-                    // // dbg!(dec.0);
-                    todo!("CMP3");
-                }
+                thumb::Instruction::CMPThumb5(dec) => exec_thumb5_cmp(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::MOV3(dec) => exec_thumb_mov3(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::SUB1(dec) => exec_thumb_sub1(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::SUB3(dec) => exec_thumb_sub3(bus, dec, &mut self.gpr, &mut self.cpsr),

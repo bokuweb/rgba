@@ -348,6 +348,19 @@ pub fn exec_thumb_cmp2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     (s, PipelineStatus::Continue)
 }
 
+pub fn exec_thumb5_cmp<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+    let rd = gpr[dec.get_Rd2_0() as usize];
+    let rs = gpr[dec.get_Rs() as usize];
+    let d = rd as i64 - rs as i64;
+    cpsr.set_Z_from(d as u32);
+    cpsr.set_N_from(d as u32);
+    cpsr.set_C(d >= 0);
+    let (_, v) = (rd as i32).overflowing_sub(rs as i32);
+    cpsr.set_V(v);
+    let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    (s, PipelineStatus::Continue)
+}
+
 pub fn exec_thumb_cmn<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     todo!("cmn");
     (0, PipelineStatus::Continue)

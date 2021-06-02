@@ -37,7 +37,7 @@ pub enum Instruction {
     ADD6(DataProcessing), // 6 and 5
     ADD7(DataProcessing),
     CMP1(DataProcessing),
-    CMP3(DataProcessing),
+    CMPThumb5(DataProcessing),
     SUB1(DataProcessing),
     SUB3(DataProcessing),
     MOV3(DataProcessing),
@@ -192,7 +192,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
             // THUMB.5: Hi register operations
             match dec.get_op9_8() {
                 0b00 => Instruction::ADDHiRegister(dec),
-                0b01 => Instruction::CMP3(dec),
+                0b01 => Instruction::CMPThumb5(dec),
                 0b10 => Instruction::MOV3(dec),
                 // 0b11 => Instruction::BX(dec),
                 _ => unreachable!(),
