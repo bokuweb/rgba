@@ -154,8 +154,8 @@ impl ARM {
             }
             CpuState::Thumb => {
                 let fetched = self.get_thumb_executable(bus);
-                dbg!(&self.gpr, self.cpsr.get_V());
-                if self.gpr[15] == 134218714 {
+                dbg!(&self.gpr, self.cpsr.get_V(), self.cpsr.get_Z());
+                if self.gpr[15] == 134218834 {
                     dbg!("hello");
                 }
                 let instruction = thumb::decode(fetched);

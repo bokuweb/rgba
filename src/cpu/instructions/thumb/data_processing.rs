@@ -349,9 +349,10 @@ pub fn exec_thumb_cmp2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
 }
 
 pub fn exec_thumb5_cmp<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
-    let rd = gpr[dec.get_Rd2_0() as usize];
-    let rs = gpr[dec.get_Rs() as usize];
+    let rd = gpr[dec.get_Rd_7_2_0() as usize];
+    let rs = gpr[dec.get_Rs6_3() as usize];
     let d = rd as i64 - rs as i64;
+    dbg!(rd, rs, d);
     cpsr.set_Z_from(d as u32);
     cpsr.set_N_from(d as u32);
     cpsr.set_C(d >= 0);
