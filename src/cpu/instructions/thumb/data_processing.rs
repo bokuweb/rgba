@@ -362,9 +362,31 @@ pub fn exec_thumb5_cmp<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     (s, PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_cmn<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
-    todo!("cmn");
-    (0, PipelineStatus::Continue)
+pub fn exec_thumb4_cmn<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+    let rd = gpr[dec.get_Rd2_0() as usize];
+    let rs = gpr[dec.get_Rs() as usize];
+    let d = (rd as u64).wrapping_add(rs as u64);
+    cpsr.set_N_from(d as u32);
+    cpsr.set_Z_from(d as u32);
+    let (_, v) = (rd as i32).overflowing_add(rs as i32);
+    cpsr.set_V(v);
+    cpsr.set_C(d & (1 << 32) != 0);
+    let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    (s, PipelineStatus::Continue)
+}
+
+pub fn exec_thumb4_adc<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+    let rd = gpr[dec.get_Rd2_0() as usize];
+    let rs = gpr[dec.get_Rs() as usize];
+    let c: u32 = cpsr.get_C().into();
+    let d = (rd as u64).wrapping_add(rs as u64 + c as u64);
+    cpsr.set_N_from(d as u32);
+    cpsr.set_Z_from(d as u32);
+    let (_, v) = (rd as i32).overflowing_add(rs as i32 + c as i32);
+    cpsr.set_V(v);
+    cpsr.set_C(d & (1 << 32) != 0);
+    let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    (s, PipelineStatus::Continue)
 }
 
 pub fn exec_thumb_orr<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
