@@ -75,7 +75,7 @@ impl ARM {
 
     fn increment_pc(&mut self) {
         let next = if self.cpsr.get_cpu_state() == CpuState::ARM { 4 } else { 2 };
-        self.gpr[PC] = self.gpr[PC].wrapping_add(next);
+        self.gpr[PC] = (self.gpr[PC] & 0xFFFF_FFFE).wrapping_add(next);
     }
 
     fn get_inst_addr(&self) -> Word {
@@ -155,7 +155,7 @@ impl ARM {
             CpuState::Thumb => {
                 let fetched = self.get_thumb_executable(bus);
                 dbg!(&self.gpr, self.cpsr.get_V(), self.cpsr.get_Z());
-                if self.gpr[15] == 134218834 {
+                if self.gpr[15] == 134219058 {
                     dbg!("hello");
                 }
                 let instruction = thumb::decode(fetched);
