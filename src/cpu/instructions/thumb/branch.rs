@@ -29,16 +29,14 @@ pub fn exec_thumb_b(dec: Branch, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Execut
 pub fn exec_thumb_b2(dec: Branch, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     // TODO: Add cycle
     let offset = dec.get_offset11();
+    dbg!(offset, dec.0);
     let offset = if offset & 0x0400 != 0 {
-        (offset as u32 | 0xFFFF_FC00 as u32) as i32
+        (offset as u32 | 0xFFFF_F800 as u32) as i32
     } else {
         offset as i32
     }
     .wrapping_shl(1);
-
-    if gpr[PC] as i64 + offset as i64 == 134221503 {
-        // dbg!("0", &gpr);
-    }
+    dbg!(offset, dec);
 
     let pc = gpr[PC] as i64 + offset as i64;
     gpr[PC] = pc as u32;

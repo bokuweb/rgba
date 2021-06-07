@@ -55,7 +55,11 @@ pub fn exec_thumb_add_hi_register<T: BusAccessor>(bus: &T, dec: DataProcessing, 
     dbg!(rs, rd, gpr[rd].wrapping_add(gpr[rs]));
     gpr[rd] = gpr[rd].wrapping_add(gpr[rs]);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
-    (s, PipelineStatus::Continue)
+    if rd == PC {
+        (s, PipelineStatus::Flush)
+    } else {
+        (s, PipelineStatus::Continue)
+    }
 }
 
 // THUMB.12: get relative address
