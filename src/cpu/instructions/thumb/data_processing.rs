@@ -56,7 +56,7 @@ pub fn exec_thumb_add_hi_register<T: BusAccessor>(bus: &T, dec: DataProcessing, 
     gpr[rd] = gpr[rd].wrapping_add(gpr[rs]);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     if rd == PC {
-        (s, PipelineStatus::Flush)
+        (0, PipelineStatus::Flush)
     } else {
         (s, PipelineStatus::Continue)
     }

@@ -155,6 +155,7 @@ impl BusAccessor for CpuBus {
     fn read_byte(&self, addr: u32) -> Byte {
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_byte(addr),
+            0x0200_0000..=0x0203_FFFF => self.eram.read_byte(addr - 0x0200_0000),
             0x0300_0000..=0x0300_7FFF => self.wram.read_byte(addr - 0x0300_0000),
             0x0300_8000..=0x03FF_FFFF => 0,
             0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
@@ -172,6 +173,7 @@ impl BusAccessor for CpuBus {
         // dbg!(format!("read half word addr = {:x}", addr));
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_halfword(addr),
+            0x0200_0000..=0x0203_FFFF => self.eram.read_halfword(addr - 0x0200_0000),
             0x0300_0000..=0x0300_7FFF => self.wram.read_halfword(addr - 0x0300_0000),
             0x0300_8000..=0x03FF_FFFF => 0,
             0x0400_0000..=0x0400_005F => self.lcdc.read_halfword(addr - 0x0400_0000),
@@ -212,6 +214,7 @@ impl BusAccessor for CpuBus {
         }
         match addr {
             // 0x0000_0000...0x0007_FFFF => self.rom.borrow().read_word(addr),
+            0x0200_0000..=0x0203_FFFF => self.eram.write_byte(addr - 0x0200_0000, data),
             0x0300_0000..=0x0300_7FFF => {
                 if addr == 0x03007dd9 {
                     // dbg!("write to 0x03007dd9", data);
@@ -221,7 +224,7 @@ impl BusAccessor for CpuBus {
             0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
             0x0400_0060..=0x0400_03FF => {}
             0x0500_0000..=0x0500_03FF => self.palette.write_byte(addr - 0x0500_0000, data),
-            _ => panic!("TODO: "),
+            _ => panic!(format!("TODO: 0x{:x} 0x{:x}", addr, data)),
         };
     }
 

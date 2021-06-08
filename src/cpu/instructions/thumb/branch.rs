@@ -14,7 +14,6 @@ pub fn exec_thumb_b(dec: Branch, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Execut
 
     let cond: Cond = dec.get_cond().into();
     if cpsr.condition_ok(cond) {
-        dbg!(cpsr.get_Z());
         if (gpr[PC] as i64 + (offset as i64).wrapping_shl(1)) == 134221503 {
             // dbg!("0", &gpr);
         }
@@ -29,7 +28,6 @@ pub fn exec_thumb_b(dec: Branch, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Execut
 pub fn exec_thumb_b2(dec: Branch, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     // TODO: Add cycle
     let offset = dec.get_offset11();
-    dbg!(offset, dec.0);
     let offset = if offset & 0x0400 != 0 {
         (offset as u32 | 0xFFFF_F800 as u32) as i32
     } else {

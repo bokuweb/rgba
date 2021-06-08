@@ -87,7 +87,6 @@ impl ARM {
         if self.cpsr.get_cpu_state() == CpuState::ARM {
             self.gpr[PC] - (PC_OFFSET * 4) as Word
         } else {
-            dbg!(self.gpr[PC]);
             self.gpr[PC] - (PC_OFFSET * 2) as Word
         }
     }
@@ -160,10 +159,10 @@ impl ARM {
             }
             CpuState::Thumb => {
                 let fetched = self.get_thumb_executable(bus);
-                dbg!(&self.gpr, self.cpsr.get_V(), self.cpsr.get_Z());
-                if self.gpr[15] == 134219062 {
-                    dbg!("hello");
-                }
+                // dbg!(&self.gpr, self.cpsr.get_V(), self.cpsr.get_Z());
+                // if self.gpr[15] == 134219062 {
+                //    dbg!("hello");
+                // }
                 let instruction = thumb::decode(fetched);
                 let cycle = cycle + self.execute_thumb(instruction, bus, started);
                 Ok(cycle)
@@ -182,7 +181,6 @@ impl ARM {
     where
         T: BusAccessor,
     {
-        dbg!(self.get_inst_addr());
         bus.read_halfword(self.get_inst_addr())
     }
 
