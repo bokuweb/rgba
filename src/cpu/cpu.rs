@@ -151,9 +151,9 @@ impl ARM {
 
         match self.cpsr.get_cpu_state() {
             CpuState::ARM => {
-//                  dbg!(&self.gpr, self.cpsr.get_V());
+               //  dbg!(&self.gpr, self.cpsr.get_V());
 
-                if self.gpr[15] == 134218744 {
+                if self.gpr[15] == 134218844 {
                     dbg!("hello", self.cpsr.get_V());
                 }
                 let fetched = self.get_arm_executable(bus);

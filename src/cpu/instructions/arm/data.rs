@@ -151,7 +151,7 @@ where
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
                 cpsr.set_C(gpr[rn] >= value);
-                let (_, v) = (d as i32).overflowing_sub(value as i32);
+                let (_, v) = (gpr[rn] as i32).overflowing_sub(value as i32);
                 cpsr.set_V(v);
             }
         }
@@ -192,7 +192,6 @@ where
                 cpsr.set_Z_from(d as u32);
                 cpsr.set_C_from(d);
                 let (_, v) = (gpr[rn] as i32).overflowing_add(value as i32);
-                dbg!(v);
                 cpsr.set_V(v);
             }
         }
@@ -210,7 +209,8 @@ where
     let rn = dec.get_Rn() as usize;
     let c = cpsr.get_C();
     let result = exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
-        let d = gpr[rn] as u64 + value as u64 + if c { 1 } else { 0 };
+        let c = if c { 1 } else { 0 } as u32;
+        let d = gpr[rn] as u64 + value as u64 + c as u64;
         if s {
             if rd == PC {
                 unimplemented!("data processing Rd = PC with S flag.");
@@ -218,7 +218,8 @@ where
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
                 cpsr.set_C_from(d);
-                cpsr.set_V_from(gpr[rd], d as u32);
+                let (_, v) = (gpr[rn] as i32).overflowing_add((value + c) as i32);
+                cpsr.set_V(v);
             }
         }
         gpr[rd] = d as u32;
@@ -244,7 +245,8 @@ where
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
                 cpsr.set_C(gpr[rn] >= value + c);
-                cpsr.set_V_from(gpr[rd], d as u32);
+                let (_, v) = (gpr[rn] as i32).overflowing_sub((value + c) as i32);
+                cpsr.set_V(v);
             }
         }
         gpr[rd] = d
@@ -269,7 +271,8 @@ where
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
                 cpsr.set_C(gpr[rn] >= d);
-                cpsr.set_V_from(gpr[rd], d as u32);
+                let (_, v) = (gpr[rn] as i32).overflowing_sub(c as i32);
+                cpsr.set_V(v);
             }
         }
         gpr[rd] = d;
@@ -313,7 +316,7 @@ where
         cpsr.set_N(cmp >> 31 != 0);
         cpsr.set_Z(cmp == 0);
         // let (_, v) = (rn as i32).overflowing_sub(value as i32);
-        let v = rn >> 31 != value >> 31 && rn >> 31 != cmp >> 31;
+        let (_, v) = (rn as i32).overflowing_sub(value as i32);
         cpsr.set_V(v);
         // NOTE: Should we consider to shifted carry?
         cpsr.set_C(rn >= value);
