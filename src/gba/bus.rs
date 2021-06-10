@@ -271,6 +271,7 @@ impl BusAccessor for CpuBus {
             // Unused
             0x0300_8000..=0x03FF_FFFF => {
                 // // dbg!(format!("{:x}", addr));
+                panic!("unused")
             }
             0x0400_0000..=0x0400_005F => self.lcdc.write_word(addr - 0x0400_0000, data),
             0x0400_0060..=0x0400_03FF => {}

@@ -191,7 +191,9 @@ where
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
                 cpsr.set_C_from(d);
-                cpsr.set_V_from(gpr[rd], d as u32);
+                let (_, v) = (gpr[rn] as i32).overflowing_add(value as i32);
+                dbg!(v);
+                cpsr.set_V(v);
             }
         }
         gpr[rd] = d as u32;

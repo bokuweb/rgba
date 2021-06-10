@@ -144,8 +144,18 @@ impl ARM {
             0
         };
         // let log = format!("{:?}", self.gpr);
+        // dbg!(&self.gpr);
+        if self.gpr[15] == 134225604 {
+            // panic!("aa")
+        }
+
         match self.cpsr.get_cpu_state() {
             CpuState::ARM => {
+//                  dbg!(&self.gpr, self.cpsr.get_V());
+
+                if self.gpr[15] == 134218744 {
+                    dbg!("hello", self.cpsr.get_V());
+                }
                 let fetched = self.get_arm_executable(bus);
                 let cond: Cond = fetched.wrapping_shr(28).into();
                 if !self.cpsr.condition_ok(cond) {
@@ -159,7 +169,8 @@ impl ARM {
             }
             CpuState::Thumb => {
                 let fetched = self.get_thumb_executable(bus);
-                // dbg!(&self.gpr, self.cpsr.get_V(), self.cpsr.get_Z());
+                // dbg!(&self.gpr);
+
                 // if self.gpr[15] == 134219062 {
                 //    dbg!("hello");
                 // }
