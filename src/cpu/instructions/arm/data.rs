@@ -424,9 +424,11 @@ where
 {
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
-    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry: bool, cpsr| {
         if s {
-            unimplemented!()
+            cpsr.set_N_from(value);
+            cpsr.set_Z_from(value);
+            cpsr.set_C(carry);
         }
         gpr[rd] = value;
     })

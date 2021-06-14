@@ -137,10 +137,10 @@ impl PSR {
         self.set_C(reg > 0xFFFF_FFFF);
     }
 
-    pub fn set_V_from(&mut self, cur: u32, reg: u32) {
-        let v = (cur >> 31) != 0 && (((cur >> 31) ^ reg) >> 31) != 0 && (reg >> 31) == 0;
-        self.set_V(v);
-    }
+    // pub fn set_V_from(&mut self, cur: u32, reg: u32) {
+    //     let v = (cur >> 31) != 0 && (((cur >> 31) ^ reg) >> 31) != 0 && (reg >> 31) == 0;
+    //     self.set_V(v);
+    // }
 
     pub fn switch_mode(&mut self, new_mode: Mode, gpr: &mut [Word; 16], spsr: &mut PSR, bank_gpr: &mut BankGpr, bank_spsr: &mut BankSpsr) {
         if new_mode == self.get_mode() {

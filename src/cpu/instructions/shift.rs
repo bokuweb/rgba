@@ -23,7 +23,13 @@ pub fn is_carry_over(shift_type: Shift, value: u32, shift: u32, current: bool, s
         }
     } else {
         match shift_type {
-            Shift::LSL => value & (1 << (32 - shift)) != 0,
+            Shift::LSL => {
+                if shift > 32 {
+                    false
+                } else {
+                    value & (1 << (32 - shift)) != 0
+                }
+            }
             Shift::ASR => {
                 if shift == 0 {
                     current
@@ -35,7 +41,7 @@ pub fn is_carry_over(shift_type: Shift, value: u32, shift: u32, current: bool, s
                     false
                 }
             }
-            _ => value & (1 << (shift - 1)) != 0,
+            _ => value & (1 as u32).checked_shl(shift - 1).unwrap_or_default() != 0,
         }
     }
 }
@@ -45,7 +51,7 @@ pub fn lsl(value: u32, shift: u32) -> u32 {
         // Op2 = Rm
         return value;
     }
-    value.wrapping_shl(shift)
+    value.checked_shl(shift).unwrap_or_default()
 }
 
 pub fn lsr(value: u32, shift: u32, shift_by_reg: bool) -> u32 {
@@ -56,7 +62,7 @@ pub fn lsr(value: u32, shift: u32, shift_by_reg: bool) -> u32 {
             return value;
         }
     }
-    value.wrapping_shr(shift)
+    value.checked_shr(shift).unwrap_or_default()
 }
 
 pub fn asr(value: u32, shift: u32, shift_by_reg: bool) -> u32 {
@@ -73,9 +79,9 @@ pub fn asr(value: u32, shift: u32, shift_by_reg: bool) -> u32 {
         }
     }
     if value & (1 << 31) == 0 {
-        value.wrapping_shr(shift)
+        value.checked_shr(shift).unwrap_or_default()
     } else if shift < 32 {
-        value.wrapping_shr(shift) | ((0xFFFF_FFFF as u32).wrapping_shl(32 - shift))
+        value.checked_shr(shift).unwrap_or_default() | ((0xFFFF_FFFF as u32).checked_shl(32 - shift).unwrap_or_default())
     } else if value & 0x8000_0000 == 0 {
         return 0;
     } else {
@@ -87,15 +93,17 @@ pub fn ror(value: u32, shift: u32, c: bool, shift_by_reg: bool) -> u32 {
     if shift == 0 {
         if !shift_by_reg {
             if c {
-                return value.wrapping_shr(1) | 0x8000_0000; // Op2 bit 31 set to old C
+                return value.checked_shr(1).unwrap_or_default() | 0x8000_0000; // Op2 bit 31 set to old C
             } else {
-                return value.wrapping_shr(1);
+                return value.checked_shr(1).unwrap_or_default();
             }
         } else {
             return value;
         }
-    }
-    value.wrapping_shr(shift) | (value.wrapping_shl(32 - shift))
+    } // else if shift > 32 {
+      //return 0;
+      //}
+    value.rotate_right(shift)
 }
 
 #[test]
