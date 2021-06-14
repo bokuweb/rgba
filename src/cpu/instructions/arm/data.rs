@@ -332,7 +332,7 @@ where
         let rn = gpr[rn];
         let cmn = (rn as u64).wrapping_add(value as u64);
         cpsr.set_N((cmn as i32) < 0);
-        cpsr.set_Z(cmn == 0);
+        cpsr.set_Z((cmn as u32) == 0);
         let (_, v) = (rn as i32).overflowing_add(value as i32);
         cpsr.set_V(v);
         cpsr.set_C(cmn & (1 << 32) != 0);
