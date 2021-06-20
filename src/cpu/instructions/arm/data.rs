@@ -5,16 +5,11 @@ use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::*;
 use crate::cpu::instructions::shift::{is_carry_over, ror, shift};
 use crate::cpu::instructions::ExecuteResult;
-use crate::cpu::registers::psr::PSR;
+use crate::cpu::registers::psr::{Mode, PSR};
+use crate::cpu::registers::{BankGpr, BankSpsr};
 use crate::types::*;
 
-pub fn exec_data_processing<T, F>(
-    bus: &T,
-    gpr: &mut [Word; 16],
-    dec: DataProcessing,
-    cpsr: &mut PSR,
-    data_process: &mut F,
-) -> Result<ExecuteResult, ()>
+pub fn exec_data_processing<T, F>(bus: &T, gpr: &mut [Word; 16], dec: DataProcessing, cpsr: &mut PSR, data_process: &mut F) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
     F: FnMut(&mut [Word; 16], Word, bool, &mut PSR),
@@ -135,7 +130,15 @@ where
     })
 }
 
-pub fn exec_arm_sub<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_sub<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -145,8 +148,8 @@ where
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let d = gpr[rn].wrapping_sub(value);
         if s {
-            if rd == PC {
-                unimplemented!("data processing Rd = PC with S flag.");
+            if rd == PC && cpsr.get_mode() != Mode::User {
+                cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
@@ -174,15 +177,28 @@ where
     })
 }
 
+fn get_operand(gpr: &[Word; 16], reg: u32, I: bool, R: bool) -> u32 {
+    // When using R15 as operand (Rm or Rn)]
+    // the returned value depends on the instruction: PC+12 if I=0,R=1 (shift by register)
+    // otherwise PC+8 (shift by immediate).
+    if reg as usize == PC && !I && R {
+        return gpr[reg as usize] + 4;
+    }
+    gpr[reg as usize]
+}
+
 pub fn exec_arm_add<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
     let s = dec.get_S();
+    let i = dec.get_I();
+    let r = dec.get_R();
     let rd = dec.get_Rd() as usize;
-    let rn = dec.get_Rn() as usize;
+    let rn = dec.get_Rn();
+    let op1 = get_operand(gpr, rn, i, r);
     let result = exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
-        let d = gpr[rn] as u64 + value as u64;
+        let d = op1 as u64 + value as u64;
         // dbg!(d, gpr[rn], value);
         if s {
             if rd == PC {
@@ -191,7 +207,7 @@ where
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
                 cpsr.set_C_from(d);
-                let (_, v) = (gpr[rn] as i32).overflowing_add(value as i32);
+                let (_, v) = (op1 as i32).overflowing_add(value as i32);
                 cpsr.set_V(v);
             }
         }

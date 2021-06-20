@@ -2,8 +2,7 @@ use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::{arm, thumb};
 use crate::cpu::instructions::arm::{
-    block_data_transfer::*, branch::*, branch_and_exchange::*, data::*, extra_memory::*, memory::*, multiple::*, psr_transfer::*,
-    single_data_swap::*,
+    block_data_transfer::*, branch::*, branch_and_exchange::*, data::*, extra_memory::*, memory::*, multiple::*, psr_transfer::*, single_data_swap::*,
 };
 
 use crate::cpu::instructions::thumb::*;
@@ -23,12 +22,12 @@ enum CpuMode {
 
 pub struct ARM {
     pub gpr: [u32; 16],
-    bank_gpr: BankGpr,
-    pipeline_wait: u8,
-    cpsr: PSR,
-    spsr: PSR,
+    pub bank_gpr: BankGpr,
+    pub bank_spsr: BankSpsr,
+    pub cpsr: PSR,
+    pub spsr: PSR,
 
-    bank_spsr: BankSpsr,
+    pipeline_wait: u8,
     mode: CpuMode,
     irq_disable: bool,
     fiq_disable: bool,
@@ -138,24 +137,20 @@ impl ARM {
     where
         T: BusAccessor,
     {
-        let cycle = if self.pipeline_wait > 0 {
-            self.wait_pipeline_filled(bus)
-        } else {
-            0
-        };
+        let cycle = if self.pipeline_wait > 0 { self.wait_pipeline_filled(bus) } else { 0 };
         // let log = format!("{:?}", self.gpr);
-        // dbg!(&self.gpr);
+        dbg!(&self.gpr);
         if self.gpr[15] == 134225604 {
-            panic!("aa")
+            // panic!("aa")
         }
 
         match self.cpsr.get_cpu_state() {
             CpuState::ARM => {
-                dbg!(&self.gpr);
+                // dbg!(&self.gpr);
 
-                // if self.gpr[15] == 134220196 {
-                //     dbg!("hello", self.cpsr.get_Z());
-                // }
+                if self.gpr[15] == 134220600 {
+                    dbg!("hello", self.cpsr.get_Z());
+                }
                 let fetched = self.get_arm_executable(bus);
                 let cond: Cond = fetched.wrapping_shr(28).into();
                 if !self.cpsr.condition_ok(cond) {
@@ -212,7 +207,7 @@ impl ARM {
             match instruction {
                 arm::Instruction::AND(dec) => exec_arm_and(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::EOR(dec) => exec_arm_eor(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                arm::Instruction::SUB(dec) => exec_arm_sub(bus, dec, &mut self.gpr, &mut self.cpsr)?,
+                arm::Instruction::SUB(dec) => exec_arm_sub(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
                 arm::Instruction::RSB(dec) => exec_arm_rsb(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::ADD(dec) => exec_arm_add(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::ADC(dec) => exec_arm_adc(bus, dec, &mut self.gpr, &mut self.cpsr)?,
@@ -248,26 +243,10 @@ impl ARM {
                 arm::Instruction::B(dec) => exec_arm_b(dec, &mut self.gpr)?,
                 arm::Instruction::BL(dec) => exec_arm_bl(dec, &mut self.gpr)?,
                 arm::Instruction::BX(dec) => exec_arm_bx(dec, &mut self.cpsr, &mut self.gpr)?,
-                arm::Instruction::LDM(dec) => exec_arm_ldm(
-                    bus,
-                    dec,
-                    &mut self.gpr,
-                    &mut self.cpsr,
-                    &mut self.spsr,
-                    &mut self.bank_gpr,
-                    &mut self.bank_spsr,
-                )?,
+                arm::Instruction::LDM(dec) => exec_arm_ldm(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
                 arm::Instruction::STM(dec) => exec_arm_stm(bus, dec, &mut self.gpr)?,
                 arm::Instruction::MRS(dec) => exec_arm_mrs(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr)?,
-                arm::Instruction::MSR(dec) => exec_arm_msr(
-                    bus,
-                    dec,
-                    &mut self.gpr,
-                    &mut self.cpsr,
-                    &mut self.spsr,
-                    &mut self.bank_gpr,
-                    &mut self.bank_spsr,
-                )?,
+                arm::Instruction::MSR(dec) => exec_arm_msr(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
                 arm::Instruction::SWP(dec) => exec_arm_swp(bus, dec, &mut self.gpr)?,
                 arm::Instruction::SWPB(dec) => exec_arm_swpb(bus, dec, &mut self.gpr)?,
                 arm::Instruction::Undefined => unimplemented!(),

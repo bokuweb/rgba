@@ -29,7 +29,7 @@ impl From<u32> for Mode {
             0x17 => Mode::Abort,
             0x1B => Mode::Undefined,
             0x1F => Mode::System,
-            _ => panic!("illegal mode value detected."),
+            _ => panic!("illegal mode value({:x}) detected.", f),
         }
     }
 }
@@ -141,6 +141,12 @@ impl PSR {
     //     let v = (cur >> 31) != 0 && (((cur >> 31) ^ reg) >> 31) != 0 && (reg >> 31) == 0;
     //     self.set_V(v);
     // }
+
+    pub fn restore(&mut self, spsr: &mut PSR, gpr: &mut [Word; 16], bank_gpr: &mut BankGpr, bank_spsr: &mut BankSpsr) {
+        self.switch_mode(spsr.get_mode(), gpr, spsr, bank_gpr, bank_spsr);
+        self.set(spsr.get())
+        // TODO: check irq??
+    }
 
     pub fn switch_mode(&mut self, new_mode: Mode, gpr: &mut [Word; 16], spsr: &mut PSR, bank_gpr: &mut BankGpr, bank_spsr: &mut BankSpsr) {
         if new_mode == self.get_mode() {

@@ -90,6 +90,7 @@ pub fn asr(value: u32, shift: u32, shift_by_reg: bool) -> u32 {
 }
 
 pub fn ror(value: u32, shift: u32, c: bool, shift_by_reg: bool) -> u32 {
+    dbg!(value, shift);
     if shift == 0 {
         if !shift_by_reg {
             if c {
@@ -103,8 +104,8 @@ pub fn ror(value: u32, shift: u32, c: bool, shift_by_reg: bool) -> u32 {
     } // else if shift > 32 {
       //return 0;
       //}
-    value.rotate_right(shift)
-}
+      value.rotate_right(shift)
+    }
 
 #[test]
 fn test_ror() {

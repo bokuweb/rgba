@@ -34,8 +34,16 @@ where
     T: BusAccessor,
 {
     let value = if dec.get_I() {
-        ror(dec.get_imm(), dec.get_rotate().wrapping_shl(1), cpsr.get_C(), false)
+        dbg!("----", dec.get_rotate(), dec.get_imm());
+        // dec.get_rotate().rotate_right();
+        ror(
+            dec.get_imm(),
+            dec.get_rotate().checked_shl(1).unwrap_or_default(),
+            cpsr.get_C(),
+            true,
+        )
     } else {
+        dbg!("----9999");
         gpr[dec.get_Rm() as usize]
     };
 
@@ -61,7 +69,9 @@ where
         if current_mode != Mode::User && mask & 0x0000_00CF != 0 {
             cpsr.set_I(value & 0x0000_0080 != 0);
             cpsr.set_F(value & 0x0000_0040 != 0);
+            dbg!(value, current_mode);
             let new_mode = Mode::from((value & 0x0000_000F) | 0x0000_0010);
+            dbg!(new_mode);
             cpsr.switch_mode(new_mode, gpr, spsr, bank_gpr, bank_spsr);
         }
     }
