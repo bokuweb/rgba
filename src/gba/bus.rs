@@ -279,7 +279,7 @@ impl BusAccessor for CpuBus {
             0x0600_0000..=0x0601_7FFF => {
                 self.vram.write_word(addr - 0x0600_0000, data);
             }
-            _ => panic!("TODO: addr = {:x} data = {:x}", addr, data),
+            _ => error!("TODO: addr = {:x} data = {:x}", addr, data),
         };
     }
 

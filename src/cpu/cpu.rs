@@ -139,7 +139,7 @@ impl ARM {
     {
         let cycle = if self.pipeline_wait > 0 { self.wait_pipeline_filled(bus) } else { 0 };
         // let log = format!("{:?}", self.gpr);
-        dbg!(&self.gpr);
+        // dbg!(&self.gpr);
         if self.gpr[15] == 134225604 {
             // panic!("aa")
         }
