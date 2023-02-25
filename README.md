@@ -7,3 +7,10 @@
 ```
 $ brew install sdl2
 ```
+
+Please add following to .bashrc
+
+```
+export LIBRARY_PATH="$LIBRARY_PATH:$(brew --prefix)/lib"
+```
+
