@@ -16,3 +16,4 @@ export LIBRARY_PATH="$LIBRARY_PATH:$(brew --prefix)/lib"
 
 ```
 cargo run ./fixtures/hello/hello.gba
+```
