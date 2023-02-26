@@ -33,6 +33,7 @@ fn main() {
     let mut prev_time = SystemTime::now();
     let mut gba = gba::GBA::new();
     let mut key = io::Key::new();
+    let mut started = false;
 
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -51,6 +52,7 @@ fn main() {
                         Keycode::Return => {
                             // std::env::set_var("RUST_LOG", "debug");
                             // pretty_env_logger::init();
+                            started = true;
                             key.set_START(io::KeyStatus::ON)
                         }
                         Keycode::Up => key.set_UP(io::KeyStatus::ON),
@@ -82,7 +84,7 @@ fn main() {
         // dbg!(key);
         gba.update_key(key);
 
-        let buf = gba.frame();
+        let buf = gba.frame(started);
 
         for i in 0..HEIGHT {
             for j in 0..WIDTH {
