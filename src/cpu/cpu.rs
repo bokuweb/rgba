@@ -2,8 +2,7 @@ use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::{arm, thumb};
 use crate::cpu::instructions::arm::{
-    block_data_transfer::*, branch::*, branch_and_exchange::*, data::*, extra_memory::*, memory::*, multiple::*, psr_transfer::*,
-    single_data_swap::*,
+    block_data_transfer::*, branch::*, branch_and_exchange::*, data::*, extra_memory::*, memory::*, multiple::*, psr_transfer::*, single_data_swap::*,
 };
 
 use crate::cpu::instructions::thumb::*;
@@ -23,12 +22,12 @@ enum CpuMode {
 
 pub struct ARM {
     pub gpr: [u32; 16],
-    bank_gpr: BankGpr,
-    pipeline_wait: u8,
-    cpsr: PSR,
-    spsr: PSR,
+    pub bank_gpr: BankGpr,
+    pub bank_spsr: BankSpsr,
+    pub cpsr: PSR,
+    pub spsr: PSR,
 
-    bank_spsr: BankSpsr,
+    pipeline_wait: u8,
     mode: CpuMode,
     irq_disable: bool,
     fiq_disable: bool,
@@ -75,7 +74,12 @@ impl ARM {
 
     fn increment_pc(&mut self) {
         let next = if self.cpsr.get_cpu_state() == CpuState::ARM { 4 } else { 2 };
-        self.gpr[PC] = self.gpr[PC].wrapping_add(next);
+        let pc = if self.cpsr.get_cpu_state() == CpuState::ARM {
+            self.gpr[PC] & 0xFFFF_FFFC
+        } else {
+            self.gpr[PC] & 0xFFFF_FFFE
+        };
+        self.gpr[PC] = pc.wrapping_add(next);
     }
 
     fn get_inst_addr(&self) -> Word {
@@ -129,24 +133,26 @@ impl ARM {
         return next + cycle;
     }
 
-    pub fn step<T>(&mut self, bus: &mut T) -> Result<Cycle, ()>
+    pub fn step<T>(&mut self, bus: &mut T, started: bool) -> Result<Cycle, ()>
     where
         T: BusAccessor,
     {
-        let cycle = if self.pipeline_wait > 0 {
-            self.wait_pipeline_filled(bus)
-        } else {
-            0
-        };
+        let cycle = if self.pipeline_wait > 0 { self.wait_pipeline_filled(bus) } else { 0 };
         // let log = format!("{:?}", self.gpr);
-        // debug!("tick {:?}", &self.gpr);
+        // dbg!(&self.gpr);
+        if self.gpr[15] == 134225604 {
+            // panic!("aa")
+        }
+
         match self.cpsr.get_cpu_state() {
             CpuState::ARM => {
+                // dbg!(&self.gpr);
+
+                if self.gpr[15] == 134220600 {
+                    dbg!("hello", self.cpsr.get_Z());
+                }
                 let fetched = self.get_arm_executable(bus);
                 let cond: Cond = fetched.wrapping_shr(28).into();
-                if self.gpr[15] >= 134224832 && self.gpr[15] <= 134224892 {
-                    dbg!("🔥", &self.gpr, self.cpsr.condition_ok(cond));
-                }
                 if !self.cpsr.condition_ok(cond) {
                     let s = bus.compute_cycle(self.gpr[PC], AccessType::Seq(AccessWidth::Word));
                     self.increment_pc();
@@ -158,12 +164,13 @@ impl ARM {
             }
             CpuState::Thumb => {
                 let fetched = self.get_thumb_executable(bus);
-                // debug!("{:x}", fetched);
-                // if self.gpr[15] == 134218152 && self.gpr[5] == 1022{
-                //     // dbg!(&self.gpr);
+                // dbg!(&self.gpr);
+
+                // if self.gpr[15] == 134219062 {
+                //    dbg!("hello");
                 // }
                 let instruction = thumb::decode(fetched);
-                let cycle = cycle + self.execute_thumb(instruction, bus);
+                let cycle = cycle + self.execute_thumb(instruction, bus, started);
                 Ok(cycle)
             }
         }
@@ -189,18 +196,18 @@ impl ARM {
     {
         // // dbg!(&instruction, &self.gpr);
         //if (self.gpr[15] >= 134221712 && self.gpr[15] <= 134221748) {
-        //    dbg!(&self.gpr);
+        //         dbg!(&self.gpr);
         //     // dbg!("0");
 
-        if self.gpr[15] >= 134224832 && self.gpr[15] <= 134224860 {
-            dbg!('🔥', &instruction, &self.gpr);
-        }
+        // if self.gpr[15] >= 134225848 && self.gpr[15] <= 134224860 {
+        //     dbg!('🔥', &instruction, &self.gpr);
+        // }
         // }
         let (cycle, pipeline_status) = {
             match instruction {
                 arm::Instruction::AND(dec) => exec_arm_and(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::EOR(dec) => exec_arm_eor(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                arm::Instruction::SUB(dec) => exec_arm_sub(bus, dec, &mut self.gpr, &mut self.cpsr)?,
+                arm::Instruction::SUB(dec) => exec_arm_sub(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
                 arm::Instruction::RSB(dec) => exec_arm_rsb(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::ADD(dec) => exec_arm_add(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::ADC(dec) => exec_arm_adc(bus, dec, &mut self.gpr, &mut self.cpsr)?,
@@ -236,18 +243,10 @@ impl ARM {
                 arm::Instruction::B(dec) => exec_arm_b(dec, &mut self.gpr)?,
                 arm::Instruction::BL(dec) => exec_arm_bl(dec, &mut self.gpr)?,
                 arm::Instruction::BX(dec) => exec_arm_bx(dec, &mut self.cpsr, &mut self.gpr)?,
-                arm::Instruction::LDM(dec) => exec_arm_ldm(bus, dec, &mut self.gpr)?,
+                arm::Instruction::LDM(dec) => exec_arm_ldm(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
                 arm::Instruction::STM(dec) => exec_arm_stm(bus, dec, &mut self.gpr)?,
                 arm::Instruction::MRS(dec) => exec_arm_mrs(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr)?,
-                arm::Instruction::MSR(dec) => exec_arm_msr(
-                    bus,
-                    dec,
-                    &mut self.gpr,
-                    &mut self.cpsr,
-                    &mut self.spsr,
-                    &mut self.bank_gpr,
-                    &mut self.bank_spsr,
-                )?,
+                arm::Instruction::MSR(dec) => exec_arm_msr(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
                 arm::Instruction::SWP(dec) => exec_arm_swp(bus, dec, &mut self.gpr)?,
                 arm::Instruction::SWPB(dec) => exec_arm_swpb(bus, dec, &mut self.gpr)?,
                 arm::Instruction::Undefined => unimplemented!(),
@@ -268,17 +267,13 @@ impl ARM {
         }
     }
 
-    fn execute_thumb<T>(&mut self, instruction: thumb::Instruction, bus: &mut T) -> Cycle
+    fn execute_thumb<T>(&mut self, instruction: thumb::Instruction, bus: &mut T, started: bool) -> Cycle
     where
         T: BusAccessor,
     {
-        assert!(self.gpr[15] % 2 != 1);
-        let b = self.gpr.clone();
-
         let (cycle, pipeline_status) = {
-            // // dbg!(instruction);
             match instruction {
-                thumb::Instruction::LDR1(dec) => exec_thumb_ldr_imm_offset(bus, dec, &mut self.gpr),
+                thumb::Instruction::LDR1(dec) => exec_thumb_ldr_imm_offset(bus, dec, &mut self.gpr, started),
                 thumb::Instruction::LDRRegOffset(dec) => exec_thumb_ldr_reg_offset(bus, dec, &mut self.gpr),
                 thumb::Instruction::LDR3(dec) => exec_thumb_ldr3(bus, dec, &mut self.gpr),
                 thumb::Instruction::LDR4(dec) => exec_thumb_load_sp_relative(bus, dec, &mut self.gpr),
@@ -287,6 +282,9 @@ impl ARM {
                 thumb::Instruction::LDRB(dec) => exec_thumb_ldrb_imm_offset(bus, dec, &mut self.gpr),
                 thumb::Instruction::LDRBRegOffset(dec) => exec_thumb_ldrb_reg_offset(bus, dec, &mut self.gpr),
                 thumb::Instruction::LDRH(dec) => exec_thumb_ldrh(bus, dec, &mut self.gpr),
+                thumb::Instruction::LDRHThumb8(dec) => exec_thumb8_ldrh(bus, dec, &mut self.gpr),
+                thumb::Instruction::LDSBThumb8(dec) => exec_thumb8_ldsb(bus, dec, &mut self.gpr),
+                thumb::Instruction::LDSHThumb8(dec) => exec_thumb8_ldsh(bus, dec, &mut self.gpr),
                 thumb::Instruction::STRH(dec) => exec_thumb_strh(bus, dec, &mut self.gpr),
                 thumb::Instruction::STRB_IMM_OFFET(dec) => exec_thumb_strb_imm_offset(bus, dec, &mut self.gpr),
                 thumb::Instruction::STRRegOffset(dec) => exec_thumb_str_reg_offset(bus, dec, &mut self.gpr),
@@ -299,35 +297,30 @@ impl ARM {
                 // THUMB.12 6 nad 5
                 thumb::Instruction::ADD6(dec) => exec_thumb_add_relative_address(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ADD7(dec) => exec_thumb_add7(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::CMP3(dec) => {
-                    // // dbg!(dec.0);
-                    todo!("CMP3");
-                }
+                thumb::Instruction::CMPThumb5(dec) => exec_thumb5_cmp(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::MOV3(dec) => exec_thumb_mov3(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::SUB1(dec) => exec_thumb_sub1(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::SUB3(dec) => exec_thumb_sub3(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::AND(dec) => exec_thumb_and(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::EOR(dec) => exec_thumb_eor(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::LSL2(dec) => exec_thumb_lsl2(bus, dec, &mut self.gpr, &mut self.cpsr),
+                thumb::Instruction::LSLThumb4(dec) => exec_thumb4_lsl(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::LSR2(dec) => exec_thumb_lsr2(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::ASR1(dec) => exec_thumb_asr1(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::ASR2(dec) => {
-                    // exec_thumb_asr2(dec, &mut self.gpr, &mut self.cpsr)
-                    todo!("asr2")
-                }
+                thumb::Instruction::ASRThumb1(dec) => exec_thumb1_asr(bus, dec, &mut self.gpr, &mut self.cpsr),
+                thumb::Instruction::ASRThumb4(dec) => exec_thumb4_asr(bus, dec, &mut self.gpr, &mut self.cpsr),
+                thumb::Instruction::ADCThumb4(dec) => exec_thumb4_adc(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::SBC(dec) => exec_thumb_sbc(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::ROR(dec) => exec_thumb_ror(bus, dec, &mut self.gpr, &mut self.cpsr),
+                thumb::Instruction::RORThumb4(dec) => exec_thumb4_ror(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::TST(dec) => exec_thumb_tst(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::NEG(dec) => exec_thumb_neg(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::CMP1(dec) => exec_thumb_cmp1(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::CMP2(dec) => exec_thumb_cmp2(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::CMN(dec) => exec_thumb_cmn(bus, dec, &mut self.gpr, &mut self.cpsr),
+                thumb::Instruction::CMNThumb4(dec) => exec_thumb4_cmn(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::ORR(dec) => exec_thumb_orr(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::MUL(dec) => exec_thumb_mul(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::BIC(dec) => exec_thumb_bic(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::MVN(dec) => exec_thumb_mvn(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::LSL1(dec) => exec_thumb_lsl1(bus, dec, &mut self.gpr, &mut self.cpsr),
-                thumb::Instruction::LSR1(dec) => exec_thumb_lsr1(bus, dec, &mut self.gpr, &mut self.cpsr),
+                thumb::Instruction::LSLThumb1(dec) => exec_thumb1_lsl(bus, dec, &mut self.gpr, &mut self.cpsr),
+                thumb::Instruction::LSRThumb1(dec) => exec_thumb1_lsr(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::MOV1(dec) => exec_thumb_mov1(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::SUB2(dec) => exec_thumb_sub2(bus, dec, &mut self.gpr, &mut self.cpsr),
                 thumb::Instruction::B(dec) => exec_thumb_b(dec, &mut self.gpr, &mut self.cpsr),
@@ -335,7 +328,7 @@ impl ARM {
                 thumb::Instruction::BL(dec) => exec_thumb_bl1(bus, dec, &mut self.gpr),
                 thumb::Instruction::BX(dec) => exec_thumb_bx(bus, dec, &mut self.cpsr, &mut self.gpr),
                 thumb::Instruction::STMIA(dec) => exec_thumb_stmia(bus, dec, &mut self.gpr),
-                thumb::Instruction::LDMIA(dec) => exec_thumb_ldmia(bus, dec, &mut self.gpr),
+                thumb::Instruction::LDMIA(dec) => exec_thumb_ldmia(bus, dec, &mut self.gpr, started),
                 thumb::Instruction::PUSH(dec) => exec_thumb_push(bus, dec, &mut self.gpr),
                 thumb::Instruction::POP(dec) => exec_thumb_pop(bus, dec, &mut self.gpr),
                 _ => {
@@ -368,7 +361,7 @@ mod test {
 
     use super::*;
     use byteorder::{ByteOrder, LittleEndian};
-    // use ctare::memory::readable::*;
+
     trait CpuTest {
         fn run_immediately<T>(&mut self, bus: &mut T)
         where
@@ -429,7 +422,7 @@ mod test {
             T: BusAccessor,
         {
             for _ in 0..(INITIAL_PIPELINE_WAIT + 1) {
-                self.step(bus);
+                self.step(bus, false);
             }
         }
     }
@@ -446,7 +439,7 @@ mod test {
         setup();
         let mut bus = MockBus::new();
         let mut arm = ARM::new();
-        let _ = arm.step(&mut bus);
+        let _ = arm.step(&mut bus, false);
         assert_eq!(arm.get_gpr(PC), 0x0000_000C);
     }
 

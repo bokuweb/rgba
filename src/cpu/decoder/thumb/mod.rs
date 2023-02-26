@@ -15,6 +15,9 @@ pub enum Instruction {
     LDR1(SingleDataTransfer),
     LDRB(SingleDataTransfer),
     LDRH(SingleDataTransfer),
+    LDRHThumb8(SingleDataTransfer),
+    LDSBThumb8(SingleDataTransfer),
+    LDSHThumb8(SingleDataTransfer),
     LDRBRegOffset(SingleDataTransfer),
     LDRRegOffset(SingleDataTransfer),
     LDR3(SingleDataTransfer),
@@ -34,28 +37,29 @@ pub enum Instruction {
     ADD6(DataProcessing), // 6 and 5
     ADD7(DataProcessing),
     CMP1(DataProcessing),
-    CMP3(DataProcessing),
+    CMPThumb5(DataProcessing),
     SUB1(DataProcessing),
     SUB3(DataProcessing),
     MOV3(DataProcessing),
     AND(DataProcessing),
     EOR(DataProcessing),
-    LSL2(DataProcessing),
+    LSLThumb4(DataProcessing),
     LSR2(DataProcessing),
-    ASR2(DataProcessing),
+    ASRThumb4(DataProcessing),
+    ADCThumb4(DataProcessing),
     SBC(DataProcessing),
-    ROR(DataProcessing),
+    RORThumb4(DataProcessing),
     TST(DataProcessing),
     NEG(DataProcessing),
     CMP2(DataProcessing),
-    CMN(DataProcessing),
+    CMNThumb4(DataProcessing),
     ORR(DataProcessing),
     MUL(DataProcessing),
     BIC(DataProcessing),
     MVN(DataProcessing),
-    LSL1(DataProcessing),
-    LSR1(DataProcessing),
-    ASR1(DataProcessing),
+    LSLThumb1(DataProcessing),
+    LSRThumb1(DataProcessing),
+    ASRThumb1(DataProcessing),
     MOV1(DataProcessing),
     SUB2(DataProcessing),
     B(Branch),
@@ -81,9 +85,9 @@ pub fn decode(raw: HalfWord) -> Instruction {
             if dec.get_S() {
                 match dec.get_op11_10() {
                     0b00 => Instruction::STRHRegOffset(dec),
-                    0b01 => todo!("ldsb"),
-                    0b10 => todo!("ldrh"),
-                    0b11 => todo!("ldsh"),
+                    0b01 => Instruction::LDSBThumb8(dec),
+                    0b10 => Instruction::LDRHThumb8(dec),
+                    0b11 => Instruction::LDSHThumb8(dec),
                     _ => unreachable!("unknown thumb data transfer instruction {}", dec.get_op11_10()),
                 }
             } else {
@@ -146,15 +150,16 @@ pub fn decode(raw: HalfWord) -> Instruction {
             match dec.get_op9_6() {
                 0b0000 => Instruction::AND(dec),
                 0b0001 => Instruction::EOR(dec),
-                0b0010 => Instruction::LSL2(dec),
+                0b0010 => Instruction::LSLThumb4(dec),
                 0b0011 => Instruction::LSR2(dec),
-                0b0100 => Instruction::ASR2(dec),
+                0b0100 => Instruction::ASRThumb4(dec),
+                0b0101 => Instruction::ADCThumb4(dec),
                 0b0110 => Instruction::SBC(dec),
-                0b0111 => Instruction::ROR(dec),
+                0b0111 => Instruction::RORThumb4(dec),
                 0b1000 => Instruction::TST(dec),
                 0b1001 => Instruction::NEG(dec),
                 0b1010 => Instruction::CMP2(dec),
-                0b1011 => Instruction::CMN(dec),
+                0b1011 => Instruction::CMNThumb4(dec),
                 0b1100 => Instruction::ORR(dec),
                 0b1101 => Instruction::MUL(dec),
                 0b1110 => Instruction::BIC(dec),
@@ -162,13 +167,13 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 _ => unreachable!("unknown thumb data processing instruction {}", dec.get_op9_6()),
             }
         }
-        // THUMB.1: move shift register
+        // THUMB.1: move shifted register
         v if ((v & 0xE000) == 0x0000) => {
             let dec = DataProcessing(v);
             match dec.get_op12_11() {
-                0b00 => Instruction::LSL1(dec),
-                0b01 => Instruction::LSR1(dec),
-                0b10 => Instruction::ASR1(dec),
+                0b00 => Instruction::LSLThumb1(dec),
+                0b01 => Instruction::LSRThumb1(dec),
+                0b10 => Instruction::ASRThumb1(dec),
                 _ => unreachable!("unknown thumb data processing instruction {}", dec.get_op12_11()),
             }
         }
@@ -189,7 +194,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
             // THUMB.5: Hi register operations
             match dec.get_op9_8() {
                 0b00 => Instruction::ADDHiRegister(dec),
-                0b01 => Instruction::CMP3(dec),
+                0b01 => Instruction::CMPThumb5(dec),
                 0b10 => Instruction::MOV3(dec),
                 // 0b11 => Instruction::BX(dec),
                 _ => unreachable!(),

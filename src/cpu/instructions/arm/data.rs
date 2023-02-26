@@ -5,16 +5,11 @@ use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::*;
 use crate::cpu::instructions::shift::{is_carry_over, ror, shift};
 use crate::cpu::instructions::ExecuteResult;
-use crate::cpu::registers::psr::PSR;
+use crate::cpu::registers::psr::{Mode, PSR};
+use crate::cpu::registers::{BankGpr, BankSpsr};
 use crate::types::*;
 
-pub fn exec_data_processing<T, F>(
-    bus: &T,
-    gpr: &mut [Word; 16],
-    dec: DataProcessing,
-    cpsr: &mut PSR,
-    data_process: &mut F,
-) -> Result<ExecuteResult, ()>
+pub fn exec_data_processing<T, F>(bus: &T, gpr: &mut [Word; 16], dec: DataProcessing, cpsr: &mut PSR, data_process: &mut F) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
     F: FnMut(&mut [Word; 16], Word, bool, &mut PSR),
@@ -135,7 +130,15 @@ where
     })
 }
 
-pub fn exec_arm_sub<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_sub<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -145,13 +148,13 @@ where
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let d = gpr[rn].wrapping_sub(value);
         if s {
-            if rd == PC {
-                unimplemented!("data processing Rd = PC with S flag.");
+            if rd == PC && cpsr.get_mode() != Mode::User {
+                cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
                 cpsr.set_C(gpr[rn] >= value);
-                let (_, v) = (d as i32).overflowing_sub(value as i32);
+                let (_, v) = (gpr[rn] as i32).overflowing_sub(value as i32);
                 cpsr.set_V(v);
             }
         }
@@ -174,15 +177,28 @@ where
     })
 }
 
+fn get_operand(gpr: &[Word; 16], reg: u32, I: bool, R: bool) -> u32 {
+    // When using R15 as operand (Rm or Rn)]
+    // the returned value depends on the instruction: PC+12 if I=0,R=1 (shift by register)
+    // otherwise PC+8 (shift by immediate).
+    if reg as usize == PC && !I && R {
+        return gpr[reg as usize] + 4;
+    }
+    gpr[reg as usize]
+}
+
 pub fn exec_arm_add<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
     let s = dec.get_S();
+    let i = dec.get_I();
+    let r = dec.get_R();
     let rd = dec.get_Rd() as usize;
-    let rn = dec.get_Rn() as usize;
+    let rn = dec.get_Rn();
+    let op1 = get_operand(gpr, rn, i, r);
     let result = exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
-        let d = gpr[rn] as u64 + value as u64;
+        let d = op1 as u64 + value as u64;
         // dbg!(d, gpr[rn], value);
         if s {
             if rd == PC {
@@ -191,7 +207,8 @@ where
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
                 cpsr.set_C_from(d);
-                cpsr.set_V_from(gpr[rd], d as u32);
+                let (_, v) = (op1 as i32).overflowing_add(value as i32);
+                cpsr.set_V(v);
             }
         }
         gpr[rd] = d as u32;
@@ -208,7 +225,8 @@ where
     let rn = dec.get_Rn() as usize;
     let c = cpsr.get_C();
     let result = exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
-        let d = gpr[rn] as u64 + value as u64 + if c { 1 } else { 0 };
+        let c = if c { 1 } else { 0 } as u32;
+        let d = gpr[rn] as u64 + value as u64 + c as u64;
         if s {
             if rd == PC {
                 unimplemented!("data processing Rd = PC with S flag.");
@@ -216,7 +234,8 @@ where
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
                 cpsr.set_C_from(d);
-                cpsr.set_V_from(gpr[rd], d as u32);
+                let (_, v) = (gpr[rn] as i32).overflowing_add((value + c) as i32);
+                cpsr.set_V(v);
             }
         }
         gpr[rd] = d as u32;
@@ -242,7 +261,8 @@ where
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
                 cpsr.set_C(gpr[rn] >= value + c);
-                cpsr.set_V_from(gpr[rd], d as u32);
+                let (_, v) = (gpr[rn] as i32).overflowing_sub((value + c) as i32);
+                cpsr.set_V(v);
             }
         }
         gpr[rd] = d
@@ -267,7 +287,8 @@ where
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
                 cpsr.set_C(gpr[rn] >= d);
-                cpsr.set_V_from(gpr[rd], d as u32);
+                let (_, v) = (gpr[rn] as i32).overflowing_sub(c as i32);
+                cpsr.set_V(v);
             }
         }
         gpr[rd] = d;
@@ -311,11 +332,10 @@ where
         cpsr.set_N(cmp >> 31 != 0);
         cpsr.set_Z(cmp == 0);
         // let (_, v) = (rn as i32).overflowing_sub(value as i32);
-        let v = rn >> 31 != value >> 31 && rn >> 31 != cmp >> 31;
+        let (_, v) = (rn as i32).overflowing_sub(value as i32);
         cpsr.set_V(v);
         // NOTE: Should we consider to shifted carry?
         cpsr.set_C(rn >= value);
-        dbg!("CMP", cmp >> 31 != 0, cmp == 0, v, rn >= value, cmp, value, rn);
     })
 }
 
@@ -328,7 +348,7 @@ where
         let rn = gpr[rn];
         let cmn = (rn as u64).wrapping_add(value as u64);
         cpsr.set_N((cmn as i32) < 0);
-        cpsr.set_Z(cmn == 0);
+        cpsr.set_Z((cmn as u32) == 0);
         let (_, v) = (rn as i32).overflowing_add(value as i32);
         cpsr.set_V(v);
         cpsr.set_C(cmn & (1 << 32) != 0);
@@ -420,11 +440,12 @@ where
 {
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
-    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry: bool, cpsr| {
         if s {
-            unimplemented!()
+            cpsr.set_N_from(value);
+            cpsr.set_Z_from(value);
+            cpsr.set_C(carry);
         }
         gpr[rd] = value;
-        dbg!(&gpr);
     })
 }

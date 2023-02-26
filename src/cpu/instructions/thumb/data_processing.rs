@@ -15,7 +15,9 @@ pub fn exec_thumb_add1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     cpsr.set_N_from(d as u32);
     cpsr.set_Z_from(d as u32);
     cpsr.set_C_from(d);
-    cpsr.set_V_from(gpr[dec.get_Rd2_0() as usize], d as u32);
+    let (_, v) = (gpr[dec.get_Rn5_3() as usize] as i32).overflowing_add(imm as i32);
+    cpsr.set_V(v);
+    // cpsr.set_V_from(gpr[dec.get_Rd2_0() as usize], d as u32);
     gpr[dec.get_Rd2_0() as usize] = d as u32;
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
@@ -23,11 +25,14 @@ pub fn exec_thumb_add1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
 
 pub fn exec_thumb_add2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let rn_rd = dec.get_Rd10_8() as usize;
-    let d = gpr[rn_rd] as u64 + dec.get_imm8() as u64;
+    let imm = dec.get_imm8() as u32;
+    let d = gpr[rn_rd] as u64 + imm as u64;
     cpsr.set_N_from(d as u32);
     cpsr.set_Z_from(d as u32);
     cpsr.set_C_from(d);
-    cpsr.set_V_from(gpr[rn_rd], d as u32);
+    let v = gpr[rn_rd] >> 31 == 0 && (gpr[rn_rd] as u32 ^ d as u32) >> 31 != 0 && (imm ^ d as u32) >> 31 != 0;
+    // cpsr.set_V_from(gpr[rn_rd], d as u32);
+    cpsr.set_V(v);
     gpr[rn_rd] = d as u32;
     // dbg!("ADD2", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
@@ -39,7 +44,8 @@ pub fn exec_thumb_add3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     cpsr.set_N_from(d as u32);
     cpsr.set_Z_from(d as u32);
     cpsr.set_C_from(d);
-    cpsr.set_V_from(gpr[dec.get_Rd2_0() as usize], d as u32);
+    let (_, v) = (gpr[dec.get_Rn5_3() as usize] as i32).overflowing_add(gpr[dec.get_Rm8_6() as usize] as i32);
+    cpsr.set_V(v);
     gpr[dec.get_Rd2_0() as usize] = d as u32;
     // dbg!("ADd3", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
@@ -48,10 +54,15 @@ pub fn exec_thumb_add3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
 
 pub fn exec_thumb_add_hi_register<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let rs = usize::from(dec.get_Rs6_3());
-    let rd = usize::from(if dec.get_msbd() { dec.get_Rd2_0() | 0x8 } else { dec.get_Rd2_0() });
-    gpr[rd] = gpr[rd] + gpr[rs];
+    let rd = usize::from(dec.get_Rd_7_2_0());
+    dbg!(rs, rd, gpr[rd].wrapping_add(gpr[rs]));
+    gpr[rd] = gpr[rd].wrapping_add(gpr[rs]);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
-    (s, PipelineStatus::Continue)
+    if rd == PC {
+        (0, PipelineStatus::Flush)
+    } else {
+        (s, PipelineStatus::Continue)
+    }
 }
 
 // THUMB.12: get relative address
@@ -91,7 +102,9 @@ pub fn exec_thumb_sub1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     cpsr.set_N_from(d as u32);
     cpsr.set_Z_from(d as u32);
     cpsr.set_C(gpr[rn] >= imm);
-    cpsr.set_V_from(gpr[dec.get_Rd2_0() as usize], d as u32);
+    let (_, v) = (gpr[rn] as i32).overflowing_sub(imm as i32);
+    cpsr.set_V(v);
+    // cpsr.set_V_from(gpr[dec.get_Rd2_0() as usize], d as u32);
     gpr[dec.get_Rd2_0() as usize] = d as u32;
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
@@ -104,7 +117,9 @@ pub fn exec_thumb_sub2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     cpsr.set_N_from(d as u32);
     cpsr.set_Z_from(d as u32);
     cpsr.set_C(gpr[rn as usize] >= imm);
-    cpsr.set_V_from(gpr[dec.get_Rd10_8() as usize], d as u32);
+    cpsr.set_V((gpr[rn as usize] as i32).overflowing_sub(imm as i32).1);
+    // let v = gpr[rn_rd] >> 31 == 0 && (gpr[rn_rd] as u32 ^ d as u32) >> 31 != 0 && (imm ^ d as u32) >> 31 != 0;
+    // cpsr.set_V_from(gpr[rn_rd], d as u32);
     gpr[dec.get_Rd10_8() as usize] = d as u32;
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
@@ -119,7 +134,9 @@ pub fn exec_thumb_sub3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     cpsr.set_N_from(d as u32);
     cpsr.set_Z_from(d as u32);
     cpsr.set_C(gpr[rn] >= gpr[rm]);
-    cpsr.set_V_from(gpr[rd], d as u32);
+    let (_, v) = (gpr[rn] as i32).overflowing_sub(gpr[rm] as i32);
+    cpsr.set_V(v);
+    // cpsr.set_V_from(gpr[rd], d as u32);
     gpr[rd] = d as u32;
     // dbg!("SUB3", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
@@ -144,12 +161,19 @@ pub fn exec_thumb_eor<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
     (s, PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_asr1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+pub fn exec_thumb1_asr<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let rd = dec.get_Rd2_0() as usize;
     let rn = dec.get_Rn5_3() as usize;
     let sh = dec.get_sh() as u32;
     if sh == 0 {
         gpr[rd] = gpr[rn];
+        let c = gpr[rn] >> 31 != 0;
+        cpsr.set_C(c);
+        if c {
+            gpr[rd] = 0xFFFF_FFFF;
+        } else {
+            gpr[rd] = 0x0;
+        }
     } else {
         cpsr.set_C(is_carry_over(Shift::ASR, gpr[rn], sh, cpsr.get_C(), true));
         gpr[rd] = asr(gpr[rn], sh, true);
@@ -161,19 +185,66 @@ pub fn exec_thumb_asr1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     (s, PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_lsl2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+pub fn exec_thumb4_lsl<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let rd = dec.get_Rd2_0() as usize;
     let rs = dec.get_Rs() as usize;
-    let sh = gpr[rs];
-
-    if sh == 0 {
-        return (1, PipelineStatus::Continue);
+    let sh = gpr[rs] & 0xFF;
+    if sh != 0 {
+        if sh < 32 {
+            cpsr.set_C(gpr[rd] & (1 << (32 - sh)) != 0);
+            gpr[rd] = gpr[rd].wrapping_shl(sh);
+        } else {
+            if sh > 32 {
+                cpsr.set_C(false);
+            } else {
+                cpsr.set_C(gpr[rd] & 0x01 != 0);
+            }
+            gpr[rd] = 0;
+        }
+        // return (1, PipelineStatus::Continue);
     }
-    cpsr.set_C(is_carry_over(Shift::LSL, gpr[rd], sh, cpsr.get_C(), true));
-    gpr[rd] = lsl(gpr[rd], sh);
+    // cpsr.set_C(is_carry_over(Shift::LSL, gpr[rd], sh, cpsr.get_C(), true));
+    // gpr[rd] = lsl(gpr[rd], sh);
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
-    let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    let s = if sh != 0 {
+        bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word))
+    } else {
+        0
+    };
+    // Consume S + 1 cycle
+    (s + 1, PipelineStatus::Continue)
+}
+
+pub fn exec_thumb4_asr<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+    let rd = dec.get_Rd2_0() as usize;
+    let rs = dec.get_Rs() as usize;
+    let sh = gpr[rs] & 0xFF;
+    if sh != 0 {
+        if sh < 32 {
+            cpsr.set_C(gpr[rd] & (1 << (sh - 1)) != 0);
+            gpr[rd] = gpr[rd].wrapping_shr(sh)
+                | if gpr[rd] & 0x8000_0000 != 0 {
+                    ((0xFFFF_FFFF as u32).wrapping_shl(32 - sh))
+                } else {
+                    0
+                };
+        } else {
+            cpsr.set_C(gpr[rd].wrapping_shr(31) != 0);
+            if cpsr.get_C() {
+                gpr[rd] = 0xFFFF_FFFF;
+            } else {
+                gpr[rd] = 0;
+            }
+        }
+    }
+    cpsr.set_N_from(gpr[rd]);
+    cpsr.set_Z_from(gpr[rd]);
+    let s = if sh != 0 {
+        bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word))
+    } else {
+        0
+    };
     // Consume S + 1 cycle
     (s + 1, PipelineStatus::Continue)
 }
@@ -181,14 +252,23 @@ pub fn exec_thumb_lsl2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
 pub fn exec_thumb_lsr2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let rd = dec.get_Rd2_0() as usize;
     let rs = dec.get_Rs() as usize;
-    let sh = gpr[rs];
+    let sh = gpr[rs] & 0xFF;
 
-    // dbg!("lsr2", sh);
-    if sh == 0 {
-        return (1, PipelineStatus::Continue);
+    if sh != 0 {
+        if sh < 32 {
+            cpsr.set_C(gpr[rd] & (1 << (rs - 1)) != 0);
+            gpr[rd] = gpr[rd].wrapping_shr(sh);
+        } else {
+            if sh > 32 {
+                cpsr.set_C(false);
+            } else {
+                cpsr.set_C(gpr[rd].wrapping_shr(31) != 0);
+            }
+            gpr[rd] = 0;
+        }
     }
-    cpsr.set_C(is_carry_over(Shift::LSR, gpr[rd], sh, cpsr.get_C(), true));
-    gpr[rd] = lsr(gpr[rd], sh, true);
+    // cpsr.set_C(is_carry_over(Shift::LSR, gpr[rd], sh, cpsr.get_C(), true));
+    // gpr[rd] = lsr(gpr[rd], sh, true);
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
@@ -206,23 +286,36 @@ pub fn exec_thumb_sbc<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
     cpsr.set_N_from(d as u32);
     cpsr.set_Z_from(d as u32);
     cpsr.set_C_from(d);
-    cpsr.set_V_from(gpr[rd], d as u32);
+    let (_, v) = (gpr[rd] as i32).overflowing_sub(m as i32);
+    cpsr.set_V(v);
+    // cpsr.set_V_from(gpr[rd], d as u32);
     gpr[rd] = d as u32;
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_ror<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
-    let rd = dec.get_Rd2_0() as usize;
-    let sh = dec.get_Rs() as u32;
-    if sh == 0 {
-        return (1, PipelineStatus::Continue);
+pub fn exec_thumb4_ror<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+    dbg!("beforeROR", &gpr);
+    if gpr[15] == 134234196 {
+        // panic!()
     }
-    cpsr.set_C(is_carry_over(Shift::ROR, gpr[rd], sh, cpsr.get_C(), true));
-    gpr[rd] = ror(gpr[rd], sh, cpsr.get_C(), true);
+    let rd = dec.get_Rd2_0() as usize;
+    let sh = gpr[dec.get_Rs() as usize] & 0xFF;
+    if sh != 0 {
+        let r = sh & 0x1F;
+        if r > 0 {
+            cpsr.set_C((gpr[rd] & (1 << (r - 1))) != 0);
+            gpr[rd] = gpr[rd].rotate_right(r);
+        } else {
+            cpsr.set_C(gpr[rd] >> 31 != 0)
+        }
+    }
+    // cpsr.set_C(is_carry_over(Shift::ROR, gpr[rd], sh, cpsr.get_C(), true));
+    // gpr[rd] = ror(gpr[rd], sh, cpsr.get_C(), true);
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    dbg!("afterROR", &gpr);
     // Consume S + 1 cycle
     (s + 1, PipelineStatus::Continue)
 }
@@ -252,7 +345,9 @@ pub fn exec_thumb_cmp1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     cpsr.set_Z_from(d as u32);
     cpsr.set_N_from(d as u32);
     cpsr.set_C(d >= 0);
-    cpsr.set_V_from(gpr[dec.get_Rd10_8() as usize], d as u32);
+    let (_, v) = (gpr[dec.get_Rn10_8() as usize] as i32).overflowing_sub(dec.get_imm8() as i32);
+    cpsr.set_V(v);
+    // cpsr.set_V_from(gpr[dec.get_Rd10_8() as usize], d as u32);
     // dbg!("CMP1", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
@@ -263,15 +358,54 @@ pub fn exec_thumb_cmp2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     cpsr.set_N_from(d as u32);
     cpsr.set_Z_from(d as u32);
     cpsr.set_C(d >= 0);
-    cpsr.set_V_from(gpr[dec.get_Rd2_0() as usize], d as u32);
+    let (_, v) = (gpr[dec.get_Rd2_0() as usize] as i32).overflowing_sub(dec.get_Rm5_3() as i32);
+    cpsr.set_V(v);
+    // cpsr.set_V_from(gpr[dec.get_Rd2_0() as usize], d as u32);
     // dbg!("CMP2", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_cmn<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
-    todo!("cmn");
-    (0, PipelineStatus::Continue)
+pub fn exec_thumb5_cmp<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+    let rd = gpr[dec.get_Rd_7_2_0() as usize];
+    let rs = gpr[dec.get_Rs6_3() as usize];
+    let d = rd as i64 - rs as i64;
+    dbg!(rd, rs, d);
+    cpsr.set_Z_from(d as u32);
+    cpsr.set_N_from(d as u32);
+    cpsr.set_C(d >= 0);
+    let (_, v) = (rd as i32).overflowing_sub(rs as i32);
+    cpsr.set_V(v);
+    let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    (s, PipelineStatus::Continue)
+}
+
+pub fn exec_thumb4_cmn<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+    let rd = gpr[dec.get_Rd2_0() as usize];
+    let rs = gpr[dec.get_Rs() as usize];
+    let d = (rd as u64).wrapping_add(rs as u64);
+    cpsr.set_N_from(d as u32);
+    cpsr.set_Z_from(d as u32);
+    let (_, v) = (rd as i32).overflowing_add(rs as i32);
+    cpsr.set_V(v);
+    cpsr.set_C(d & (1 << 32) != 0);
+    let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    (s, PipelineStatus::Continue)
+}
+
+pub fn exec_thumb4_adc<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+    let rd = gpr[dec.get_Rd2_0() as usize];
+    let rs = gpr[dec.get_Rs() as usize];
+    let c: u32 = cpsr.get_C().into();
+    let (_, v) = (rd as i32).overflowing_add(rs as i32 + c as i32);
+    let d = (rd as u64).wrapping_add(rs as u64 + c as u64);
+    gpr[dec.get_Rd2_0() as usize] = d as u32;
+    cpsr.set_N_from(d as u32);
+    cpsr.set_Z_from(d as u32);
+    cpsr.set_V(v);
+    cpsr.set_C(d & (1 << 32) != 0);
+    let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+    (s, PipelineStatus::Continue)
 }
 
 pub fn exec_thumb_orr<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
@@ -321,7 +455,7 @@ pub fn exec_thumb_bic<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
     (s, PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_lsl1<T>(bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult
+pub fn exec_thumb1_lsl<T>(bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult
 where
     T: BusAccessor,
 {
@@ -332,8 +466,8 @@ where
     if sh == 0 {
         gpr[rd] = gpr[rn];
     } else {
-        cpsr.set_C(is_carry_over(Shift::LSL, gpr[rn], sh, cpsr.get_C(), true));
-        gpr[rd] = lsl(gpr[rn], sh);
+        cpsr.set_C((gpr[rn] & (1 << (32 - sh))) != 0);
+        gpr[rd] = gpr[rn].wrapping_shl(sh);
     }
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
@@ -341,7 +475,7 @@ where
     (s, PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_lsr1<T>(bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult
+pub fn exec_thumb1_lsr<T>(bus: &mut T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult
 where
     T: BusAccessor,
 {
@@ -350,7 +484,8 @@ where
     let sh = dec.get_sh() as u32;
 
     if sh == 0 {
-        gpr[rd] = gpr[rn];
+        cpsr.set_C(gpr[rn] >> 31 != 0);
+        gpr[rd] = 0x0;
     } else {
         cpsr.set_C(is_carry_over(Shift::LSR, gpr[rn], sh, cpsr.get_C(), true));
         gpr[rd] = lsr(gpr[rn], sh, true);
