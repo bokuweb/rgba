@@ -1,5 +1,7 @@
+use crate::cpu::constants::*;
+use crate::cpu::registers::{BankGpr, BankSpsr};
 use crate::cpu::types::*;
-
+use crate::types::*;
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum CpuState {
     ARM,
@@ -27,7 +29,7 @@ impl From<u32> for Mode {
             0x17 => Mode::Abort,
             0x1B => Mode::Undefined,
             0x1F => Mode::System,
-            _ => panic!("illegal mode value detected."),
+            _ => panic!("illegal mode value({:x}) detected.", f),
         }
     }
 }
@@ -135,9 +137,80 @@ impl PSR {
         self.set_C(reg > 0xFFFF_FFFF);
     }
 
-    pub fn set_V_from(&mut self, cur: u32, reg: u32) {
-        let v = (cur >> 31) != 0 && (((cur >> 31) ^ reg) >> 31) != 0 && (reg >> 31) == 0;
-        self.set_V(v);
+    // pub fn set_V_from(&mut self, cur: u32, reg: u32) {
+    //     let v = (cur >> 31) != 0 && (((cur >> 31) ^ reg) >> 31) != 0 && (reg >> 31) == 0;
+    //     self.set_V(v);
+    // }
+
+    pub fn restore(&mut self, spsr: &mut PSR, gpr: &mut [Word; 16], bank_gpr: &mut BankGpr, bank_spsr: &mut BankSpsr) {
+        self.switch_mode(spsr.get_mode(), gpr, spsr, bank_gpr, bank_spsr);
+        self.set(spsr.get())
+        // TODO: check irq??
+    }
+
+    pub fn switch_mode(&mut self, new_mode: Mode, gpr: &mut [Word; 16], spsr: &mut PSR, bank_gpr: &mut BankGpr, bank_spsr: &mut BankSpsr) {
+        if new_mode == self.get_mode() {
+            return;
+        }
+
+        // TODO: move to PSR?
+        //       switch mode
+        // let current_value = cpsr.get();
+        if new_mode != Mode::User || new_mode != Mode::System {
+            let current_mode = self.get_mode();
+            // let new_mode = self.get_mode();
+            if current_mode != new_mode {
+                // TODO: support FIQ
+                if current_mode == Mode::FIQ {
+                    bank_gpr.write(current_mode, 8, gpr[8]);
+                    bank_gpr.write(current_mode, 9, gpr[9]);
+                    bank_gpr.write(current_mode, 10, gpr[10]);
+                    bank_gpr.write(current_mode, 11, gpr[11]);
+                    bank_gpr.write(current_mode, 12, gpr[12]);
+
+                    gpr[8] = bank_gpr.pop(8);
+                    gpr[9] = bank_gpr.pop(9);
+                    gpr[10] = bank_gpr.pop(10);
+                    gpr[11] = bank_gpr.pop(11);
+                    gpr[12] = bank_gpr.pop(12);
+                }
+
+                if new_mode == Mode::FIQ {
+                    bank_gpr.push(8, gpr[8]);
+                    bank_gpr.push(9, gpr[9]);
+                    bank_gpr.push(10, gpr[10]);
+                    bank_gpr.push(11, gpr[11]);
+                    bank_gpr.push(12, gpr[12]);
+
+                    gpr[8] = bank_gpr.read(new_mode, 8);
+                    gpr[9] = bank_gpr.read(new_mode, 9);
+                    gpr[10] = bank_gpr.read(new_mode, 10);
+                    gpr[11] = bank_gpr.read(new_mode, 11);
+                    gpr[12] = bank_gpr.read(new_mode, 12);
+                }
+
+                if current_mode != Mode::System && current_mode != Mode::User {
+                    bank_gpr.write(current_mode, SP, gpr[SP]);
+                    bank_gpr.write(current_mode, LR, gpr[LR]);
+                    bank_spsr.write(current_mode, *spsr);
+
+                    gpr[SP] = bank_gpr.pop(SP);
+                    gpr[LR] = bank_gpr.pop(LR);
+                    *spsr = bank_spsr.pop()
+                }
+
+                if new_mode != Mode::System && new_mode != Mode::User {
+                    bank_gpr.push(SP, gpr[SP]);
+                    bank_gpr.push(LR, gpr[LR]);
+                    bank_spsr.push(*spsr);
+
+                    gpr[SP] = bank_gpr.read(new_mode, SP);
+                    gpr[LR] = bank_gpr.read(new_mode, LR);
+                    *spsr = bank_spsr.read(new_mode);
+                }
+            }
+        }
+        self.set_mode(new_mode);
     }
 
     pub fn condition_ok(&self, cond: Cond) -> bool {

@@ -16,6 +16,8 @@ bitfield! {
     #[allow(non_snake_case)]
     pub get_bit4, _: 4;
     #[allow(non_snake_case)]
+    pub get_R, _: 4;
+    #[allow(non_snake_case)]
     pub get_Rm, _: 3, 0;
     #[allow(non_snake_case)]
     pub get_Rs, _: 11, 8;

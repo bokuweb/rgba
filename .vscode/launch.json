@@ -19,7 +19,7 @@
                     "kind": "bin"
                 }
             },
-            "args": ["fixtures/armwrestler/armwrestler.gba"],
+            "args": ["fixtures/gba-tests/arm/arm.gba"],
             "cwd": "${workspaceFolder}"
         },
         {

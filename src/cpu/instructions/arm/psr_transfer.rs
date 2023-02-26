@@ -24,6 +24,7 @@ pub fn exec_arm_msr<T>(
     bus: &T,
     dec: PsrTransfer,
     gpr: &mut [Word; 16],
+
     cpsr: &mut PSR,
     spsr: &mut PSR,
     bank_gpr: &mut BankGpr,
@@ -33,8 +34,16 @@ where
     T: BusAccessor,
 {
     let value = if dec.get_I() {
-        ror(dec.get_imm(), dec.get_rotate().wrapping_shl(1), cpsr.get_C(), false)
+        dbg!("----", dec.get_rotate(), dec.get_imm());
+        // dec.get_rotate().rotate_right();
+        ror(
+            dec.get_imm(),
+            dec.get_rotate().checked_shl(1).unwrap_or_default(),
+            cpsr.get_C(),
+            true,
+        )
     } else {
+        dbg!("----9999");
         gpr[dec.get_Rm() as usize]
     };
 
@@ -60,68 +69,12 @@ where
         if current_mode != Mode::User && mask & 0x0000_00CF != 0 {
             cpsr.set_I(value & 0x0000_0080 != 0);
             cpsr.set_F(value & 0x0000_0040 != 0);
-
-            // TODO: move to PSR?
-            //       switch mode
-            // let current_value = cpsr.get();
-            let current_mode = cpsr.get_mode();
+            dbg!(value, current_mode);
             let new_mode = Mode::from((value & 0x0000_000F) | 0x0000_0010);
-            // let new_mode = cpsr.get_mode();
-            if current_mode != new_mode {
-                // TODO: support FIQ
-                if current_mode == Mode::FIQ {
-                    bank_gpr.write(current_mode, 8, gpr[8]);
-                    bank_gpr.write(current_mode, 9, gpr[9]);
-                    bank_gpr.write(current_mode, 10, gpr[10]);
-                    bank_gpr.write(current_mode, 11, gpr[11]);
-                    bank_gpr.write(current_mode, 12, gpr[12]);
-
-                    gpr[8] = bank_gpr.pop(8);
-                    gpr[9] = bank_gpr.pop(9);
-                    gpr[10] = bank_gpr.pop(10);
-                    gpr[11] = bank_gpr.pop(11);
-                    gpr[12] = bank_gpr.pop(12);
-                }
-
-                if new_mode == Mode::FIQ {
-                    bank_gpr.push(8, gpr[8]);
-                    bank_gpr.push(9, gpr[9]);
-                    bank_gpr.push(10, gpr[10]);
-                    bank_gpr.push(11, gpr[11]);
-                    bank_gpr.push(12, gpr[12]);
-
-                    gpr[8] = bank_gpr.read(new_mode, 8);
-                    gpr[9] = bank_gpr.read(new_mode, 9);
-                    gpr[10] = bank_gpr.read(new_mode, 10);
-                    gpr[11] = bank_gpr.read(new_mode, 11);
-                    gpr[12] = bank_gpr.read(new_mode, 12);
-                }
-
-                if current_mode != Mode::System && current_mode != Mode::User {
-                    bank_gpr.write(current_mode, SP, gpr[SP]);
-                    bank_gpr.write(current_mode, LR, gpr[LR]);
-                    bank_spsr.write(current_mode, *spsr);
-
-                    gpr[SP] = bank_gpr.pop(SP);
-                    gpr[LR] = bank_gpr.pop(LR);
-                    *spsr = bank_spsr.pop()
-                }
-
-                if new_mode != Mode::System && new_mode != Mode::User {
-                    bank_gpr.push(SP, gpr[SP]);
-                    bank_gpr.push(LR, gpr[LR]);
-                    bank_spsr.push(*spsr);
-
-                    gpr[SP] = bank_gpr.read(new_mode, SP);
-                    gpr[LR] = bank_gpr.read(new_mode, LR);
-                    *spsr = bank_spsr.read(new_mode);
-                }
-            }
-            cpsr.set_mode(new_mode);
+            dbg!(new_mode);
+            cpsr.switch_mode(new_mode, gpr, spsr, bank_gpr, bank_spsr);
         }
     }
-    //        }
-    //}
 
     let cycle = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     Ok((cycle, PipelineStatus::Continue))

@@ -15,4 +15,3 @@ bitfield! {
     #[allow(non_snake_case)]
     pub get_Rm, _: 6, 3;
 }
-
