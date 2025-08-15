@@ -8,6 +8,10 @@ impl Rom {
     pub fn new(size: usize, init: &[u8]) -> Self {
         Rom(init.to_vec())
     }
+
+    pub fn size(&self) -> usize {
+        self.0.len()
+    }
 }
 
 impl Raw for Rom {

@@ -119,11 +119,35 @@ impl LCDController {
     }
 
     pub fn render(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
+        // Debug output for rendering state
+        println!("Render called - DISPCNT: 0x{:04x}, Mode: {:?}, Forced blank: {}", 
+                 self.dispcnt.read(), self.dispcnt.mode(), self.dispcnt.forced_vlank());
+        
+        // Check if forced blank is enabled
+        if self.dispcnt.forced_vlank() {
+            println!("Forced blank enabled - returning black screen");
+            // Return blank screen (black)
+            return vec![0; 240 * 160 * 4];
+        }
+        
         match self.dispcnt.mode() {
-            BgMode::Mode0 => self.render_with_mode0(vram, palette),
-            BgMode::Mode3 => self.render_with_mode3(vram),
-            BgMode::Mode4 => self.render_with_mode4(vram, palette),
-            _ => todo!(),
+            BgMode::Mode0 => {
+                println!("Rendering with Mode 0");
+                self.render_with_mode0(vram, palette)
+            },
+            BgMode::Mode3 => {
+                println!("Rendering with Mode 3");
+                self.render_with_mode3(vram)
+            },
+            BgMode::Mode4 => {
+                println!("Rendering with Mode 4");
+                self.render_with_mode4(vram, palette)
+            },
+            _ => {
+                println!("Unsupported mode: {:?} - returning black screen", self.dispcnt.mode());
+                // For unsupported modes, return blank screen
+                vec![0; 240 * 160 * 4]
+            }
         }
     }
 

@@ -161,7 +161,11 @@ impl BusAccessor for CpuBus {
             0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
             0x0400_0060..=0x0400_03FF => 0,
             0x0500_0000..=0x0500_03FF => self.palette.read_byte(addr - 0x0500_0000),
+            0x0600_0000..=0x0601_7FFF => self.vram.read_byte(addr - 0x0600_0000),
+            0x0700_0000..=0x0700_03FF => self.oam.read_byte(addr - 0x0700_0000),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_byte(addr - 0x0800_0000),
+            0x0A00_0000..=0x0DFF_FFFF => self.rom.read_byte((addr - 0x0A00_0000) % self.rom.size() as u32), // GamePak WS1/WS2 - mirror ROM
+            0x0E00_0000..=0x0FFF_FFFF => 0, // SRAM - return 0 for now
             _ => {
                 let a = format!("read byte addr = {:x}", addr);
                 panic!("TODO: {:?}", a);
@@ -178,10 +182,27 @@ impl BusAccessor for CpuBus {
             0x0300_8000..=0x03FF_FFFF => 0,
             0x0400_0000..=0x0400_005F => self.lcdc.read_halfword(addr - 0x0400_0000),
             0x0400_0130 => self.key.read(),
-            0x0400_0060..=0x0400_03FF => 0,
+            0x0400_0060..=0x0400_03FF => {
+                match addr {
+                    0x0400_0100 => 0, // TM0CNT_L - Timer 0 Counter/Reload
+                    0x0400_0102 => 0, // TM0CNT_H - Timer 0 Control
+                    0x0400_0200 => 0, // IE - Interrupt Enable Register
+                    0x0400_0202 => 0, // IF - Interrupt Request Flags / IRQ Acknowledge
+                    0x0400_0204 => 0, // WAITCNT - Game Pak Waitstate Control
+                    0x0400_0208 => 0, // IME - Interrupt Master Enable Register
+                    0x0400_00DE => 0, // Unknown register accessed by agb_checker
+                    _ => {
+                        println!("I/O read halfword: 0x{:08x}", addr);
+                        0
+                    }
+                }
+            },
             0x0500_0000..=0x0500_03FF => self.palette.read_halfword(addr - 0x0500_0000),
             0x0600_0000..=0x0601_7FFF => self.vram.read_halfword(addr - 0x0600_0000),
+            0x0700_0000..=0x0700_03FF => self.oam.read_halfword(addr - 0x0700_0000),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_halfword(addr - 0x0800_0000),
+            0x0A00_0000..=0x0DFF_FFFF => self.rom.read_halfword((addr - 0x0A00_0000) % self.rom.size() as u32), // GamePak WS1/WS2 - mirror ROM
+            0x0E00_0000..=0x0FFF_FFFF => 0, // SRAM - return 0 for now
             _ => panic!("TODO: {:x}", addr),
         }
     }
@@ -195,7 +216,11 @@ impl BusAccessor for CpuBus {
             0x0400_0000..=0x0400_005F => self.lcdc.read_word(addr - 0x0400_0000),
             0x0400_0060..=0x0400_03FF => 0,
             0x0500_0000..=0x0500_03FF => self.palette.read_word(addr - 0x0500_0000),
+            0x0600_0000..=0x0601_7FFF => self.vram.read_word(addr - 0x0600_0000),
+            0x0700_0000..=0x0700_03FF => self.oam.read_word(addr - 0x0700_0000),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_word(addr - 0x0800_0000),
+            0x0A00_0000..=0x0DFF_FFFF => self.rom.read_word((addr - 0x0A00_0000) % self.rom.size() as u32), // GamePak WS1/WS2 - mirror ROM
+            0x0E00_0000..=0x0FFF_FFFF => 0, // SRAM - return 0 for now
             _ => {
                 if addr == 0xc8002489 {
                     dbg!("aa");
@@ -224,6 +249,9 @@ impl BusAccessor for CpuBus {
             0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
             0x0400_0060..=0x0400_03FF => {}
             0x0500_0000..=0x0500_03FF => self.palette.write_byte(addr - 0x0500_0000, data),
+            0x0600_0000..=0x0601_7FFF => self.vram.write_byte(addr - 0x0600_0000, data),
+            0x0700_0000..=0x0700_03FF => self.oam.write_byte(addr - 0x0700_0000, data),
+            0x0E00_0000..=0x0FFF_FFFF => {}, // SRAM - ignore writes for now
             _ => panic!(format!("TODO: 0x{:x} 0x{:x}", addr, data)),
         };
     }
@@ -243,12 +271,26 @@ impl BusAccessor for CpuBus {
                 self.wram.write_halfword(addr - 0x0300_0000, data);
             }
             0x0400_0000..=0x0400_005F => self.lcdc.write_halfword(addr - 0x0400_0000, data),
-            0x0400_0060..=0x0400_03FF => {}
+            0x0400_0060..=0x0400_03FF => {
+                match addr {
+                    0x0400_0100 => {}, // TM0CNT_L - Timer 0 Counter/Reload
+                    0x0400_0102 => {}, // TM0CNT_H - Timer 0 Control
+                    0x0400_0200 => {}, // IE - Interrupt Enable Register
+                    0x0400_0202 => {}, // IF - Interrupt Request Flags / IRQ Acknowledge
+                    0x0400_0204 => {}, // WAITCNT - Game Pak Waitstate Control
+                    0x0400_0208 => {}, // IME - Interrupt Master Enable Register
+                    0x0400_00DE => {}, // Unknown register accessed by agb_checker
+                    _ => {
+                        println!("I/O write halfword: 0x{:08x} = 0x{:04x}", addr, data);
+                    }
+                }
+            }
             0x0500_0000..=0x0500_03FF => self.palette.write_halfword(addr - 0x0500_0000, data),
             0x0600_0000..=0x0601_7FFF => {
                 self.vram.write_halfword(addr - 0x0600_0000, data);
             }
-
+            0x0700_0000..=0x0700_03FF => self.oam.write_halfword(addr - 0x0700_0000, data),
+            0x0E00_0000..=0x0FFF_FFFF => {}, // SRAM - ignore writes for now
             _ => panic!("TODO: "),
         };
     }
@@ -279,6 +321,8 @@ impl BusAccessor for CpuBus {
             0x0600_0000..=0x0601_7FFF => {
                 self.vram.write_word(addr - 0x0600_0000, data);
             }
+            0x0700_0000..=0x0700_03FF => self.oam.write_word(addr - 0x0700_0000, data),
+            0x0E00_0000..=0x0FFF_FFFF => {}, // SRAM - ignore writes for now
             _ => error!("TODO: addr = {:x} data = {:x}", addr, data),
         };
     }
