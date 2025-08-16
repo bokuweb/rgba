@@ -154,7 +154,7 @@ impl BusAccessor for CpuBus {
     fn read_byte(&self, addr: u32) -> Byte {
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_byte(addr),
-            0x0200_0000..=0x0203_FFFF => self.eram.read_byte(addr - 0x0200_0000),
+            0x0200_0000..=0x02FF_FFFF => self.eram.read_byte((addr - 0x0200_0000) % 0x40000),
             0x0300_0000..=0x0300_7FFF => self.wram.read_byte(addr - 0x0300_0000),
             0x0300_8000..=0x03FF_FFFF => 0,
             0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
@@ -184,8 +184,15 @@ impl BusAccessor for CpuBus {
         // dbg!(format!("read half word addr = {:x}", addr));
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_halfword(addr),
-            0x0200_0000..=0x0203_FFFF => self.eram.read_halfword(addr - 0x0200_0000),
-            0x0300_0000..=0x0300_7FFF => self.wram.read_halfword(addr - 0x0300_0000),
+            0x0200_0000..=0x02FF_FFFF => self.eram.read_halfword((addr - 0x0200_0000) % 0x40000),
+            0x0300_0000..=0x0300_7FFF => {
+                if addr == 0x03007FF8 {
+                    // BIOS IF work area - used by IntrWait/VBlankIntrWait
+                    self.interrupt_controller.read_bios_if_work()
+                } else {
+                    self.wram.read_halfword(addr - 0x0300_0000)
+                }
+            },
             0x0300_8000..=0x03FF_FFFF => 0,
             0x0400_0000..=0x0400_005F => self.lcdc.read_halfword(addr - 0x0400_0000),
             0x0400_0130 => {
@@ -198,7 +205,11 @@ impl BusAccessor for CpuBus {
                     0x0400_0100..=0x0400_010F => self.timer_controller.read(addr), // Timer registers
                     0x0400_00B0..=0x0400_00DF => self.dma_controller.read_register(addr), // DMA registers
                     0x0400_0200 => self.interrupt_controller.read_ie(), // IE - Interrupt Enable Register
-                    0x0400_0202 => self.interrupt_controller.read_if(), // IF - Interrupt Request Flags / IRQ Acknowledge
+                    0x0400_0202 => {
+                        let if_value = self.interrupt_controller.read_if();
+                        println!("🔵 IF register read at PC location, returning: 0x{:04x}", if_value);
+                        if_value
+                    } // IF - Interrupt Request Flags / IRQ Acknowledge
                     0x0400_0204 => 0, // WAITCNT - Game Pak Waitstate Control
                     0x0400_0208 => self.interrupt_controller.read_ime(), // IME - Interrupt Master Enable Register
                     _ => {
@@ -237,11 +248,34 @@ impl BusAccessor for CpuBus {
     fn read_word(&self, addr: u32) -> Word {
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_word(addr),
-            0x0200_0000..=0x0203_FFFF => self.eram.read_word(addr - 0x0200_0000),
+            0x0200_0000..=0x02FF_FFFF => self.eram.read_word((addr - 0x0200_0000) % 0x40000),
             0x0300_0000..=0x0300_7FFF => self.wram.read_word(addr - 0x0300_0000),
             0x0300_8000..=0x03FF_FFFF => 0,
             0x0400_0000..=0x0400_005F => self.lcdc.read_word(addr - 0x0400_0000),
-            0x0400_0060..=0x0400_03FF => 0,
+            0x0400_0060..=0x0400_03FF => {
+                match addr {
+                    0x0400_00B0..=0x0400_00DF => {
+                        // DMA registers: compose from two halfwords
+                        let lo = self.dma_controller.read_register(addr) as u32;
+                        let hi = self.dma_controller.read_register(addr + 2) as u32;
+                        (lo | (hi << 16))
+                    }
+                    0x0400_0100..=0x0400_010F => {
+                        // Timer registers: compose from two halfwords
+                        let lo = self.timer_controller.read(addr) as u32;
+                        let hi = self.timer_controller.read(addr + 2) as u32;
+                        (lo | (hi << 16))
+                    }
+                    0x0400_0200 => {
+                        // IE | IF
+                        let lo = self.interrupt_controller.read_ie() as u32;
+                        let hi = self.interrupt_controller.read_if() as u32;
+                        (lo | (hi << 16))
+                    }
+                    0x0400_0208 => self.interrupt_controller.read_ime() as u32,
+                    _ => 0,
+                }
+            },
             0x0500_0000..=0x0500_03FF => self.palette.read_word(addr - 0x0500_0000),
             0x0600_0000..=0x0601_7FFF => self.vram.read_word(addr - 0x0600_0000),
             0x0700_0000..=0x0700_03FF => self.oam.read_word(addr - 0x0700_0000),
@@ -274,7 +308,7 @@ impl BusAccessor for CpuBus {
         }
         match addr {
             // 0x0000_0000...0x0007_FFFF => self.rom.borrow().read_word(addr),
-            0x0200_0000..=0x0203_FFFF => self.eram.write_byte(addr - 0x0200_0000, data),
+            0x0200_0000..=0x02FF_FFFF => self.eram.write_byte((addr - 0x0200_0000) % 0x40000, data),
             0x0300_0000..=0x0300_7FFF => {
                 if addr == 0x03007dd9 {
                     // dbg!("write to 0x03007dd9", data);
@@ -311,19 +345,95 @@ impl BusAccessor for CpuBus {
         }
         match addr {
             // I/O Register
-            0x0200_0000..=0x0203_FFFF => self.eram.write_halfword(addr - 0x0200_0000, data),
+            0x0200_0000..=0x02FF_FFFF => self.eram.write_halfword((addr - 0x0200_0000) % 0x40000, data),
             // WRAM
             0x0300_0000..=0x0300_7FFF => {
+                if addr == 0x03007FF8 {
+                    // BIOS IF work area - used by IntrWait/VBlankIntrWait
+                    self.interrupt_controller.write_bios_if_work(data);
+                } else {
                 // info!("wram addr = {:x} {:x}", addr, data);
                 self.wram.write_halfword(addr - 0x0300_0000, data);
+                }
             }
-            0x0400_0000..=0x0400_005F => self.lcdc.write_halfword(addr - 0x0400_0000, data),
+            0x0400_0000..=0x0400_005F => {
+                if addr == 0x04000000 {
+                    println!("📺 DISPCNT write: 0x{:04x} (Mode:{}, BG0-3:{}{}{}{}, OBJ:{}, Win0-2/OBJ:{}{}{}, ForceBlank:{})", 
+                        data, 
+                        data & 0x7,
+                        if data & 0x100 != 0 {"✓"} else {"-"},
+                        if data & 0x200 != 0 {"✓"} else {"-"},
+                        if data & 0x400 != 0 {"✓"} else {"-"},
+                        if data & 0x800 != 0 {"✓"} else {"-"},
+                        if data & 0x1000 != 0 {"✓"} else {"-"},
+                        if data & 0x2000 != 0 {"✓"} else {"-"},
+                        if data & 0x4000 != 0 {"✓"} else {"-"},
+                        if data & 0x8000 != 0 {"✓"} else {"-"},
+                        if data & 0x80 != 0 {"ON"} else {"OFF"}
+                    );
+                } else if addr >= 0x04000008 && addr <= 0x0400001E {
+                    println!("🖼️  BGxCNT write: 0x{:08x} = 0x{:04x}", addr, data);
+                } else {
+                    println!("LCD reg write HW: 0x{:08x} = 0x{:04x}", addr, data);
+                }
+                self.lcdc.write_halfword(addr - 0x0400_0000, data)
+            },
             0x0400_0060..=0x0400_03FF => {
                 match addr {
                     0x0400_0100..=0x0400_010F => self.timer_controller.write(addr, data), // Timer registers
-                    0x0400_00B0..=0x0400_00DF => self.dma_controller.write_register(addr, data), // DMA registers
+                    0x0400_00B0..=0x0400_00DF => { // DMA registers
+                        println!("DMA reg write: 0x{:08x} = 0x{:04x}", addr, data);
+                        self.dma_controller.write_register(addr, data);
+
+                        // If CNT_H (offset 10) written and start timing is immediate (0), execute now
+                        let ch_id = ((addr - 0x0400_00B0) / 12) as usize;
+                        let reg_offset = (addr - 0x0400_00B0) % 12;
+                        if reg_offset == 10 {
+                            if let Some(ch) = self.dma_controller.get_channel(ch_id) {
+                                let timing = ch.get_start_timing();
+                                if ch.is_enabled() && timing == 0 {
+                                    println!("Kick Immediate DMA{}", ch_id);
+                                    let (mut src, mut dst, mut count, tr32, src_ctrl, dst_ctrl, irq) = (
+                                        ch.internal_source,
+                                        ch.internal_destination,
+                                        ch.get_count(),
+                                        ch.get_transfer_type(),
+                                        ch.get_source_addr_control(),
+                                        ch.get_dest_addr_control(),
+                                        ch.is_irq_enabled(),
+                                    );
+                                    let mut transfers = 0usize;
+                                    while count > 0 && transfers < 0x4000 {
+                                        let sdata = self.read_word(src);
+                                        if tr32 { self.write_word(dst, sdata); }
+                                        else { self.write_halfword(dst, (sdata & 0xFFFF) as HalfWord); }
+                                        let step = if tr32 { 4 } else { 2 };
+                                        match src_ctrl { 0 => src += step, 1 => src -= step, _ => {} }
+                                        match dst_ctrl { 0 => dst += step, 1 => dst -= step, 3 => dst += step, _ => {} }
+                                        count -= 1;
+                                        transfers += 1;
+                                    }
+                                    if let Some(chm) = self.dma_controller.get_channel_mut(ch_id) {
+                                        chm.internal_source = src;
+                                        chm.internal_destination = dst;
+                                        chm.set_count(count);
+                                        if count == 0 {
+                                            chm.enable = false;
+                                            if irq {
+                                                let it = match ch_id { 0=>crate::gba::interrupt::InterruptType::DMA0, 1=>crate::gba::interrupt::InterruptType::DMA1, 2=>crate::gba::interrupt::InterruptType::DMA2, _=>crate::gba::interrupt::InterruptType::DMA3 };
+                                                self.interrupt_controller.request_interrupt(it);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
                     0x0400_0200 => self.interrupt_controller.write_ie(data), // IE - Interrupt Enable Register
-                    0x0400_0202 => self.interrupt_controller.write_if(data), // IF - Interrupt Request Flags / IRQ Acknowledge
+                    0x0400_0202 => {
+                        println!("DEBUG: write_halfword to IF (0x0400_0202) with data: 0x{:04x}", data);
+                        self.interrupt_controller.write_if(data)
+                    }, // IF - Interrupt Request Flags / IRQ Acknowledge
                     0x0400_0204 => {}, // WAITCNT - Game Pak Waitstate Control
                     0x0400_0208 => self.interrupt_controller.write_ime(data), // IME - Interrupt Master Enable Register
                     _ => {
@@ -333,10 +443,7 @@ impl BusAccessor for CpuBus {
             }
             0x0500_0000..=0x0500_03FF => self.palette.write_halfword(addr - 0x0500_0000, data),
             0x0600_0000..=0x0601_7FFF => {
-                // Monitor VRAM writes for tile data/map changes
-                if data != 0 {
-                    println!("VRAM write at 0x{:08x}: 0x{:04x}", addr, data);
-                }
+                println!("VRAM write at 0x{:08x}: 0x{:04x}", addr, data);
                 self.vram.write_halfword(addr - 0x0600_0000, data);
             }
             0x0700_0000..=0x0700_03FF => self.oam.write_halfword(addr - 0x0700_0000, data),
@@ -373,11 +480,16 @@ impl BusAccessor for CpuBus {
             // panic!();
         }
         match addr {
-            0x0000_0000..=0x0007_FFFF => panic!("illegal write access."),
-            0x0200_0000..=0x0203_FFFF => self.eram.write_word(addr - 0x0200_0000, data),
+            0x0000_0000..=0x0007_FFFF => {
+                // Allow writes to BIOS region for our custom IRQ handler
+                // Ignore writes to BIOS area (read-only)
+            }
+            0x0200_0000..=0x02FF_FFFF => self.eram.write_word((addr - 0x0200_0000) % 0x40000, data),
             // WRAM
             0x0300_0000..=0x0300_7FFF => {
-                // info!("wram addr = {:x} {:x}", addr, data);
+                if addr == 0x0300_7FFC {
+                    println!("🧭 User IRQ handler set @0x03007FFC = 0x{:08x}", data);
+                }
                 self.wram.write_word(addr - 0x0300_0000, data);
             }
             // Unused
@@ -386,9 +498,31 @@ impl BusAccessor for CpuBus {
                 panic!("unused")
             }
             0x0400_0000..=0x0400_005F => self.lcdc.write_word(addr - 0x0400_0000, data),
-            0x0400_0060..=0x0400_03FF => {}
+            0x0400_0060..=0x0400_03FF => {
+                match addr {
+                    0x0400_0200 => { // IE|IF as word write
+                        let ie: u16 = (data & 0xFFFF) as u16;
+                        let if_mask: u16 = ((data >> 16) & 0xFFFF) as u16;
+                        self.interrupt_controller.write_ie(ie);
+                        self.interrupt_controller.write_if(if_mask);
+                    }
+                    0x0400_0208 => { // IME as word: take low half
+                        let ime: u16 = (data & 0xFFFF) as u16;
+                        self.interrupt_controller.write_ime(ime);
+                    }
+                    _ => {
+                        // Fallback: split into two halfword writes for unknown IO
+                        let lo: u16 = (data & 0xFFFF) as u16;
+                        let hi: u16 = ((data >> 16) & 0xFFFF) as u16;
+                        println!("I/O write word: 0x{:08x} = 0x{:08x}", addr, data);
+                        self.write_halfword(addr, lo);
+                        self.write_halfword(addr + 2, hi);
+                    }
+                }
+            }
             0x0500_0000..=0x0500_03FF => self.palette.write_word(addr - 0x0500_0000, data),
             0x0600_0000..=0x0601_7FFF => {
+                println!("VRAM write word at 0x{:08x}: 0x{:08x}", addr, data);
                 self.vram.write_word(addr - 0x0600_0000, data);
             }
             0x0700_0000..=0x0700_03FF => self.oam.write_word(addr - 0x0700_0000, data),
@@ -489,9 +623,107 @@ impl CpuBus {
         for interrupt_type in timer_interrupts {
             self.interrupt_controller.request_interrupt(interrupt_type);
         }
-        
+
         // Update LCD and handle VBlank/HBlank interrupts
-        self.lcdc.run(cycles, &mut self.interrupt_controller)
+        let frame_ready = self.lcdc.run(cycles, &mut self.interrupt_controller);
+
+        // Kick DMA with start-timing VBlank (1) on VBlank start edge
+        if self.lcdc.take_vblank_edge() {
+            for ch_id in 0..4 {
+                let start_on_vblank = self.dma_controller.get_channel(ch_id)
+                    .map(|ch| ch.is_enabled() && ch.get_start_timing() == 1)
+                    .unwrap_or(false);
+                if !start_on_vblank { continue; }
+                println!("Kick VBlank DMA{}", ch_id);
+                // Minimal transfer: perform up to 0x4000 units
+                let (mut src, mut dst, mut count, tr32, src_ctrl, dst_ctrl, irq) = {
+                    let ch = self.dma_controller.get_channel(ch_id).unwrap();
+                    (
+                        ch.internal_source,
+                        ch.internal_destination,
+                        ch.get_count(),
+                        ch.get_transfer_type(),
+                        ch.get_source_addr_control(),
+                        ch.get_dest_addr_control(),
+                        ch.is_irq_enabled(),
+                    )
+                };
+                let mut transfers = 0usize;
+                while count > 0 && transfers < 0x4000 {
+                    let sdata = self.read_word(src);
+                    if tr32 { self.write_word(dst, sdata); }
+                    else { self.write_halfword(dst, (sdata & 0xFFFF) as HalfWord); }
+                    let step = if tr32 { 4 } else { 2 };
+                    match src_ctrl { 0 => src += step, 1 => src -= step, _ => {} }
+                    match dst_ctrl { 0 => dst += step, 1 => dst -= step, 3 => dst += step, _ => {} }
+                    count -= 1;
+                    transfers += 1;
+                }
+                if let Some(ch) = self.dma_controller.get_channel_mut(ch_id) {
+                    ch.internal_source = src;
+                    ch.internal_destination = dst;
+                    ch.set_count(count);
+                    if count == 0 {
+                        ch.enable = false;
+                        if irq {
+                            let it = match ch_id { 0=>crate::gba::interrupt::InterruptType::DMA0, 1=>crate::gba::interrupt::InterruptType::DMA1, 2=>crate::gba::interrupt::InterruptType::DMA2, _=>crate::gba::interrupt::InterruptType::DMA3 };
+                            self.interrupt_controller.request_interrupt(it);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Kick DMA with start-timing HBlank (2) for each HBlank edge
+        let hblanks = self.lcdc.take_hblank_edges();
+        if hblanks > 0 {
+            for _ in 0..hblanks {
+                for ch_id in 0..4 {
+                    let start_on_hblank = self.dma_controller.get_channel(ch_id)
+                        .map(|ch| ch.is_enabled() && ch.get_start_timing() == 2)
+                        .unwrap_or(false);
+                    if !start_on_hblank { continue; }
+                    println!("Kick HBlank DMA{}", ch_id);
+                    let (mut src, mut dst, mut count, tr32, src_ctrl, dst_ctrl, irq) = {
+                        let ch = self.dma_controller.get_channel(ch_id).unwrap();
+                        (
+                            ch.internal_source,
+                            ch.internal_destination,
+                            ch.get_count(),
+                            ch.get_transfer_type(),
+                            ch.get_source_addr_control(),
+                            ch.get_dest_addr_control(),
+                            ch.is_irq_enabled(),
+                        )
+                    };
+                    let mut transfers = 0usize;
+                    while count > 0 && transfers < 0x400 {
+                        let sdata = self.read_word(src);
+                        if tr32 { self.write_word(dst, sdata); }
+                        else { self.write_halfword(dst, (sdata & 0xFFFF) as HalfWord); }
+                        let step = if tr32 { 4 } else { 2 };
+                        match src_ctrl { 0 => src += step, 1 => src -= step, _ => {} }
+                        match dst_ctrl { 0 => dst += step, 1 => dst -= step, 3 => dst += step, _ => {} }
+                        count -= 1;
+                        transfers += 1;
+                    }
+                    if let Some(ch) = self.dma_controller.get_channel_mut(ch_id) {
+                        ch.internal_source = src;
+                        ch.internal_destination = dst;
+                        ch.set_count(count);
+                        if count == 0 {
+                            ch.enable = false;
+                            if irq {
+                                let it = match ch_id { 0=>crate::gba::interrupt::InterruptType::DMA0, 1=>crate::gba::interrupt::InterruptType::DMA1, 2=>crate::gba::interrupt::InterruptType::DMA2, _=>crate::gba::interrupt::InterruptType::DMA3 };
+                                self.interrupt_controller.request_interrupt(it);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        frame_ready
     }
 
     /// Detect EEPROM based on ROM content

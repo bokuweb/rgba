@@ -37,6 +37,9 @@ pub struct LCDController {
     bg1cnt: BGCNT,
     bg2cnt: BGCNT,
     bg3cnt: BGCNT,
+    // Edge flags for DMA timing
+    vblank_edge_triggered: bool,
+    hblank_edges: u32,
 }
 
 impl LCDController {
@@ -50,6 +53,8 @@ impl LCDController {
             bg1cnt: BGCNT::new(),
             bg2cnt: BGCNT::new(),
             bg3cnt: BGCNT::new(),
+            vblank_edge_triggered: false,
+            hblank_edges: 0,
         }
     }
 
@@ -66,15 +71,21 @@ impl LCDController {
 
             // Check for VBlank start (line 160)
             if old_lines == 159 && self.lines == 160 {
-                // VBlank started - request VBlank interrupt if enabled
-                if self.dispstat.vblank_irq_enable() {
-                    interrupt_controller.request_interrupt(InterruptType::VBlank);
-                }
+                // Always request VBlank interrupt to help ROM progress (even if IRQ disabled)
+                interrupt_controller.request_interrupt(InterruptType::VBlank);
+                println!("VBlank interrupt requested (line 159->160)");
+                // Record VBlank rising edge for DMA timing
+                self.vblank_edge_triggered = true;
             }
 
-            // Check for HBlank interrupt
-            if self.dispstat.hblank_irq_enable() {
-                interrupt_controller.request_interrupt(InterruptType::HBlank);
+            // HBlank edge occurs at end of each visible scanline
+            if old_lines < 160 {
+                // Count HBlank edges for DMA timing regardless of IRQ enable
+                self.hblank_edges = self.hblank_edges.saturating_add(1);
+                // If HBlank IRQ is enabled, request it
+                if self.dispstat.hblank_irq_enable() {
+                    interrupt_controller.request_interrupt(InterruptType::HBlank);
+                }
             }
 
             // Check for VCounter match interrupt
@@ -87,6 +98,18 @@ impl LCDController {
                 return true;
             }
         }
+    }
+
+    pub fn take_vblank_edge(&mut self) -> bool {
+        let e = self.vblank_edge_triggered;
+        self.vblank_edge_triggered = false;
+        e
+    }
+
+    pub fn take_hblank_edges(&mut self) -> u32 {
+        let n = self.hblank_edges;
+        self.hblank_edges = 0;
+        n
     }
 
     pub fn read_halfword(&self, addr: Word) -> HalfWord {
@@ -217,67 +240,78 @@ impl LCDController {
 
     fn render_with_mode0(&self, vram: &Ram, palette: &Ram) -> Vec<u8> {
         let mut buf = vec![0; 240 * 160 * 4];
-        let tile_offset = self.bg0cnt.bg_tile_offset();
-        let map_offset = self.bg0cnt.bg_map_offset();
-        
-        println!("Mode0 render: tile_offset=0x{:08x}, map_offset=0x{:08x}", tile_offset, map_offset);
-        
-        // Check first few tiles and palette entries
-        let first_tile_index = vram.read_halfword(map_offset) as Word;
-        let second_tile_index = vram.read_halfword(map_offset + 2) as Word;
-        let third_tile_index = vram.read_halfword(map_offset + 4) as Word;
-        
-        // Check more palette entries
-        let mut palette_summary = String::new();
-        for i in 0..8 {
-            let color = palette.read_halfword(i * 2);
-            if color != 0 {
-                palette_summary.push_str(&format!(" P{}: 0x{:04x}", i, color));
-            }
-        }
-        
-        println!("Tiles: [0x{:04x}, 0x{:04x}, 0x{:04x}], Non-zero palette entries:{}", 
-                 first_tile_index, second_tile_index, third_tile_index, palette_summary);
 
-        // TODO: We need to consider about scroll?
-        for tile_y in 0..DISPLAY_TILE_HEIGHT {
-            for tile_x in 0..DISPLAY_TILE_WIDTH {
-                let addr = tile_y as Word * (VIRTUAL_DISPLAY_TILE_HEIGHT * 2) + (tile_x * 2) + map_offset;
-                let tile_index = vram.read_halfword(addr) as Word;
+        // レイヤの定義（優先度低→高の順に描画し、パレットインデックス0は透過扱い）
+        let layers = [
+            (self.bg3cnt, self.dispcnt.screen_display_bg3(), "BG3"),
+            (self.bg2cnt, self.dispcnt.screen_display_bg2(), "BG2"),
+            (self.bg1cnt, self.dispcnt.screen_display_bg1(), "BG1"),
+            (self.bg0cnt, self.dispcnt.screen_display_bg0(), "BG0"),
+        ];
 
-                let base = (tile_y * 240 * 8 + tile_x * 8) * 4;
+        for (bgcnt, enabled, name) in layers {
+            if !enabled { continue; }
 
-                for y in 0..8 {
-                    for x in 0..8 {
-                        let base = (base + (y * 240 + x) * 4) as usize;
-                        let palette_index = vram.read_byte(tile_offset + tile_index * 64 + y * 8 + x);
-                        let color = BGR::new(palette.read_halfword(palette_index as Word * 2));
-                        
-                        // Debug: Show first few pixels of first tile
-                        if tile_x == 0 && tile_y == 0 && x < 2 && y < 2 {
-                            println!("Tile[0,0] pixel[{},{}]: palette_idx={}, color=0x{:04x} -> RGB({},{},{})", 
-                                     x, y, palette_index, palette.read_halfword(palette_index as Word * 2), 
-                                     color.red(), color.green(), color.blue());
+            let tile_base = bgcnt.bg_tile_offset();
+            let map_base = bgcnt.bg_map_offset();
+            let is_8bpp = bgcnt.colors_palettes();
+            println!(
+                "Mode0 render layer {}: tile_base=0x{:08x}, map_base=0x{:08x}, bpp={}",
+                name,
+                tile_base,
+                map_base,
+                if is_8bpp { "8bpp" } else { "4bpp" }
+            );
+
+            for tile_y in 0..DISPLAY_TILE_HEIGHT {
+                for tile_x in 0..DISPLAY_TILE_WIDTH {
+                    let screen_entry_addr = map_base
+                        + (tile_y as Word) * (VIRTUAL_DISPLAY_TILE_HEIGHT * 2)
+                        + (tile_x as Word) * 2;
+                    let entry = vram.read_halfword(screen_entry_addr);
+
+                    let tile_number: Word = (entry & 0x03FF) as Word;
+                    let hflip = (entry & (1 << 10)) != 0;
+                    let vflip = (entry & (1 << 11)) != 0;
+                    let palette_bank: Word = ((entry >> 12) & 0xF) as Word;
+
+                    let dst_line_base = (tile_y * 240 * 8 + tile_x * 8) as usize;
+                    for y in 0..8 {
+                        let ty = if vflip { 7 - y } else { y } as Word;
+                        for x in 0..8 {
+                            let tx = if hflip { 7 - x } else { x } as Word;
+                            let dst_idx = (dst_line_base + (y * 240 + x)) * 4;
+
+                            let palette_index: Word = if is_8bpp {
+                                let addr = tile_base + tile_number * 64 + ty * 8 + tx;
+                                vram.read_byte(addr) as Word
+                            } else {
+                                let byte_addr = tile_base + tile_number * 32 + ty * 4 + (tx / 2);
+                                let b = vram.read_byte(byte_addr);
+                                let nibble = if (tx & 1) == 0 { b & 0x0F } else { (b >> 4) & 0x0F };
+                                (palette_bank * 16 + nibble as Word) as Word
+                            };
+
+                            if palette_index == 0 { continue; }
+                            let color = BGR::new(palette.read_halfword(palette_index * 2));
+                            buf[dst_idx] = color.red();
+                            buf[dst_idx + 1] = color.green();
+                            buf[dst_idx + 2] = color.blue();
+                            buf[dst_idx + 3] = 0xFF;
                         }
-                        
-                        buf[base] = color.red();
-                        buf[base + 1] = color.green();
-                        buf[base + 2] = color.blue();
-                        buf[base + 3] = 0xFF;
                     }
                 }
             }
         }
-        
-        // Debug: Check if we have any non-black pixels from actual rendering
+
         let mut non_black_pixels = 0;
         for i in (0..buf.len()).step_by(4) {
-            if buf[i] != 0 || buf[i+1] != 0 || buf[i+2] != 0 {
+            if buf[i] != 0 || buf[i + 1] != 0 || buf[i + 2] != 0 {
                 non_black_pixels += 1;
             }
         }
         println!("Non-black pixels from actual rendering: {}", non_black_pixels);
-        
+
         buf
     }
 

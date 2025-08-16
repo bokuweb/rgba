@@ -33,7 +33,7 @@ fn main() {
     let mut prev_time = SystemTime::now();
     let mut gba = gba::GBA::new();
     let mut key = io::Key::new();
-    let mut started = false;
+    let mut started = std::env::var("RUSTY_GBA_AUTOSTART").is_ok();
 
     'running: loop {
         for event in event_pump.poll_iter() {

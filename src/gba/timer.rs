@@ -48,11 +48,12 @@ impl Timer {
         self.control
     }
     
-    /// Write control register (TM0CNT_H)
+    /// Write control register (TM0CNT_H) - GBATek仕様準拠
     pub fn write_control(&mut self, value: HalfWord) {
         let old_enabled = self.is_enabled();
         let old_irq_enabled = self.is_irq_enabled();
-        self.control = value;
+        // GBATek & JavaScript実装: Timer CNT_H書き込み時に0x00C7マスクを適用
+        self.control = value & 0x00C7;
         let new_enabled = self.is_enabled();
         let new_irq_enabled = self.is_irq_enabled();
         

@@ -123,6 +123,11 @@ where
 
     // If PC is loaded
     if register_list & 0x8000 != 0 {
+        // If S bit is set and in a privileged mode, then restore CPSR from SPSR when loading PC
+        if dec.get_S() && cpsr.get_mode() != Mode::User {
+            println!("ARM LDM^ -> restore CPSR and Flush");
+            cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
+        }
         Ok((cycle, PipelineStatus::Flush))
     } else {
         // consume merged I-S cycle

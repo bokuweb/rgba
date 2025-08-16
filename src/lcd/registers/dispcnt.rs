@@ -70,6 +70,7 @@ impl DISPCNT {
 
 impl Default for DISPCNT {
     fn default() -> Self {
-        DISPCNT(0x0080)
+        // GBATek: DISPCNT初期値は0x0000, Forced Blankは無効
+        DISPCNT(0x0000)
     }
 }

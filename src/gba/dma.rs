@@ -14,11 +14,11 @@ pub struct DMAChannel {
     /// Enable flag
     pub enable: bool,
     /// Internal source address (for transfers)
-    internal_source: u32,
+    pub(crate) internal_source: u32,
     /// Internal destination address (for transfers)
-    internal_destination: u32,
+    pub(crate) internal_destination: u32,
     /// Internal count (for transfers)
-    internal_count: u32,
+    pub(crate) internal_count: u32,
 }
 
 impl Default for DMAChannel {
@@ -57,10 +57,11 @@ impl DMAChannel {
         self.count = count;
     }
 
-    /// Set control register
+    /// Set control register - GBATek仕様準拠
     pub fn set_control(&mut self, control: u16) {
-        self.control = control;
-        self.enable = (control & 0x8000) != 0; // Bit 15 is enable
+        // GBATek & JavaScript実装: DMA CNT_H書き込み時に0xFFE0マスクを適用
+        self.control = control & 0xFFE0;
+        self.enable = (self.control & 0x8000) != 0; // Bit 15 is enable
         
         if self.enable {
             // Initialize internal registers when DMA is enabled

@@ -86,7 +86,7 @@ pub fn exec_thumb_push<T>(bus: &mut T, dec: BlockDataTransfer, gpr: &mut [Word; 
 where
     T: BusAccessor,
 {
-    let mut addr = gpr[SP] - 4;
+    let mut addr = gpr[SP].wrapping_sub(4);
     let register_list = dec.get_register_list();
 
     let mut cycle: Cycle = 0;
@@ -94,7 +94,7 @@ where
 
     if dec.get_R() {
         bus.write_word(addr, gpr[LR]);
-        addr = addr - 4;
+        addr = addr.wrapping_sub(4);
     }
 
     for i in 0..0x8 {
@@ -110,7 +110,7 @@ where
             };
             cycle += bus.compute_cycle(addr, access_type);
 
-            addr -= 4;
+            addr = addr.wrapping_sub(4);
         }
     }
 

@@ -156,7 +156,7 @@ impl PSR {
         // TODO: move to PSR?
         //       switch mode
         // let current_value = cpsr.get();
-        if new_mode != Mode::User || new_mode != Mode::System {
+        if new_mode != Mode::User && new_mode != Mode::System {
             let current_mode = self.get_mode();
             // let new_mode = self.get_mode();
             if current_mode != new_mode {

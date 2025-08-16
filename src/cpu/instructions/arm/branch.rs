@@ -15,7 +15,10 @@ pub fn exec_arm_b(dec: Branch, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()
     } else {
         imm
     }) as i32;
-    gpr[PC] = (gpr[PC] as i32 + imm * 4) as Word;
+    // PC is currently visible PC; branch target = visible PC + (imm<<2)
+    let target = (gpr[PC] as i32).wrapping_add(imm * 4) as Word;
+    println!("ARM B -> PC = 0x{:08x}", target);
+    gpr[PC] = target;
     // dbg!("b");
     // b does not consume extra cycle.
     Ok((0, PipelineStatus::Flush))
