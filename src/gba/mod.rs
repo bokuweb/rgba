@@ -1,38 +1,21 @@
 mod bus;
+pub mod interrupt;
+pub mod timer;
 
 use crate::io;
 use crate::lcd;
 
 use bus::CpuBus;
 
-use crate::cpu::bus::accessor::BusAccessor;
-use crate::cpu::constants;
 use crate::cpu::cpu;
-use crate::cpu::decoder;
-use crate::cpu::instructions;
-use crate::cpu::registers;
-use crate::cpu::types;
 
-// mod error;
-// mod instructions;
-// mod memory;
-// mod registers;
-// mod types;
-
-// use constants::*;
-// use error::*;
 use crate::memory::ram::Ram;
-use crate::memory::readable::*;
 use crate::memory::rom::Rom;
-use crate::memory::writable::*;
-use crate::memory::Raw;
 
 use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
-
-use crate::types::*;
 
 // Visible     240 dots,  57.221 us,    960 cycles - 78% of h-time
 // H-Blanking   68 dots,  16.212 us,    272 cycles - 22% of h-time
@@ -82,8 +65,8 @@ impl GBA {
     pub fn frame(&mut self, started: bool) -> Vec<u8> {
         loop {
             let cycles = self.arm.step(&mut self.bus, started).unwrap();
-            let lcdc = self.bus.borrow_mut_lcdc();
-            let ready = lcdc.run(cycles);
+            // Use a separate method to handle LCD update with interrupt controller
+            let ready = self.bus.update_lcd(cycles);
             if ready {
                 break;
             }

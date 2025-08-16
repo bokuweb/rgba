@@ -8,7 +8,7 @@ use crate::cpu::instructions::arm::{
 use crate::cpu::instructions::thumb::*;
 
 use crate::cpu::instructions::PipelineStatus;
-use crate::cpu::registers::{BankGpr, BankSpsr, CpuState, PSR};
+use crate::cpu::registers::{BankGpr, BankSpsr, CpuState, Mode, PSR};
 use crate::cpu::types::*;
 use crate::types::*;
 
@@ -137,6 +137,12 @@ impl ARM {
     where
         T: BusAccessor,
     {
+        // Check for interrupts before executing instruction
+        if self.should_handle_interrupt(bus) {
+            let cycle = self.handle_interrupt(bus);
+            return Ok(cycle);
+        }
+
         let cycle = if self.pipeline_wait > 0 { self.wait_pipeline_filled(bus) } else { 0 };
         // let log = format!("{:?}", self.gpr);
         // dbg!(&self.gpr);
@@ -351,6 +357,64 @@ impl ARM {
                 cycle + self.wait_pipeline_filled(bus)
             }
         }
+    }
+
+    fn should_handle_interrupt<T>(&self, bus: &T) -> bool
+    where
+        T: BusAccessor,
+    {
+        // IRQ interrupts are disabled if CPSR.I is set or if we're already in IRQ mode
+        if self.irq_disable || self.cpsr.get_mode() == Mode::IRQ {
+            return false;
+        }
+
+        // Check if there are pending interrupts by reading from the interrupt controller
+        // We need to check IE, IF, and IME registers
+        let ime = bus.read_halfword(0x04000208);
+        if (ime & 1) == 0 {
+            return false; // Master interrupt disable
+        }
+
+        let ie = bus.read_halfword(0x04000200);
+        let if_reg = bus.read_halfword(0x04000202);
+        
+        (ie & if_reg) != 0
+    }
+
+    fn handle_interrupt<T>(&mut self, bus: &mut T) -> Cycle
+    where
+        T: BusAccessor,
+    {
+        println!("Handling interrupt");
+        
+        // Save current mode and switch to IRQ mode
+        let old_mode = self.cpsr.get_mode();
+        
+        // Save return address in LR_irq (current PC - 4 for ARM mode)
+        let return_addr = if self.cpsr.get_cpu_state() == CpuState::ARM {
+            self.gpr[PC] - 4
+        } else {
+            self.gpr[PC] - 2
+        };
+        
+        // Use the existing switch_mode functionality from PSR
+        self.cpsr.switch_mode(Mode::IRQ, &mut self.gpr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr);
+        
+        // Set return address
+        self.gpr[LR] = return_addr;
+        
+        // Disable IRQ
+        self.cpsr.set_I(true);
+        
+        // Set PC to interrupt vector (0x18 for IRQ)
+        self.gpr[PC] = 0x18;
+        self.cpsr.set_cpu_state(CpuState::ARM);
+        
+        // Flush pipeline
+        self.flush_pipeline();
+        
+        // Return cycles for interrupt handling
+        3 // Typical interrupt overhead
     }
 }
 

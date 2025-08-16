@@ -27,11 +27,11 @@ impl DISPSTAT {
         }
 
         if DISPSTAT::is_hblank(cycles) {
-            v | 0x0002;
+            v |= 0x0002;
         }
 
         if self.vcount_setting() == lines as u16 {
-            v | 0x0004;
+            v |= 0x0004;
         }
         v
     }

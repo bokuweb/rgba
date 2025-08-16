@@ -1,5 +1,6 @@
 use crate::cpu::bus;
 use crate::cpu::types;
+use crate::gba::interrupt::InterruptController;
 use crate::io;
 use crate::lcd;
 use crate::types::*;
@@ -10,14 +11,6 @@ use crate::memory::ram::Ram;
 use crate::memory::readable::*;
 use crate::memory::rom::Rom;
 use crate::memory::writable::*;
-use crate::memory::Raw;
-
-use std::env;
-use std::fs::File;
-use std::io::Read;
-use std::path::Path;
-
-use types::*;
 
 pub const BIOS_ADDR: u32 = 0x0000_0000;
 pub const EWRAM_ADDR: u32 = 0x0200_0000;
@@ -139,7 +132,7 @@ impl CycleLUT {
 }
 
 pub struct CpuBus {
-    cycleLUT: CycleLUT,
+    cycle_lut: CycleLUT,
     lcdc: lcd::LCDController,
     bios: Rom,
     rom: Rom,
@@ -149,6 +142,7 @@ pub struct CpuBus {
     palette: Ram,
     oam: Ram,
     key: io::Key,
+    interrupt_controller: InterruptController,
 }
 
 impl BusAccessor for CpuBus {
@@ -186,10 +180,10 @@ impl BusAccessor for CpuBus {
                 match addr {
                     0x0400_0100 => 0, // TM0CNT_L - Timer 0 Counter/Reload
                     0x0400_0102 => 0, // TM0CNT_H - Timer 0 Control
-                    0x0400_0200 => 0, // IE - Interrupt Enable Register
-                    0x0400_0202 => 0, // IF - Interrupt Request Flags / IRQ Acknowledge
+                    0x0400_0200 => self.interrupt_controller.read_ie(), // IE - Interrupt Enable Register
+                    0x0400_0202 => self.interrupt_controller.read_if(), // IF - Interrupt Request Flags / IRQ Acknowledge
                     0x0400_0204 => 0, // WAITCNT - Game Pak Waitstate Control
-                    0x0400_0208 => 0, // IME - Interrupt Master Enable Register
+                    0x0400_0208 => self.interrupt_controller.read_ime(), // IME - Interrupt Master Enable Register
                     0x0400_00DE => 0, // Unknown register accessed by agb_checker
                     _ => {
                         println!("I/O read halfword: 0x{:08x}", addr);
@@ -275,10 +269,10 @@ impl BusAccessor for CpuBus {
                 match addr {
                     0x0400_0100 => {}, // TM0CNT_L - Timer 0 Counter/Reload
                     0x0400_0102 => {}, // TM0CNT_H - Timer 0 Control
-                    0x0400_0200 => {}, // IE - Interrupt Enable Register
-                    0x0400_0202 => {}, // IF - Interrupt Request Flags / IRQ Acknowledge
+                    0x0400_0200 => self.interrupt_controller.write_ie(data), // IE - Interrupt Enable Register
+                    0x0400_0202 => self.interrupt_controller.write_if(data), // IF - Interrupt Request Flags / IRQ Acknowledge
                     0x0400_0204 => {}, // WAITCNT - Game Pak Waitstate Control
-                    0x0400_0208 => {}, // IME - Interrupt Master Enable Register
+                    0x0400_0208 => self.interrupt_controller.write_ime(data), // IME - Interrupt Master Enable Register
                     0x0400_00DE => {}, // Unknown register accessed by agb_checker
                     _ => {
                         println!("I/O write halfword: 0x{:08x} = 0x{:04x}", addr, data);
@@ -333,10 +327,10 @@ impl BusAccessor for CpuBus {
             return 1;
         }
         match access_type {
-            AccessType::NonSeq(AccessWidth::Byte) | AccessType::NonSeq(AccessWidth::HalfWord) => self.cycleLUT.n16[page],
-            AccessType::NonSeq(AccessWidth::Word) => self.cycleLUT.n32[page],
-            AccessType::Seq(AccessWidth::Byte) | AccessType::Seq(AccessWidth::HalfWord) => self.cycleLUT.s16[page],
-            AccessType::Seq(AccessWidth::Word) => self.cycleLUT.s32[page],
+            AccessType::NonSeq(AccessWidth::Byte) | AccessType::NonSeq(AccessWidth::HalfWord) => self.cycle_lut.n16[page],
+            AccessType::NonSeq(AccessWidth::Word) => self.cycle_lut.n32[page],
+            AccessType::Seq(AccessWidth::Byte) | AccessType::Seq(AccessWidth::HalfWord) => self.cycle_lut.s16[page],
+            AccessType::Seq(AccessWidth::Word) => self.cycle_lut.s32[page],
         }
     }
 }
@@ -354,7 +348,7 @@ impl CpuBus {
         key: io::Key,
     ) -> CpuBus {
         CpuBus {
-            cycleLUT: CycleLUT::new(),
+            cycle_lut: CycleLUT::new(),
             lcdc,
             bios,
             rom,
@@ -364,6 +358,7 @@ impl CpuBus {
             palette,
             oam,
             key,
+            interrupt_controller: InterruptController::new(),
         }
     }
 
@@ -389,5 +384,17 @@ impl CpuBus {
 
     pub(crate) fn borrow_oam(&self) -> &Ram {
         &self.oam
+    }
+
+    pub(crate) fn borrow_mut_interrupt_controller(&mut self) -> &mut InterruptController {
+        &mut self.interrupt_controller
+    }
+
+    pub(crate) fn borrow_interrupt_controller(&self) -> &InterruptController {
+        &self.interrupt_controller
+    }
+
+    pub(crate) fn update_lcd(&mut self, cycles: usize) -> bool {
+        self.lcdc.run(cycles, &mut self.interrupt_controller)
     }
 }

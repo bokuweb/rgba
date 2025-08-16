@@ -4,6 +4,7 @@ use crate::types::*;
 
 use super::constants::*;
 use super::*;
+use crate::gba::interrupt::{InterruptController, InterruptType};
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 struct BGR(HalfWord);
@@ -52,7 +53,7 @@ impl LCDController {
         }
     }
 
-    pub fn run(&mut self, cycles: usize) -> bool {
+    pub fn run(&mut self, cycles: usize, interrupt_controller: &mut InterruptController) -> bool {
         self.cycles += cycles;
 
         loop {
@@ -60,7 +61,27 @@ impl LCDController {
                 return false;
             }
             self.cycles -= CYCLES_PER_LINE;
+            let old_lines = self.lines;
             self.lines += 1;
+
+            // Check for VBlank start (line 160)
+            if old_lines == 159 && self.lines == 160 {
+                // VBlank started - request VBlank interrupt if enabled
+                if self.dispstat.vblank_irq_enable() {
+                    interrupt_controller.request_interrupt(InterruptType::VBlank);
+                    println!("VBlank interrupt requested at line {}", self.lines);
+                }
+            }
+
+            // Check for HBlank interrupt
+            if self.dispstat.hblank_irq_enable() {
+                interrupt_controller.request_interrupt(InterruptType::HBlank);
+            }
+
+            // Check for VCounter match interrupt
+            if self.dispstat.vcounter_irq_enable() && self.dispstat.vcount_setting() == self.lines as u16 {
+                interrupt_controller.request_interrupt(InterruptType::VCounter);
+            }
 
             if self.lines >= LINES_PER_FRAME {
                 self.lines -= LINES_PER_FRAME;
@@ -98,6 +119,7 @@ impl LCDController {
     pub fn write_halfword(&mut self, addr: Word, data: HalfWord) {
         match addr {
             0x0000 => self.dispcnt.write(data),
+            0x0004 => self.dispstat.write(data),
             0x0008 => self.bg0cnt.write(data),
             0x000A => self.bg1cnt.write(data),
             0x000C => self.bg2cnt.write(data),
@@ -110,6 +132,7 @@ impl LCDController {
         let data = data as HalfWord;
         match addr {
             0x0000 => self.dispcnt.write(data),
+            0x0004 => self.dispstat.write(data),
             0x0008 => self.bg0cnt.write(data),
             0x000A => self.bg1cnt.write(data),
             0x000C => self.bg2cnt.write(data),
