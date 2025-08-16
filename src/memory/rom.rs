@@ -12,6 +12,10 @@ impl Rom {
     pub fn size(&self) -> usize {
         self.0.len()
     }
+
+    pub fn data(&self) -> &[u8] {
+        &self.0
+    }
 }
 
 impl Raw for Rom {

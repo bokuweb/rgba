@@ -99,7 +99,10 @@ impl LCDController {
             0x000A => self.bg1cnt.read(),
             0x000C => self.bg2cnt.read(),
             0x000E => self.bg3cnt.read(),
-            _ => todo!(),
+            _ => {
+                println!("[LCD] Unimplemented register read halfword: addr=0x{:04X}", addr);
+                0
+            }
         }
     }
 
@@ -112,7 +115,10 @@ impl LCDController {
             0x000A => self.bg1cnt.read() as Word,
             0x000C => self.bg2cnt.read() as Word,
             0x000E => self.bg3cnt.read() as Word,
-            _ => todo!(),
+            _ => {
+                println!("[LCD] Unimplemented register read word: addr=0x{:04X}", addr);
+                0
+            }
         }
     }
 
@@ -124,7 +130,9 @@ impl LCDController {
             0x000A => self.bg1cnt.write(data),
             0x000C => self.bg2cnt.write(data),
             0x000E => self.bg3cnt.write(data),
-            _ => todo!(),
+            _ => {
+                println!("[LCD] Unimplemented register write halfword: addr=0x{:04X}, data=0x{:04X}", addr, data);
+            }
         }
     }
 
@@ -137,7 +145,9 @@ impl LCDController {
             0x000A => self.bg1cnt.write(data),
             0x000C => self.bg2cnt.write(data),
             0x000E => self.bg3cnt.write(data),
-            _ => todo!(),
+            _ => {
+                println!("[LCD] Unimplemented register write word: addr=0x{:04X}, data=0x{:08X}", addr, data);
+            }
         }
     }
 

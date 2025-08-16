@@ -1,5 +1,6 @@
 use crate::cpu::bus;
-use crate::cpu::types;
+use crate::gba::dma::DMAController;
+use crate::gba::eeprom::{EEPROM, EEPROMSize};
 use crate::gba::interrupt::InterruptController;
 use crate::io;
 use crate::lcd;
@@ -85,7 +86,7 @@ impl CycleLUT {
         Self::default()
     }
 
-    pub fn update(&mut self, waitcnt: ()) {
+    pub fn update(&mut self, _waitcnt: ()) {
         static S_GAMEPAK_NSEQ_CYCLES: [usize; 4] = [4, 3, 2, 8];
         static S_GAMEPAK_WS0_SEQ_CYCLES: [usize; 2] = [2, 1];
         static S_GAMEPAK_WS1_SEQ_CYCLES: [usize; 2] = [4, 1];
@@ -143,6 +144,8 @@ pub struct CpuBus {
     oam: Ram,
     key: io::Key,
     interrupt_controller: InterruptController,
+    dma_controller: DMAController,
+    eeprom: Option<EEPROM>,
 }
 
 impl BusAccessor for CpuBus {
@@ -158,8 +161,16 @@ impl BusAccessor for CpuBus {
             0x0600_0000..=0x0601_7FFF => self.vram.read_byte(addr - 0x0600_0000),
             0x0700_0000..=0x0700_03FF => self.oam.read_byte(addr - 0x0700_0000),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_byte(addr - 0x0800_0000),
-            0x0A00_0000..=0x0DFF_FFFF => self.rom.read_byte((addr - 0x0A00_0000) % self.rom.size() as u32), // GamePak WS1/WS2 - mirror ROM
-            0x0E00_0000..=0x0FFF_FFFF => 0, // SRAM - return 0 for now
+            0x0A00_0000..=0x0BFF_FFFF => self.rom.read_byte((addr - 0x0A00_0000) % self.rom.size() as u32), // GamePak WS1 - mirror ROM
+            0x0C00_0000..=0x0CFF_FFFF => self.rom.read_byte((addr - 0x0C00_0000) % self.rom.size() as u32), // GamePak WS2 - mirror ROM
+            0x0D00_0000..=0x0DFF_FFFF => {
+                println!("[EEPROM] Read byte access at 0x{:08X}", addr);
+                self.rom.read_byte((addr - 0x0D00_0000) % self.rom.size() as u32) // EEPROM range - currently mirror ROM
+            }
+            0x0E00_0000..=0x0FFF_FFFF => {
+                println!("[SRAM] Read byte access at 0x{:08X}", addr);
+                0 // SRAM - return 0 for now
+            }
             _ => {
                 let a = format!("read byte addr = {:x}", addr);
                 panic!("TODO: {:?}", a);
@@ -180,11 +191,11 @@ impl BusAccessor for CpuBus {
                 match addr {
                     0x0400_0100 => 0, // TM0CNT_L - Timer 0 Counter/Reload
                     0x0400_0102 => 0, // TM0CNT_H - Timer 0 Control
+                    0x0400_00B0..=0x0400_00DF => self.dma_controller.read_register(addr), // DMA registers
                     0x0400_0200 => self.interrupt_controller.read_ie(), // IE - Interrupt Enable Register
                     0x0400_0202 => self.interrupt_controller.read_if(), // IF - Interrupt Request Flags / IRQ Acknowledge
                     0x0400_0204 => 0, // WAITCNT - Game Pak Waitstate Control
                     0x0400_0208 => self.interrupt_controller.read_ime(), // IME - Interrupt Master Enable Register
-                    0x0400_00DE => 0, // Unknown register accessed by agb_checker
                     _ => {
                         println!("I/O read halfword: 0x{:08x}", addr);
                         0
@@ -195,8 +206,25 @@ impl BusAccessor for CpuBus {
             0x0600_0000..=0x0601_7FFF => self.vram.read_halfword(addr - 0x0600_0000),
             0x0700_0000..=0x0700_03FF => self.oam.read_halfword(addr - 0x0700_0000),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_halfword(addr - 0x0800_0000),
-            0x0A00_0000..=0x0DFF_FFFF => self.rom.read_halfword((addr - 0x0A00_0000) % self.rom.size() as u32), // GamePak WS1/WS2 - mirror ROM
-            0x0E00_0000..=0x0FFF_FFFF => 0, // SRAM - return 0 for now
+            0x0A00_0000..=0x0BFF_FFFF => self.rom.read_halfword((addr - 0x0A00_0000) % self.rom.size() as u32), // GamePak WS1 - mirror ROM
+            0x0C00_0000..=0x0CFF_FFFF => self.rom.read_halfword((addr - 0x0C00_0000) % self.rom.size() as u32), // GamePak WS2 - mirror ROM
+            0x0D00_0000..=0x0DFF_FFFF => {
+                // EEPROM range - typically accessed at 0xDFFFF00-0xDFFFFFF
+                if let Some(ref eeprom) = self.eeprom {
+                    // Check DMA3 status for proper EEPROM operation
+                    let dma3_enabled = self.dma_controller.get_channel(3)
+                        .map(|ch| ch.is_enabled())
+                        .unwrap_or(false);
+                    eeprom.peek_read_halfword(addr, dma3_enabled)
+                } else {
+                    println!("[EEPROM] Read halfword access at 0x{:08X} (no EEPROM)", addr);
+                    1 // Return 1 when no EEPROM is present
+                }
+            }
+            0x0E00_0000..=0x0FFF_FFFF => {
+                println!("[SRAM] Read halfword access at 0x{:08X}", addr);
+                0 // SRAM - return 0 for now
+            }
             _ => panic!("TODO: {:x}", addr),
         }
     }
@@ -213,13 +241,21 @@ impl BusAccessor for CpuBus {
             0x0600_0000..=0x0601_7FFF => self.vram.read_word(addr - 0x0600_0000),
             0x0700_0000..=0x0700_03FF => self.oam.read_word(addr - 0x0700_0000),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_word(addr - 0x0800_0000),
-            0x0A00_0000..=0x0DFF_FFFF => self.rom.read_word((addr - 0x0A00_0000) % self.rom.size() as u32), // GamePak WS1/WS2 - mirror ROM
-            0x0E00_0000..=0x0FFF_FFFF => 0, // SRAM - return 0 for now
+            0x0A00_0000..=0x0BFF_FFFF => self.rom.read_word((addr - 0x0A00_0000) % self.rom.size() as u32), // GamePak WS1 - mirror ROM
+            0x0C00_0000..=0x0CFF_FFFF => self.rom.read_word((addr - 0x0C00_0000) % self.rom.size() as u32), // GamePak WS2 - mirror ROM
+            0x0D00_0000..=0x0DFF_FFFF => {
+                println!("[EEPROM] Read word access at 0x{:08X}", addr);
+                self.rom.read_word((addr - 0x0D00_0000) % self.rom.size() as u32) // EEPROM range - currently mirror ROM
+            }
+            0x0E00_0000..=0x0FFF_FFFF => {
+                println!("[SRAM] Read word access at 0x{:08X}", addr);
+                0 // SRAM - return 0 for now
+            }
             _ => {
                 if addr == 0xc8002489 {
                     dbg!("aa");
                 }
-                panic!(format!("TODO: addr = 0x{:x}", addr))
+                panic!("TODO: addr = 0x{:x}", addr)
             }
         }
     }
@@ -245,8 +281,15 @@ impl BusAccessor for CpuBus {
             0x0500_0000..=0x0500_03FF => self.palette.write_byte(addr - 0x0500_0000, data),
             0x0600_0000..=0x0601_7FFF => self.vram.write_byte(addr - 0x0600_0000, data),
             0x0700_0000..=0x0700_03FF => self.oam.write_byte(addr - 0x0700_0000, data),
-            0x0E00_0000..=0x0FFF_FFFF => {}, // SRAM - ignore writes for now
-            _ => panic!(format!("TODO: 0x{:x} 0x{:x}", addr, data)),
+            0x0D00_0000..=0x0DFF_FFFF => {
+                println!("[EEPROM] Write byte access at 0x{:08X} = 0x{:02X}", addr, data);
+                // EEPROM range - ignore writes for now (should not be used for byte access)
+            }
+            0x0E00_0000..=0x0FFF_FFFF => {
+                println!("[SRAM] Write byte access at 0x{:08X} = 0x{:02X}", addr, data);
+                // SRAM - ignore writes for now
+            }
+            _ => panic!("TODO: 0x{:x} 0x{:x}", addr, data),
         };
     }
 
@@ -269,11 +312,11 @@ impl BusAccessor for CpuBus {
                 match addr {
                     0x0400_0100 => {}, // TM0CNT_L - Timer 0 Counter/Reload
                     0x0400_0102 => {}, // TM0CNT_H - Timer 0 Control
+                    0x0400_00B0..=0x0400_00DF => self.dma_controller.write_register(addr, data), // DMA registers
                     0x0400_0200 => self.interrupt_controller.write_ie(data), // IE - Interrupt Enable Register
                     0x0400_0202 => self.interrupt_controller.write_if(data), // IF - Interrupt Request Flags / IRQ Acknowledge
                     0x0400_0204 => {}, // WAITCNT - Game Pak Waitstate Control
                     0x0400_0208 => self.interrupt_controller.write_ime(data), // IME - Interrupt Master Enable Register
-                    0x0400_00DE => {}, // Unknown register accessed by agb_checker
                     _ => {
                         println!("I/O write halfword: 0x{:08x} = 0x{:04x}", addr, data);
                     }
@@ -284,7 +327,22 @@ impl BusAccessor for CpuBus {
                 self.vram.write_halfword(addr - 0x0600_0000, data);
             }
             0x0700_0000..=0x0700_03FF => self.oam.write_halfword(addr - 0x0700_0000, data),
-            0x0E00_0000..=0x0FFF_FFFF => {}, // SRAM - ignore writes for now
+            0x0D00_0000..=0x0DFF_FFFF => {
+                // EEPROM range - typically accessed at 0xDFFFF00-0xDFFFFFF
+                if let Some(ref mut eeprom) = self.eeprom {
+                    // Get DMA3 count for proper EEPROM operation
+                    let dma_count = self.dma_controller.get_channel(3)
+                        .map(|ch| ch.get_count())
+                        .unwrap_or(64); // Default for read operations
+                    eeprom.write_halfword(addr, data, dma_count);
+                } else {
+                    println!("[EEPROM] Write halfword access at 0x{:08X} = 0x{:04X} (no EEPROM)", addr, data);
+                }
+            }
+            0x0E00_0000..=0x0FFF_FFFF => {
+                println!("[SRAM] Write halfword access at 0x{:08X} = 0x{:04X}", addr, data);
+                // SRAM - ignore writes for now
+            }
             _ => panic!("TODO: "),
         };
     }
@@ -316,8 +374,15 @@ impl BusAccessor for CpuBus {
                 self.vram.write_word(addr - 0x0600_0000, data);
             }
             0x0700_0000..=0x0700_03FF => self.oam.write_word(addr - 0x0700_0000, data),
-            0x0E00_0000..=0x0FFF_FFFF => {}, // SRAM - ignore writes for now
-            _ => error!("TODO: addr = {:x} data = {:x}", addr, data),
+            0x0D00_0000..=0x0DFF_FFFF => {
+                println!("[EEPROM] Write word access at 0x{:08X} = 0x{:08X}", addr, data);
+                // EEPROM range - ignore writes for now (should not be used for word access)
+            }
+            0x0E00_0000..=0x0FFF_FFFF => {
+                println!("[SRAM] Write word access at 0x{:08X} = 0x{:08X}", addr, data);
+                // SRAM - ignore writes for now
+            }
+            _ => panic!("TODO: addr = {:x} data = {:x}", addr, data),
         };
     }
 
@@ -347,6 +412,9 @@ impl CpuBus {
         oam: Ram,
         key: io::Key,
     ) -> CpuBus {
+        // Auto-detect EEPROM based on ROM content or size
+        let eeprom = Self::detect_eeprom(&rom);
+        
         CpuBus {
             cycle_lut: CycleLUT::new(),
             lcdc,
@@ -359,6 +427,8 @@ impl CpuBus {
             oam,
             key,
             interrupt_controller: InterruptController::new(),
+            dma_controller: DMAController::new(),
+            eeprom,
         }
     }
 
@@ -396,5 +466,67 @@ impl CpuBus {
 
     pub(crate) fn update_lcd(&mut self, cycles: usize) -> bool {
         self.lcdc.run(cycles, &mut self.interrupt_controller)
+    }
+
+    /// Detect EEPROM based on ROM content
+    /// Based on gbatek documentation and JS implementation
+    fn detect_eeprom(rom: &Rom) -> Option<EEPROM> {
+        // Check for EEPROM identifier strings in ROM
+        let rom_data = rom.data();
+        
+        // Look for EEPROM_V strings as mentioned in gbatek
+        if let Some(_) = Self::find_string_in_rom(rom_data, b"EEPROM_V") {
+            println!("[EEPROM] Detected EEPROM identifier in ROM");
+            // Default to 512 bytes, can be auto-detected later based on DMA count
+            Some(EEPROM::new(EEPROMSize::Size512))
+        } else {
+            // For testing purposes, create EEPROM for certain ROM sizes or patterns
+            // This can be removed or made more sophisticated later
+            if rom.size() > 0x1000000 { // 16MB+ ROMs often use EEPROM
+                println!("[EEPROM] Large ROM detected, assuming EEPROM present");
+                Some(EEPROM::new(EEPROMSize::Size8K))
+            } else {
+                None
+            }
+        }
+    }
+
+    /// Find a string pattern in ROM data
+    fn find_string_in_rom(data: &[u8], pattern: &[u8]) -> Option<usize> {
+        data.windows(pattern.len())
+            .position(|window| window == pattern)
+    }
+
+    /// Get mutable reference to EEPROM (for save/load operations)
+    pub fn get_eeprom_mut(&mut self) -> Option<&mut EEPROM> {
+        self.eeprom.as_mut()
+    }
+
+    /// Get reference to EEPROM (for save/load operations)
+    pub fn get_eeprom(&self) -> Option<&EEPROM> {
+        self.eeprom.as_ref()
+    }
+
+    /// Get mutable reference to DMA controller
+    pub fn get_dma_controller_mut(&mut self) -> &mut DMAController {
+        &mut self.dma_controller
+    }
+
+    /// Get reference to DMA controller
+    pub fn get_dma_controller(&self) -> &DMAController {
+        &self.dma_controller
+    }
+
+    /// Handle EEPROM read with proper state management
+    /// This should be called from a context where mutable access is available
+    pub fn eeprom_read_with_state_update(&mut self, addr: u32) -> HalfWord {
+        if let Some(ref mut eeprom) = self.eeprom {
+            let dma3_enabled = self.dma_controller.get_channel(3)
+                .map(|ch| ch.is_enabled())
+                .unwrap_or(false);
+            eeprom.read_halfword(addr, dma3_enabled)
+        } else {
+            1 // Return 1 when no EEPROM is present
+        }
     }
 }

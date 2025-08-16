@@ -1,4 +1,6 @@
 mod bus;
+pub mod dma;
+pub mod eeprom;
 pub mod interrupt;
 pub mod timer;
 
@@ -90,6 +92,7 @@ mod test {
     use super::*;
     use pretty_assertions::*;
 
+    use crate::cpu::bus::accessor::BusAccessor;
     use crate::memory::ram::Ram;
     use crate::memory::rom::Rom;
 
