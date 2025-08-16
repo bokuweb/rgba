@@ -184,30 +184,31 @@ impl LCDController {
     }
 
     pub fn render(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
-
+        println!("Render called - DISPCNT: 0x{:04x}, Mode: {:?}, Forced blank: {}", 
+                 self.dispcnt.read(), self.dispcnt.mode(), self.dispcnt.forced_vlank());
         
         // Check if forced blank is enabled
         if self.dispcnt.forced_vlank() {
-
+            println!("Forced blank enabled - returning black screen");
             // Return blank screen (black)
             return vec![0; 240 * 160 * 4];
         }
         
         match self.dispcnt.mode() {
             BgMode::Mode0 => {
-
+                println!("Rendering with Mode 0");
                 self.render_with_mode0(vram, palette)
             },
             BgMode::Mode3 => {
-
+                println!("Rendering with Mode 3");
                 self.render_with_mode3(vram)
             },
             BgMode::Mode4 => {
-
+                println!("Rendering with Mode 4");
                 self.render_with_mode4(vram, palette)
             },
             _ => {
-
+                println!("Unsupported mode: {:?} - returning black screen", self.dispcnt.mode());
                 // For unsupported modes, return blank screen
                 vec![0; 240 * 160 * 4]
             }
@@ -218,6 +219,25 @@ impl LCDController {
         let mut buf = vec![0; 240 * 160 * 4];
         let tile_offset = self.bg0cnt.bg_tile_offset();
         let map_offset = self.bg0cnt.bg_map_offset();
+        
+        println!("Mode0 render: tile_offset=0x{:08x}, map_offset=0x{:08x}", tile_offset, map_offset);
+        
+        // Check first few tiles and palette entries
+        let first_tile_index = vram.read_halfword(map_offset) as Word;
+        let second_tile_index = vram.read_halfword(map_offset + 2) as Word;
+        let third_tile_index = vram.read_halfword(map_offset + 4) as Word;
+        
+        // Check more palette entries
+        let mut palette_summary = String::new();
+        for i in 0..8 {
+            let color = palette.read_halfword(i * 2);
+            if color != 0 {
+                palette_summary.push_str(&format!(" P{}: 0x{:04x}", i, color));
+            }
+        }
+        
+        println!("Tiles: [0x{:04x}, 0x{:04x}, 0x{:04x}], Non-zero palette entries:{}", 
+                 first_tile_index, second_tile_index, third_tile_index, palette_summary);
 
         // TODO: We need to consider about scroll?
         for tile_y in 0..DISPLAY_TILE_HEIGHT {
@@ -240,6 +260,16 @@ impl LCDController {
                 }
             }
         }
+        
+        // Debug: Check if we have any non-black pixels from actual rendering
+        let mut non_black_pixels = 0;
+        for i in (0..buf.len()).step_by(4) {
+            if buf[i] != 0 || buf[i+1] != 0 || buf[i+2] != 0 {
+                non_black_pixels += 1;
+            }
+        }
+        println!("Non-black pixels from actual rendering: {}", non_black_pixels);
+        
         buf
     }
 

@@ -54,18 +54,25 @@ impl ARM {
         self.gpr[PC] = 0x00000000;
 
         self.cpsr = PSR::default();
+        // Set IRQ and FIQ disable bits in CPSR (bits 7 and 6)
+        self.cpsr.set_I(true);  // Disable IRQ
+        self.cpsr.set_F(true);  // Disable FIQ
+        self.cpsr.set_mode(Mode::System); // Start in System mode
 
         self.mode = CpuMode::Supervisor;
-        self.irq_disable = true;
+        self.irq_disable = true;  // Keep for compatibility, but CPSR.I is authoritative
         self.fiq_disable = true;
 
-        // TODO: ResetSP
-        // this.cpu.switchMode(this.cpu.MODE_SUPERVISOR);
-        // this.cpu.gprs[this.cpu.SP] = 0x3007FE0;
-        // this.cpu.switchMode(this.cpu.MODE_IRQ);
-        // this.cpu.gprs[this.cpu.SP] = 0x3007FA0;
-        // this.cpu.switchMode(this.cpu.MODE_SYSTEM);
-        self.gpr[SP] = 0x3007F00;
+        // Initialize stack pointers for different modes
+        // Set System mode SP
+        self.gpr[SP] = 0x3007FE0;
+        
+        // Switch to IRQ mode and set SP_irq
+        self.cpsr.switch_mode(Mode::IRQ, &mut self.gpr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr);
+        self.gpr[SP] = 0x3007FA0;  // IRQ stack pointer
+        
+        // Switch back to System mode  
+        self.cpsr.switch_mode(Mode::System, &mut self.gpr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr);
     }
 
     fn flush_pipeline(&mut self) {
@@ -79,7 +86,14 @@ impl ARM {
         } else {
             self.gpr[PC] & 0xFFFF_FFFE
         };
-        self.gpr[PC] = pc.wrapping_add(next);
+        let new_pc = pc.wrapping_add(next);
+        
+        // Check for invalid PC values
+        if new_pc > 0xFFFF_FFFF || (new_pc < 0x08000000 && new_pc > 0x03FFFFFF && new_pc != 0) {
+            println!("WARNING: Invalid PC detected: old=0x{:08x}, new=0x{:08x}", self.gpr[PC], new_pc);
+        }
+        
+        self.gpr[PC] = new_pc;
     }
 
     fn get_inst_addr(&self) -> Word {
@@ -364,7 +378,9 @@ impl ARM {
         T: BusAccessor,
     {
         // IRQ interrupts are disabled if CPSR.I is set or if we're already in IRQ mode
-        if self.irq_disable || self.cpsr.get_mode() == Mode::IRQ {
+        let cpsr_irq_disabled = self.cpsr.get_I();
+        if cpsr_irq_disabled || self.cpsr.get_mode() == Mode::IRQ {
+            // println!("Interrupt blocked: CPSR.I={}, mode={:?}", cpsr_irq_disabled, self.cpsr.get_mode());
             return false;
         }
 
@@ -372,13 +388,17 @@ impl ARM {
         // We need to check IE, IF, and IME registers
         let ime = bus.read_halfword(0x04000208);
         if (ime & 1) == 0 {
+            // println!("Interrupt blocked: IME disabled (IME=0x{:04x})", ime);
             return false; // Master interrupt disable
         }
 
         let ie = bus.read_halfword(0x04000200);
         let if_reg = bus.read_halfword(0x04000202);
+        let pending = (ie & if_reg) != 0;
         
-        (ie & if_reg) != 0
+        // println!("Interrupt check: IME=0x{:04x}, IE=0x{:04x}, IF=0x{:04x}, pending={}", ime, ie, if_reg, pending);
+        
+        pending
     }
 
     fn handle_interrupt<T>(&mut self, bus: &mut T) -> Cycle
@@ -390,10 +410,13 @@ impl ARM {
         let if_reg = bus.read_halfword(0x04000202);
         let pending = ie & if_reg;
         
+        // println!("Interrupt handler called: IE=0x{:04x}, IF=0x{:04x}, pending=0x{:04x}", ie, if_reg, pending);
+        
         if pending != 0 {
             // Find the highest priority interrupt (lowest bit number) and acknowledge it
             for i in 0..14 {
                 if (pending & (1 << i)) != 0 {
+                    println!("Processing interrupt type: {}", i);
                     // Clear the interrupt flag by writing to IF register
                     bus.write_halfword(0x04000202, 1 << i);
                     break;
@@ -404,12 +427,9 @@ impl ARM {
         // Save current mode and switch to IRQ mode
         let _old_mode = self.cpsr.get_mode();
         
-        // Save return address in LR_irq (current PC - 4 for ARM mode)
-        let return_addr = if self.cpsr.get_cpu_state() == CpuState::ARM {
-            self.gpr[PC] - 4
-        } else {
-            self.gpr[PC] - 2
-        };
+        // Save return address in LR_irq 
+        // For IRQ, return address is always current PC - 4, regardless of ARM/Thumb mode
+        let return_addr = self.gpr[PC] - 4;
         
         // Use the existing switch_mode functionality from PSR
         self.cpsr.switch_mode(Mode::IRQ, &mut self.gpr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr);
@@ -421,6 +441,17 @@ impl ARM {
         self.cpsr.set_I(true);
         
         // Set PC to interrupt vector (0x18 for IRQ)
+        println!("Jumping to IRQ handler at 0x18, old PC: 0x{:08x}", return_addr);
+        
+        // Also check if user handler is set up
+        let user_handler_ptr = bus.read_word(0x03007FFC);
+        println!("User IRQ handler pointer at 0x03007FFC: 0x{:08x}", user_handler_ptr);
+        
+        // Verify the return address is valid
+        if return_addr > 0xFFFFFFFF || return_addr < 0x08000000 {
+            println!("WARNING: Invalid return address: 0x{:08x}", return_addr);
+        }
+        
         self.gpr[PC] = 0x18;
         self.cpsr.set_cpu_state(CpuState::ARM);
         

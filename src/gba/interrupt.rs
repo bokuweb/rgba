@@ -44,7 +44,7 @@ impl InterruptController {
     /// Write IE register
     pub fn write_ie(&mut self, value: HalfWord) {
         self.ie = value;
-        //println!("IE write: 0x{:04x}", value);
+        println!("IE write: 0x{:04x} (VBlank enabled: {})", value, (value & 1) != 0);
     }
 
     /// Read IF register
@@ -67,14 +67,14 @@ impl InterruptController {
     /// Write IME register
     pub fn write_ime(&mut self, value: HalfWord) {
         self.ime = value;
-        // println!("IME write: 0x{:04x}", value);
+        println!("IME write: 0x{:04x} (enabled: {})", value, (value & 1) != 0);
     }
 
     /// Request an interrupt
     pub fn request_interrupt(&mut self, interrupt_type: InterruptType) {
         let bit = 1 << (interrupt_type as u16);
         self.if_flags |= bit;
-
+        println!("Interrupt requested: {:?} (bit {}), IF now: 0x{:04x}", interrupt_type, interrupt_type as u16, self.if_flags);
     }
 
     /// Check if any interrupts should be serviced
