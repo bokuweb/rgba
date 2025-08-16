@@ -15,6 +15,9 @@ pub struct Timer {
     
     /// Timer ID (0-3)
     id: u8,
+    
+    /// Debug: Total cycles while enabled
+    total_cycles_while_enabled: u32,
 }
 
 impl Timer {
@@ -25,6 +28,7 @@ impl Timer {
             control: 0,
             cycle_counter: 0,
             id,
+            total_cycles_while_enabled: 0,
         }
     }
     
@@ -47,17 +51,23 @@ impl Timer {
     /// Write control register (TM0CNT_H)
     pub fn write_control(&mut self, value: HalfWord) {
         let old_enabled = self.is_enabled();
+        let old_irq_enabled = self.is_irq_enabled();
         self.control = value;
         let new_enabled = self.is_enabled();
+        let new_irq_enabled = self.is_irq_enabled();
         
         // If timer is being enabled, reset counter to reload value
         if !old_enabled && new_enabled {
             self.counter = self.reload;
             self.cycle_counter = 0;
-            println!("Timer {} enabled with reload: 0x{:04x}, prescaler: {}", 
-                     self.id, self.reload, self.get_prescaler_value());
+            self.total_cycles_while_enabled = 0;
+            println!("Timer {} enabled with reload: 0x{:04x}, prescaler: {}, IRQ: {}", 
+                     self.id, self.reload, self.get_prescaler_value(), new_irq_enabled);
         } else if old_enabled && !new_enabled {
-            println!("Timer {} disabled", self.id);
+            println!("Timer {} disabled (was at counter: 0x{:04x}, total cycles: {})", 
+                     self.id, self.counter, self.total_cycles_while_enabled);
+        } else if old_enabled && new_enabled && (old_irq_enabled != new_irq_enabled) {
+            println!("Timer {} IRQ setting changed: {}", self.id, new_irq_enabled);
         }
     }
     
@@ -95,6 +105,7 @@ impl Timer {
         
         let prescaler = self.get_prescaler_value();
         self.cycle_counter += cycles;
+        self.total_cycles_while_enabled += cycles;
         
         let mut overflow = false;
         while self.cycle_counter >= prescaler {
@@ -104,11 +115,14 @@ impl Timer {
                 // Timer overflow
                 self.counter = self.reload;
                 overflow = true;
-                if self.is_irq_enabled() {
-                    println!("Timer {} overflow! IRQ enabled, generating interrupt", self.id);
-                }
+                println!("Timer {} overflow! Counter reset to 0x{:04x}, IRQ enabled: {}", 
+                         self.id, self.reload, self.is_irq_enabled());
             } else {
                 self.counter += 1;
+                // Debug: Show counter progress for Timer 0
+                if self.id == 0 && (self.counter % 10 == 0 || self.counter > 0xFFF0) {
+                    println!("Timer 0 counter: 0x{:04x} (target: 0xFFFF)", self.counter);
+                }
             }
         }
         

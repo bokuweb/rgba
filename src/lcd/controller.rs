@@ -252,6 +252,14 @@ impl LCDController {
                         let base = (base + (y * 240 + x) * 4) as usize;
                         let palette_index = vram.read_byte(tile_offset + tile_index * 64 + y * 8 + x);
                         let color = BGR::new(palette.read_halfword(palette_index as Word * 2));
+                        
+                        // Debug: Show first few pixels of first tile
+                        if tile_x == 0 && tile_y == 0 && x < 2 && y < 2 {
+                            println!("Tile[0,0] pixel[{},{}]: palette_idx={}, color=0x{:04x} -> RGB({},{},{})", 
+                                     x, y, palette_index, palette.read_halfword(palette_index as Word * 2), 
+                                     color.red(), color.green(), color.blue());
+                        }
+                        
                         buf[base] = color.red();
                         buf[base + 1] = color.green();
                         buf[base + 2] = color.blue();

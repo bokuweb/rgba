@@ -2,6 +2,7 @@ use crate::cpu::bus;
 use crate::gba::dma::DMAController;
 use crate::gba::eeprom::{EEPROM, EEPROMSize};
 use crate::gba::interrupt::InterruptController;
+use crate::gba::timer::TimerController;
 use crate::io;
 use crate::lcd;
 use crate::types::*;
@@ -145,6 +146,7 @@ pub struct CpuBus {
     key: io::Key,
     interrupt_controller: InterruptController,
     dma_controller: DMAController,
+    timer_controller: TimerController,
     eeprom: Option<EEPROM>,
 }
 
@@ -186,11 +188,14 @@ impl BusAccessor for CpuBus {
             0x0300_0000..=0x0300_7FFF => self.wram.read_halfword(addr - 0x0300_0000),
             0x0300_8000..=0x03FF_FFFF => 0,
             0x0400_0000..=0x0400_005F => self.lcdc.read_halfword(addr - 0x0400_0000),
-            0x0400_0130 => self.key.read(),
+            0x0400_0130 => {
+                let key_value = self.key.read();
+                println!("KEYINPUT read: 0x{:04x}", key_value);
+                key_value
+            },
             0x0400_0060..=0x0400_03FF => {
                 match addr {
-                    0x0400_0100 => 0, // TM0CNT_L - Timer 0 Counter/Reload
-                    0x0400_0102 => 0, // TM0CNT_H - Timer 0 Control
+                    0x0400_0100..=0x0400_010F => self.timer_controller.read(addr), // Timer registers
                     0x0400_00B0..=0x0400_00DF => self.dma_controller.read_register(addr), // DMA registers
                     0x0400_0200 => self.interrupt_controller.read_ie(), // IE - Interrupt Enable Register
                     0x0400_0202 => self.interrupt_controller.read_if(), // IF - Interrupt Request Flags / IRQ Acknowledge
@@ -294,6 +299,11 @@ impl BusAccessor for CpuBus {
     }
 
     fn write_halfword(&mut self, addr: u32, data: HalfWord) {
+        // Monitor test result output (AGS patch writes to 0x0004)
+        if addr == 0x0000_0004 {
+            println!("🎯 TEST RESULT OUTPUT at 0x{:08x}: 0x{:04x}", addr, data);
+        }
+        
         // debug!("write half word addr = 0x{:x} data = 0x{:x}", addr, data);
         if addr == 0x0300_0008 {
             // dbg!(data);
@@ -310,8 +320,7 @@ impl BusAccessor for CpuBus {
             0x0400_0000..=0x0400_005F => self.lcdc.write_halfword(addr - 0x0400_0000, data),
             0x0400_0060..=0x0400_03FF => {
                 match addr {
-                    0x0400_0100 => {}, // TM0CNT_L - Timer 0 Counter/Reload
-                    0x0400_0102 => {}, // TM0CNT_H - Timer 0 Control
+                    0x0400_0100..=0x0400_010F => self.timer_controller.write(addr, data), // Timer registers
                     0x0400_00B0..=0x0400_00DF => self.dma_controller.write_register(addr, data), // DMA registers
                     0x0400_0200 => self.interrupt_controller.write_ie(data), // IE - Interrupt Enable Register
                     0x0400_0202 => self.interrupt_controller.write_if(data), // IF - Interrupt Request Flags / IRQ Acknowledge
@@ -324,6 +333,10 @@ impl BusAccessor for CpuBus {
             }
             0x0500_0000..=0x0500_03FF => self.palette.write_halfword(addr - 0x0500_0000, data),
             0x0600_0000..=0x0601_7FFF => {
+                // Monitor VRAM writes for tile data/map changes
+                if data != 0 {
+                    println!("VRAM write at 0x{:08x}: 0x{:04x}", addr, data);
+                }
                 self.vram.write_halfword(addr - 0x0600_0000, data);
             }
             0x0700_0000..=0x0700_03FF => self.oam.write_halfword(addr - 0x0700_0000, data),
@@ -348,6 +361,11 @@ impl BusAccessor for CpuBus {
     }
 
     fn write_word(&mut self, addr: u32, data: Word) {
+        // Monitor test result output (AGS patch writes to 0x0004)
+        if addr == 0x0000_0004 {
+            println!("🎯 TEST RESULT OUTPUT at 0x{:08x}: 0x{:08x}", addr, data);
+        }
+        
         // dbg!(format!("write word addr 0x{:x} data = 0x{:x}", addr, data));
         if addr == 0x0300_0008 {
             // dbg!(data);
@@ -428,6 +446,7 @@ impl CpuBus {
             key,
             interrupt_controller: InterruptController::new(),
             dma_controller: DMAController::new(),
+            timer_controller: TimerController::new(),
             eeprom,
         }
     }
@@ -465,6 +484,13 @@ impl CpuBus {
     }
 
     pub(crate) fn update_lcd(&mut self, cycles: usize) -> bool {
+        // Update timers and handle timer interrupts
+        let timer_interrupts = self.timer_controller.update(cycles as u32);
+        for interrupt_type in timer_interrupts {
+            self.interrupt_controller.request_interrupt(interrupt_type);
+        }
+        
+        // Update LCD and handle VBlank/HBlank interrupts
         self.lcdc.run(cycles, &mut self.interrupt_controller)
     }
 
