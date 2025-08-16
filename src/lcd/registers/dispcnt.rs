@@ -52,8 +52,6 @@ impl DISPCNT {
     }
 
     pub fn write(&mut self, data: HalfWord) {
-        println!("DISPCNT write: 0x{:04x}, mode: {:?}, forced_blank: {}", 
-                 data, self.mode(), (data & 0x80) != 0);
         self.0 = data
     }
 

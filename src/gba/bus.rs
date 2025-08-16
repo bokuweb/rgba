@@ -164,11 +164,11 @@ impl BusAccessor for CpuBus {
             0x0A00_0000..=0x0BFF_FFFF => self.rom.read_byte((addr - 0x0A00_0000) % self.rom.size() as u32), // GamePak WS1 - mirror ROM
             0x0C00_0000..=0x0CFF_FFFF => self.rom.read_byte((addr - 0x0C00_0000) % self.rom.size() as u32), // GamePak WS2 - mirror ROM
             0x0D00_0000..=0x0DFF_FFFF => {
-                println!("[EEPROM] Read byte access at 0x{:08X}", addr);
+
                 self.rom.read_byte((addr - 0x0D00_0000) % self.rom.size() as u32) // EEPROM range - currently mirror ROM
             }
             0x0E00_0000..=0x0FFF_FFFF => {
-                println!("[SRAM] Read byte access at 0x{:08X}", addr);
+
                 0 // SRAM - return 0 for now
             }
             _ => {
@@ -197,7 +197,7 @@ impl BusAccessor for CpuBus {
                     0x0400_0204 => 0, // WAITCNT - Game Pak Waitstate Control
                     0x0400_0208 => self.interrupt_controller.read_ime(), // IME - Interrupt Master Enable Register
                     _ => {
-                        println!("I/O read halfword: 0x{:08x}", addr);
+
                         0
                     }
                 }
@@ -217,12 +217,12 @@ impl BusAccessor for CpuBus {
                         .unwrap_or(false);
                     eeprom.peek_read_halfword(addr, dma3_enabled)
                 } else {
-                    println!("[EEPROM] Read halfword access at 0x{:08X} (no EEPROM)", addr);
+
                     1 // Return 1 when no EEPROM is present
                 }
             }
             0x0E00_0000..=0x0FFF_FFFF => {
-                println!("[SRAM] Read halfword access at 0x{:08X}", addr);
+
                 0 // SRAM - return 0 for now
             }
             _ => panic!("TODO: {:x}", addr),
@@ -244,16 +244,16 @@ impl BusAccessor for CpuBus {
             0x0A00_0000..=0x0BFF_FFFF => self.rom.read_word((addr - 0x0A00_0000) % self.rom.size() as u32), // GamePak WS1 - mirror ROM
             0x0C00_0000..=0x0CFF_FFFF => self.rom.read_word((addr - 0x0C00_0000) % self.rom.size() as u32), // GamePak WS2 - mirror ROM
             0x0D00_0000..=0x0DFF_FFFF => {
-                println!("[EEPROM] Read word access at 0x{:08X}", addr);
+
                 self.rom.read_word((addr - 0x0D00_0000) % self.rom.size() as u32) // EEPROM range - currently mirror ROM
             }
             0x0E00_0000..=0x0FFF_FFFF => {
-                println!("[SRAM] Read word access at 0x{:08X}", addr);
+
                 0 // SRAM - return 0 for now
             }
             _ => {
                 if addr == 0xc8002489 {
-                    dbg!("aa");
+
                 }
                 panic!("TODO: addr = 0x{:x}", addr)
             }

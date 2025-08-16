@@ -74,7 +74,7 @@ impl InterruptController {
     pub fn request_interrupt(&mut self, interrupt_type: InterruptType) {
         let bit = 1 << (interrupt_type as u16);
         self.if_flags |= bit;
-        println!("Interrupt requested: {:?} (bit {})", interrupt_type, interrupt_type as u16);
+
     }
 
     /// Check if any interrupts should be serviced
@@ -84,10 +84,7 @@ impl InterruptController {
         let interrupts_pending = (self.ie & self.if_flags) != 0;
         let should_service = ime_enabled && interrupts_pending;
         
-        if self.if_flags != 0 {  // Only log when there are actual interrupt flags
-            println!("should_service_interrupt: IME=0x{:04x} (enabled: {}), IE=0x{:04x}, IF=0x{:04x}, pending=0x{:04x}, result: {}",
-                self.ime, ime_enabled, self.ie, self.if_flags, self.ie & self.if_flags, should_service);
-        }
+
         
         should_service
     }

@@ -10,13 +10,10 @@ use crate::types::*;
 
 /// Format 16
 pub fn exec_thumb_b(dec: Branch, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
-    let mut offset = dec.get_offset8() as i8;
+    let offset = dec.get_offset8() as i8;
 
     let cond: Cond = dec.get_cond().into();
     if cpsr.condition_ok(cond) {
-        if (gpr[PC] as i64 + (offset as i64).wrapping_shl(1)) == 134221503 {
-            // dbg!("0", &gpr);
-        }
         gpr[PC] = (gpr[PC] as i64 + (offset as i64).wrapping_shl(1)) as u32;
         return (0, PipelineStatus::Flush);
     }

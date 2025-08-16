@@ -385,10 +385,24 @@ impl ARM {
     where
         T: BusAccessor,
     {
-        println!("Handling interrupt");
+        // Read interrupt enable and interrupt flag registers
+        let ie = bus.read_halfword(0x04000200);
+        let if_reg = bus.read_halfword(0x04000202);
+        let pending = ie & if_reg;
+        
+        if pending != 0 {
+            // Find the highest priority interrupt (lowest bit number) and acknowledge it
+            for i in 0..14 {
+                if (pending & (1 << i)) != 0 {
+                    // Clear the interrupt flag by writing to IF register
+                    bus.write_halfword(0x04000202, 1 << i);
+                    break;
+                }
+            }
+        }
         
         // Save current mode and switch to IRQ mode
-        let old_mode = self.cpsr.get_mode();
+        let _old_mode = self.cpsr.get_mode();
         
         // Save return address in LR_irq (current PC - 4 for ARM mode)
         let return_addr = if self.cpsr.get_cpu_state() == CpuState::ARM {

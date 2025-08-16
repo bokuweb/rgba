@@ -69,7 +69,6 @@ impl LCDController {
                 // VBlank started - request VBlank interrupt if enabled
                 if self.dispstat.vblank_irq_enable() {
                     interrupt_controller.request_interrupt(InterruptType::VBlank);
-                    println!("VBlank interrupt requested at line {}", self.lines);
                 }
             }
 
@@ -100,7 +99,7 @@ impl LCDController {
             0x000C => self.bg2cnt.read(),
             0x000E => self.bg3cnt.read(),
             _ => {
-                println!("[LCD] Unimplemented register read halfword: addr=0x{:04X}", addr);
+                // Silently return 0 for unimplemented registers
                 0
             }
         }
@@ -116,7 +115,7 @@ impl LCDController {
             0x000C => self.bg2cnt.read() as Word,
             0x000E => self.bg3cnt.read() as Word,
             _ => {
-                println!("[LCD] Unimplemented register read word: addr=0x{:04X}", addr);
+                // Silently return 0 for unimplemented registers  
                 0
             }
         }
@@ -130,54 +129,85 @@ impl LCDController {
             0x000A => self.bg1cnt.write(data),
             0x000C => self.bg2cnt.write(data),
             0x000E => self.bg3cnt.write(data),
+            // BG scroll offsets - implement as dummy registers
+            0x0010 => {}, // BG0HOFS - BG0 horizontal offset
+            0x0012 => {}, // BG0VOFS - BG0 vertical offset  
+            0x0014 => {}, // BG1HOFS - BG1 horizontal offset
+            0x0016 => {}, // BG1VOFS - BG1 vertical offset
+            0x0018 => {}, // BG2HOFS - BG2 horizontal offset
+            0x001A => {}, // BG2VOFS - BG2 vertical offset
+            0x001C => {}, // BG3HOFS - BG3 horizontal offset
+            0x001E => {}, // BG3VOFS - BG3 vertical offset
+            // BG rotation/scaling parameters - implement as dummy registers
+            0x0020 => {}, // BG2PA - BG2 rotation/scaling parameter A
+            0x0022 => {}, // BG2PB - BG2 rotation/scaling parameter B
+            0x0024 => {}, // BG2PC - BG2 rotation/scaling parameter C
+            0x0026 => {}, // BG2PD - BG2 rotation/scaling parameter D
+            0x0030 => {}, // BG3PA - BG3 rotation/scaling parameter A
+            0x0032 => {}, // BG3PB - BG3 rotation/scaling parameter B
+            0x0034 => {}, // BG3PC - BG3 rotation/scaling parameter C
+            0x0036 => {}, // BG3PD - BG3 rotation/scaling parameter D
+            // Window control registers - implement as dummy registers
+            0x0040 => {}, // WIN0H - Window 0 horizontal dimensions
+            0x0042 => {}, // WIN1H - Window 1 horizontal dimensions
+            0x0044 => {}, // WIN0V - Window 0 vertical dimensions
+            0x0046 => {}, // WIN1V - Window 1 vertical dimensions
+            0x0048 => {}, // WININ - Control of inside of window(s)
+            0x004A => {}, // WINOUT - Control of outside of windows & inside of OBJ window
+            0x004C => {}, // MOSAIC - Mosaic size
+            0x0050 => {}, // BLDCNT - Color special effects selection
+            0x0052 => {}, // BLDALPHA - Alpha blending coefficients
+            0x0054 => {}, // BLDY - Brightness (fade-in/out) coefficient
             _ => {
-                println!("[LCD] Unimplemented register write halfword: addr=0x{:04X}, data=0x{:04X}", addr, data);
+                // Silently ignore other unimplemented registers to prevent spam
             }
         }
     }
 
     pub fn write_word(&mut self, addr: Word, data: Word) {
-        let data = data as HalfWord;
         match addr {
-            0x0000 => self.dispcnt.write(data),
-            0x0004 => self.dispstat.write(data),
-            0x0008 => self.bg0cnt.write(data),
-            0x000A => self.bg1cnt.write(data),
-            0x000C => self.bg2cnt.write(data),
-            0x000E => self.bg3cnt.write(data),
+            0x0000 => self.dispcnt.write(data as HalfWord),
+            0x0004 => self.dispstat.write(data as HalfWord),
+            0x0008 => self.bg0cnt.write(data as HalfWord),
+            0x000A => self.bg1cnt.write(data as HalfWord),
+            0x000C => self.bg2cnt.write(data as HalfWord),
+            0x000E => self.bg3cnt.write(data as HalfWord),
+            // BG reference point coordinates - implement as dummy registers
+            0x0028 => {}, // BG2X - BG2 reference point X coordinate
+            0x002C => {}, // BG2Y - BG2 reference point Y coordinate  
+            0x0038 => {}, // BG3X - BG3 reference point X coordinate
+            0x003C => {}, // BG3Y - BG3 reference point Y coordinate
             _ => {
-                println!("[LCD] Unimplemented register write word: addr=0x{:04X}, data=0x{:08X}", addr, data);
+                // Silently ignore other unimplemented registers to prevent spam
             }
         }
     }
 
     pub fn render(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
-        // Debug output for rendering state
-        println!("Render called - DISPCNT: 0x{:04x}, Mode: {:?}, Forced blank: {}", 
-                 self.dispcnt.read(), self.dispcnt.mode(), self.dispcnt.forced_vlank());
+
         
         // Check if forced blank is enabled
         if self.dispcnt.forced_vlank() {
-            println!("Forced blank enabled - returning black screen");
+
             // Return blank screen (black)
             return vec![0; 240 * 160 * 4];
         }
         
         match self.dispcnt.mode() {
             BgMode::Mode0 => {
-                println!("Rendering with Mode 0");
+
                 self.render_with_mode0(vram, palette)
             },
             BgMode::Mode3 => {
-                println!("Rendering with Mode 3");
+
                 self.render_with_mode3(vram)
             },
             BgMode::Mode4 => {
-                println!("Rendering with Mode 4");
+
                 self.render_with_mode4(vram, palette)
             },
             _ => {
-                println!("Unsupported mode: {:?} - returning black screen", self.dispcnt.mode());
+
                 // For unsupported modes, return blank screen
                 vec![0; 240 * 160 * 4]
             }
