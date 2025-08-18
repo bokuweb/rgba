@@ -102,7 +102,9 @@ impl LCDController {
             0x000A => self.bg1cnt.write(data),
             0x000C => self.bg2cnt.write(data),
             0x000E => self.bg3cnt.write(data),
-            _ => todo!(),
+            _ => {
+                todo!("Unhandled LCD register write: addr=0x{:04x}, data=0x{:04x}", addr, data);
+            }
         }
     }
 
