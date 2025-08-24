@@ -157,6 +157,7 @@ impl LCDController {
             0x0000 => self.dispcnt.read() as Word,
             0x0004 => self.dispstat.read(self.cycles, self.lines) as Word,
             0x0006 => self.lines as Word,
+            
             0x0008 => self.bg0cnt.read() as Word,
             0x000A => self.bg1cnt.read() as Word,
             0x000C => self.bg2cnt.read() as Word,
@@ -523,25 +524,40 @@ impl LCDController {
         let tile_offset = self.bg0cnt.bg_tile_offset();
         let map_offset = self.bg0cnt.bg_map_offset();
 
-        // TODO: We need to consider about scroll?
-        for tile_y in 0..DISPLAY_TILE_HEIGHT {
-            for tile_x in 0..DISPLAY_TILE_WIDTH {
-                let addr = tile_y as Word * (VIRTUAL_DISPLAY_TILE_HEIGHT * 2) + (tile_x * 2) + map_offset;
-                let tile_index = vram.read_halfword(addr) as Word;
+        // Apply scroll offsets (9-bit values, can be 0-511)
+        let scroll_x = self.bg0hofs as Word;
+        let scroll_y = self.bg0vofs as Word;
 
-                let base = (tile_y * 240 * 8 + tile_x * 8) * 4;
+        // Render pixel by pixel with scroll support
+        for screen_y in 0..160 {
+            for screen_x in 0..240 {
+                // Calculate the actual position in the background map considering scroll
+                let bg_x = (screen_x + scroll_x) & 0x1FF; // Wrap at 512 pixels (64 tiles * 8 pixels)
+                let bg_y = (screen_y + scroll_y) & 0x1FF; // Wrap at 512 pixels (64 tiles * 8 pixels)
 
-                for y in 0..8 {
-                    for x in 0..8 {
-                        let base = (base + (y * 240 + x) * 4) as usize;
-                        let palette_index = vram.read_byte(tile_offset + tile_index * 64 + y * 8 + x);
-                        let color = BGR::new(palette.read_halfword(palette_index as Word * 2));
-                        buf[base] = color.red();
-                        buf[base + 1] = color.green();
-                        buf[base + 2] = color.blue();
-                        buf[base + 3] = 0xFF;
-                    }
-                }
+                // Convert pixel coordinates to tile coordinates
+                let tile_x = bg_x / 8;
+                let tile_y = bg_y / 8;
+                let pixel_x = bg_x % 8;
+                let pixel_y = bg_y % 8;
+
+                // Calculate tile map address (32x32 tile map)
+                let tile_map_addr = (tile_y * VIRTUAL_DISPLAY_TILE_WIDTH + tile_x) * 2 + map_offset;
+                let tile_index = vram.read_halfword(tile_map_addr) as Word;
+
+                // Calculate pixel address within the tile
+                let pixel_addr = tile_offset + tile_index * 64 + pixel_y * 8 + pixel_x;
+                let palette_index = vram.read_byte(pixel_addr);
+
+                // Get color from palette
+                let color = BGR::new(palette.read_halfword(palette_index as Word * 2));
+
+                // Set pixel in output buffer
+                let buf_index = ((screen_y * 240 + screen_x) * 4) as usize;
+                buf[buf_index] = color.red();
+                buf[buf_index + 1] = color.green();
+                buf[buf_index + 2] = color.blue();
+                buf[buf_index + 3] = 0xFF;
             }
         }
         buf
