@@ -127,12 +127,18 @@ impl ARM {
         self.spsr = self.cpsr;
         
         // Save current PC (return address) to LR
-        let return_addr = self.gpr[PC] - 4; // Adjust for pipeline
+        // For IRQ, return address should be current PC (instruction being interrupted)
+        let return_addr = if self.cpsr.get_cpu_state() == crate::cpu::registers::psr::CpuState::Thumb {
+            self.gpr[PC] - 2 // Thumb mode: adjust for 2-byte instruction pipeline
+        } else {
+            self.gpr[PC] - 4 // ARM mode: adjust for 4-byte instruction pipeline
+        };
         self.gpr[LR] = return_addr;
         
         // Switch to IRQ mode and disable IRQ in CPSR
         self.cpsr.set_mode(crate::cpu::registers::psr::Mode::IRQ);
         self.cpsr.set_I(true); // Disable IRQ
+        self.cpsr.set_T(false); // Switch to ARM mode (IRQ handlers are always ARM)
         
         // Jump to IRQ vector (0x18)
         self.gpr[PC] = 0x18;
