@@ -66,6 +66,8 @@ pub struct LCDController {
     // Window registers
     win0h: HalfWord,   // WIN0H - Window 0 Horizontal Dimensions (0x4000040)
     win1h: HalfWord,   // WIN1H - Window 1 Horizontal Dimensions (0x4000042)
+    win0v: HalfWord,   // WIN0V - Window 0 Vertical Dimensions (0x4000044)
+    win1v: HalfWord,   // WIN1V - Window 1 Vertical Dimensions (0x4000046)
 }
 
 impl LCDController {
@@ -109,6 +111,8 @@ impl LCDController {
             // Initialize window registers
             win0h: 0,      // WIN0H - Window 0 Horizontal Dimensions
             win1h: 0,      // WIN1H - Window 1 Horizontal Dimensions
+            win0v: 0,      // WIN0V - Window 0 Vertical Dimensions
+            win1v: 0,      // WIN1V - Window 1 Vertical Dimensions
         }
     }
 
@@ -148,6 +152,8 @@ impl LCDController {
             0x0036 => self.bg3pd, // BG3PD - BG3 Rotation/Scaling Parameter D (dmy)
             0x0040 => self.win0h, // WIN0H - Window 0 Horizontal Dimensions
             0x0042 => self.win1h, // WIN1H - Window 1 Horizontal Dimensions
+            0x0044 => self.win0v, // WIN0V - Window 0 Vertical Dimensions
+            0x0046 => self.win1v, // WIN1V - Window 1 Vertical Dimensions
             _ => todo!(),
         }
     }
@@ -176,6 +182,8 @@ impl LCDController {
             0x003C => self.bg3y,         // BG3Y - BG3 Reference Point Y-Coordinate
             0x0040 => self.win0h as Word, // WIN0H - Window 0 Horizontal Dimensions
             0x0042 => self.win1h as Word, // WIN1H - Window 1 Horizontal Dimensions
+            0x0044 => self.win0v as Word, // WIN0V - Window 0 Vertical Dimensions
+            0x0046 => self.win1v as Word, // WIN1V - Window 1 Vertical Dimensions
             _ => todo!(),
         }
     }
@@ -341,6 +349,20 @@ impl LCDController {
                 let x2 = data & 0xFF;         // Bit 0-7: X2, Rightmost coordinate + 1
                 // println!("WIN1H write: 0x{:04x} (X1:{}, X2:{})", data, x1, x2);
             }
+            0x0044 => {
+                // WIN0V - Window 0 Vertical Dimensions (Write Only)
+                self.win0v = data;
+                let y1 = (data >> 8) & 0xFF;  // Bit 8-15: Y1, Top-most coordinate
+                let y2 = data & 0xFF;         // Bit 0-7: Y2, Bottom-most coordinate + 1
+                // println!("WIN0V write: 0x{:04x} (Y1:{}, Y2:{})", data, y1, y2);
+            }
+            0x0046 => {
+                // WIN1V - Window 1 Vertical Dimensions (Write Only)
+                self.win1v = data;
+                let y1 = (data >> 8) & 0xFF;  // Bit 8-15: Y1, Top-most coordinate
+                let y2 = data & 0xFF;         // Bit 0-7: Y2, Bottom-most coordinate + 1
+                // println!("WIN1V write: 0x{:04x} (Y1:{}, Y2:{})", data, y1, y2);
+            }
             0x004C => {
                 // MOSAIC - Mosaic Size (Write Only)
                 self.mosaic = data;
@@ -494,6 +516,18 @@ impl LCDController {
                 let x1 = (data >> 8) & 0xFF;  // Bit 8-15: X1, Leftmost coordinate
                 let x2 = data & 0xFF;         // Bit 0-7: X2, Rightmost coordinate + 1
             }
+            0x0044 => {
+                // WIN0V - Window 0 Vertical Dimensions (Write Only)
+                self.win0v = data;
+                let y1 = (data >> 8) & 0xFF;  // Bit 8-15: Y1, Top-most coordinate
+                let y2 = data & 0xFF;         // Bit 0-7: Y2, Bottom-most coordinate + 1
+            }
+            0x0046 => {
+                // WIN1V - Window 1 Vertical Dimensions (Write Only)
+                self.win1v = data;
+                let y1 = (data >> 8) & 0xFF;  // Bit 8-15: Y1, Top-most coordinate
+                let y2 = data & 0xFF;         // Bit 0-7: Y2, Bottom-most coordinate + 1
+            }
             0x004C => {
                 // MOSAIC - Mosaic Size (Write Only)
                 self.mosaic = data;
@@ -508,6 +542,34 @@ impl LCDController {
                 todo!("Unhandled LCD register word write: addr=0x{:04x}, data=0x{:08x}", addr, data);
             }
         }
+    }
+
+    // Helper function to check if a pixel is inside a window
+    fn is_pixel_in_window(&self, x: Word, y: Word, win_h: HalfWord, win_v: HalfWord) -> bool {
+        if win_h == 0 && win_v == 0 {
+            return false; // Window disabled if both dimensions are 0
+        }
+
+        // Extract window coordinates
+        let x1 = (win_h >> 8) & 0xFF;  // Left coordinate
+        let x2 = win_h & 0xFF;         // Right coordinate + 1
+        let y1 = (win_v >> 8) & 0xFF;  // Top coordinate
+        let y2 = win_v & 0xFF;         // Bottom coordinate + 1
+
+        // Handle coordinate wrapping
+        let x_in_range = if x2 > x1 {
+            x >= x1 as Word && x < x2 as Word
+        } else {
+            x >= x1 as Word || x < x2 as Word  // Wrapped around
+        };
+
+        let y_in_range = if y2 > y1 {
+            y >= y1 as Word && y < y2 as Word
+        } else {
+            y >= y1 as Word || y < y2 as Word  // Wrapped around
+        };
+
+        x_in_range && y_in_range
     }
 
     pub fn render(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
@@ -528,36 +590,64 @@ impl LCDController {
         let scroll_x = self.bg0hofs as Word;
         let scroll_y = self.bg0vofs as Word;
 
-        // Render pixel by pixel with scroll support
+        // Render pixel by pixel with scroll support and window clipping
         for screen_y in 0..160 {
             for screen_x in 0..240 {
-                // Calculate the actual position in the background map considering scroll
-                let bg_x = (screen_x + scroll_x) & 0x1FF; // Wrap at 512 pixels (64 tiles * 8 pixels)
-                let bg_y = (screen_y + scroll_y) & 0x1FF; // Wrap at 512 pixels (64 tiles * 8 pixels)
-
-                // Convert pixel coordinates to tile coordinates
-                let tile_x = bg_x / 8;
-                let tile_y = bg_y / 8;
-                let pixel_x = bg_x % 8;
-                let pixel_y = bg_y % 8;
-
-                // Calculate tile map address (32x32 tile map)
-                let tile_map_addr = (tile_y * VIRTUAL_DISPLAY_TILE_WIDTH + tile_x) * 2 + map_offset;
-                let tile_index = vram.read_halfword(tile_map_addr) as Word;
-
-                // Calculate pixel address within the tile
-                let pixel_addr = tile_offset + tile_index * 64 + pixel_y * 8 + pixel_x;
-                let palette_index = vram.read_byte(pixel_addr);
-
-                // Get color from palette
-                let color = BGR::new(palette.read_halfword(palette_index as Word * 2));
-
-                // Set pixel in output buffer
+                // Check window clipping
+                let in_win0 = self.is_pixel_in_window(screen_x, screen_y, self.win0h, self.win0v);
+                let in_win1 = self.is_pixel_in_window(screen_x, screen_y, self.win1h, self.win1v);
+                
+                // For now, if pixel is outside all windows, render normally
+                // In a full implementation, this would depend on WININ/WINOUT registers
+                // For simplicity, we'll render the background if not in any window
+                let should_render_bg = !in_win0 && !in_win1;
+                
                 let buf_index = ((screen_y * 240 + screen_x) * 4) as usize;
-                buf[buf_index] = color.red();
-                buf[buf_index + 1] = color.green();
-                buf[buf_index + 2] = color.blue();
-                buf[buf_index + 3] = 0xFF;
+                
+                if should_render_bg {
+                    // Calculate the actual position in the background map considering scroll
+                    let bg_x = (screen_x + scroll_x) & 0x1FF; // Wrap at 512 pixels (64 tiles * 8 pixels)
+                    let bg_y = (screen_y + scroll_y) & 0x1FF; // Wrap at 512 pixels (64 tiles * 8 pixels)
+
+                    // Convert pixel coordinates to tile coordinates
+                    let tile_x = bg_x / 8;
+                    let tile_y = bg_y / 8;
+                    let pixel_x = bg_x % 8;
+                    let pixel_y = bg_y % 8;
+
+                    // Calculate tile map address (32x32 tile map)
+                    let tile_map_addr = (tile_y * VIRTUAL_DISPLAY_TILE_WIDTH + tile_x) * 2 + map_offset;
+                    let tile_index = vram.read_halfword(tile_map_addr) as Word;
+
+                    // Calculate pixel address within the tile
+                    let pixel_addr = tile_offset + tile_index * 64 + pixel_y * 8 + pixel_x;
+                    let palette_index = vram.read_byte(pixel_addr);
+
+                    // Get color from palette
+                    let color = BGR::new(palette.read_halfword(palette_index as Word * 2));
+
+                    // Set pixel in output buffer
+                    buf[buf_index] = color.red();
+                    buf[buf_index + 1] = color.green();
+                    buf[buf_index + 2] = color.blue();
+                    buf[buf_index + 3] = 0xFF;
+                } else {
+                    // Inside a window - render with different color (for demonstration)
+                    // In a real implementation, this would depend on window control registers
+                    if in_win0 {
+                        // Window 0 - render with red tint
+                        buf[buf_index] = 0xFF;
+                        buf[buf_index + 1] = 0x00;
+                        buf[buf_index + 2] = 0x00;
+                        buf[buf_index + 3] = 0xFF;
+                    } else if in_win1 {
+                        // Window 1 - render with blue tint
+                        buf[buf_index] = 0x00;
+                        buf[buf_index + 1] = 0x00;
+                        buf[buf_index + 2] = 0xFF;
+                        buf[buf_index + 3] = 0xFF;
+                    }
+                }
             }
         }
         buf
