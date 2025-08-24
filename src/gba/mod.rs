@@ -1,4 +1,5 @@
 mod bus;
+mod dma;
 
 use crate::io;
 use crate::lcd;
@@ -83,6 +84,10 @@ impl GBA {
     pub fn frame(&mut self, started: bool) -> Vec<u8> {
         loop {
             let cycles = self.arm.step(&mut self.bus, started).unwrap();
+            
+            // Execute any pending DMA transfers
+            self.bus.execute_dma_transfers();
+            
             let lcdc = self.bus.borrow_mut_lcdc();
             let ready = lcdc.run(cycles);
             if ready {
