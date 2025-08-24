@@ -148,6 +148,7 @@ pub struct CpuBus {
     vram: Ram,
     palette: Ram,
     oam: Ram,
+    sram: Ram, // SRAM/FRAM/Flash save memory (0x0E000000-0x0E00FFFF, 64KB max)
     key: io::Key,
 }
 
@@ -161,10 +162,16 @@ impl BusAccessor for CpuBus {
             0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
             0x0400_0060..=0x0400_03FF => 0,
             0x0500_0000..=0x0500_03FF => self.palette.read_byte(addr - 0x0500_0000),
+            0x0600_0000..=0x0601_7FFF => self.vram.read_byte(addr - 0x0600_0000),
+            0x0700_0000..=0x0700_03FF => self.oam.read_byte(addr - 0x0700_0000),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_byte(addr - 0x0800_0000),
+            0x0E00_0000..=0x0E00_FFFF => {
+                // SRAM/FRAM/Flash save memory (byte access only)
+                self.sram.read_byte(addr - 0x0E00_0000)
+            }
             _ => {
-                let a = format!("read byte addr = {:x}", addr);
-                panic!("TODO: {:?}", a);
+                println!("⚠️  WARNING: Invalid read_byte access to 0x{:08x} (not in GBA memory map) - returning 0xFF", addr);
+                0xFF // Return invalid/unconnected bus value
             }
         }
     }
@@ -182,7 +189,14 @@ impl BusAccessor for CpuBus {
             0x0500_0000..=0x0500_03FF => self.palette.read_halfword(addr - 0x0500_0000),
             0x0600_0000..=0x0601_7FFF => self.vram.read_halfword(addr - 0x0600_0000),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_halfword(addr - 0x0800_0000),
-            _ => panic!("TODO: {:x}", addr),
+            0x0E00_0000..=0x0E00_FFFF => {
+                println!("⚠️  WARNING: Invalid halfword access to SRAM at 0x{:08x} (SRAM is byte-access only) - returning 0xFFFF", addr);
+                0xFFFF
+            }
+            _ => {
+                println!("⚠️  WARNING: Invalid read_halfword access to 0x{:08x} (not in GBA memory map) - returning 0xFFFF", addr);
+                0xFFFF
+            }
         }
     }
 
@@ -196,11 +210,13 @@ impl BusAccessor for CpuBus {
             0x0400_0060..=0x0400_03FF => 0,
             0x0500_0000..=0x0500_03FF => self.palette.read_word(addr - 0x0500_0000),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_word(addr - 0x0800_0000),
+            0x0E00_0000..=0x0E00_FFFF => {
+                println!("⚠️  WARNING: Invalid word access to SRAM at 0x{:08x} (SRAM is byte-access only) - returning 0xFFFFFFFF", addr);
+                0xFFFFFFFF
+            }
             _ => {
-                if addr == 0xc8002489 {
-                    dbg!("aa");
-                }
-                panic!(format!("TODO: addr = 0x{:x}", addr))
+                println!("⚠️  WARNING: Invalid read_word access to 0x{:08x} (not in GBA memory map) - returning 0xFFFFFFFF", addr);
+                0xFFFFFFFF
             }
         }
     }
@@ -224,7 +240,15 @@ impl BusAccessor for CpuBus {
             0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
             0x0400_0060..=0x0400_03FF => {}
             0x0500_0000..=0x0500_03FF => self.palette.write_byte(addr - 0x0500_0000, data),
-            _ => panic!(format!("TODO: 0x{:x} 0x{:x}", addr, data)),
+            0x0600_0000..=0x0601_7FFF => self.vram.write_byte(addr - 0x0600_0000, data),
+            0x0700_0000..=0x0700_03FF => self.oam.write_byte(addr - 0x0700_0000, data),
+            0x0E00_0000..=0x0E00_FFFF => {
+                // SRAM/FRAM/Flash save memory (byte access only)
+                self.sram.write_byte(addr - 0x0E00_0000, data);
+            }
+            _ => {
+                println!("⚠️  WARNING: Invalid write_byte to 0x{:08x} = 0x{:02x} (ignored)", addr, data);
+            }
         };
     }
 
@@ -248,8 +272,12 @@ impl BusAccessor for CpuBus {
             0x0600_0000..=0x0601_7FFF => {
                 self.vram.write_halfword(addr - 0x0600_0000, data);
             }
-
-            _ => panic!("TODO: "),
+            0x0E00_0000..=0x0E00_FFFF => {
+                println!("⚠️  WARNING: Invalid halfword write to SRAM at 0x{:08x} = 0x{:04x} (SRAM is byte-access only, ignored)", addr, data);
+            }
+            _ => {
+                println!("⚠️  WARNING: Invalid write_halfword to 0x{:08x} = 0x{:04x} (ignored)", addr, data);
+            }
         };
     }
 
@@ -270,8 +298,7 @@ impl BusAccessor for CpuBus {
             }
             // Unused
             0x0300_8000..=0x03FF_FFFF => {
-                // // dbg!(format!("{:x}", addr));
-                panic!("unused")
+                println!("⚠️  WARNING: Write to unused area 0x{:08x} = 0x{:08x} (ignored)", addr, data);
             }
             0x0400_0000..=0x0400_005F => self.lcdc.write_word(addr - 0x0400_0000, data),
             0x0400_0060..=0x0400_03FF => {}
@@ -279,7 +306,12 @@ impl BusAccessor for CpuBus {
             0x0600_0000..=0x0601_7FFF => {
                 self.vram.write_word(addr - 0x0600_0000, data);
             }
-            _ => error!("TODO: addr = {:x} data = {:x}", addr, data),
+            0x0E00_0000..=0x0E00_FFFF => {
+                println!("⚠️  WARNING: Invalid word write to SRAM at 0x{:08x} = 0x{:08x} (SRAM is byte-access only, ignored)", addr, data);
+            }
+            _ => {
+                println!("⚠️  WARNING: Invalid write_word to 0x{:08x} = 0x{:08x} (ignored)", addr, data);
+            }
         };
     }
 
@@ -307,6 +339,7 @@ impl CpuBus {
         vram: Ram,
         palette: Ram,
         oam: Ram,
+        sram: Ram, // SRAM/FRAM/Flash save memory
         key: io::Key,
     ) -> CpuBus {
         CpuBus {
@@ -319,6 +352,7 @@ impl CpuBus {
             vram,
             palette,
             oam,
+            sram,
             key,
         }
     }
