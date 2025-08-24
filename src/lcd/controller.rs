@@ -70,6 +70,8 @@ pub struct LCDController {
     win1v: HalfWord,   // WIN1V - Window 1 Vertical Dimensions (0x4000046)
     winin: HalfWord,   // WININ - Control of Inside of Window(s) (0x4000048)
     winout: HalfWord,  // WINOUT - Control of Outside of Windows & Inside of OBJ Window (0x400004A)
+    // Color special effects register
+    bldcnt: HalfWord,  // BLDCNT - Color Special Effects Selection (0x4000050)
 }
 
 impl LCDController {
@@ -117,6 +119,7 @@ impl LCDController {
             win1v: 0,      // WIN1V - Window 1 Vertical Dimensions
             winin: 0,      // WININ - Control of Inside of Window(s)
             winout: 0,     // WINOUT - Control of Outside of Windows & Inside of OBJ Window
+            bldcnt: 0,     // BLDCNT - Color Special Effects Selection
         }
     }
 
@@ -160,6 +163,7 @@ impl LCDController {
             0x0046 => self.win1v, // WIN1V - Window 1 Vertical Dimensions
             0x0048 => self.winin,  // WININ - Control of Inside of Window(s)
             0x004A => self.winout, // WINOUT - Control of Outside of Windows & Inside of OBJ Window
+            0x0050 => self.bldcnt, // BLDCNT - Color Special Effects Selection
             _ => todo!(),
         }
     }
@@ -192,6 +196,7 @@ impl LCDController {
             0x0046 => self.win1v as Word, // WIN1V - Window 1 Vertical Dimensions
             0x0048 => self.winin as Word,  // WININ - Control of Inside of Window(s)
             0x004A => self.winout as Word, // WINOUT - Control of Outside of Windows & Inside of OBJ Window
+            0x0050 => self.bldcnt as Word, // BLDCNT - Color Special Effects Selection
             _ => todo!(),
         }
     }
@@ -405,6 +410,24 @@ impl LCDController {
                 println!("MOSAIC register write: 0x{:04x} (BG H:{} V:{}, OBJ H:{} V:{})", 
                     data, bg_h_size + 1, bg_v_size + 1, obj_h_size + 1, obj_v_size + 1);
             }
+            0x0050 => {
+                // BLDCNT - Color Special Effects Selection (Read/Write)
+                self.bldcnt = data;
+                let first_target = data & 0x003F;        // Bit 0-5: 1st Target (BG0-3, OBJ, BD)
+                let effect_type = (data >> 6) & 0x0003;  // Bit 6-7: Effect Type
+                let second_target = (data >> 8) & 0x003F; // Bit 8-13: 2nd Target (BG0-3, OBJ, BD)
+                
+                let effect_name = match effect_type {
+                    0 => "None",
+                    1 => "Alpha Blending",
+                    2 => "Brightness Increase",
+                    3 => "Brightness Decrease",
+                    _ => "Unknown"
+                };
+                
+                // println!("BLDCNT write: 0x{:04x} (1st:{:06b}, Effect:{}, 2nd:{:06b})", 
+                //     data, first_target, effect_name, second_target);
+            }
             _ => {
                 todo!("Unhandled LCD register write: addr=0x{:04x}, data=0x{:04x}", addr, data);
             }
@@ -578,6 +601,10 @@ impl LCDController {
                 println!("MOSAIC word write: 0x{:04x} (BG H:{} V:{}, OBJ H:{} V:{})", 
                     data, bg_h_size + 1, bg_v_size + 1, obj_h_size + 1, obj_v_size + 1);
             }
+            0x0050 => {
+                // BLDCNT - Color Special Effects Selection (Read/Write)
+                self.bldcnt = data;
+            }
             _ => {
                 todo!("Unhandled LCD register word write: addr=0x{:04x}, data=0x{:08x}", addr, data);
             }
@@ -646,6 +673,59 @@ impl LCDController {
         (bg0_enable, bg1_enable, bg2_enable, bg3_enable, obj_enable, effect_enable)
     }
 
+    // Helper function to apply color special effects
+    fn apply_color_effect(&self, color: BGR, layer_id: u8, effect_enable: bool) -> BGR {
+        if !effect_enable {
+            return color;
+        }
+
+        let first_target = self.bldcnt & 0x003F;        // Bit 0-5: 1st Target
+        let effect_type = (self.bldcnt >> 6) & 0x0003;  // Bit 6-7: Effect Type
+        let second_target = (self.bldcnt >> 8) & 0x003F; // Bit 8-13: 2nd Target
+
+        // Check if current layer is a first target
+        let is_first_target = (first_target & (1 << layer_id)) != 0;
+        
+        if !is_first_target {
+            return color; // No effect if not a first target
+        }
+
+        match effect_type {
+            0 => color, // None - no effect
+            1 => {
+                // Alpha Blending - for now, just return the original color
+                // In a full implementation, this would blend with the 2nd target layer
+                color
+            }
+            2 => {
+                // Brightness Increase (make whiter)
+                let r = ((color.red() as u16 * 3) / 4).min(255) as u8;
+                let g = ((color.green() as u16 * 3) / 4).min(255) as u8;
+                let b = ((color.blue() as u16 * 3) / 4).min(255) as u8;
+                
+                // Increase brightness by adding white
+                let r = (r as u16 + 64).min(255) as u8;
+                let g = (g as u16 + 64).min(255) as u8;
+                let b = (b as u16 + 64).min(255) as u8;
+                
+                // Convert back to BGR format
+                let bgr_value = ((b as u16) << 10) | ((g as u16) << 5) | (r as u16);
+                BGR::new(bgr_value as HalfWord)
+            }
+            3 => {
+                // Brightness Decrease (make blacker)
+                let r = ((color.red() as u16 * 3) / 4) as u8;
+                let g = ((color.green() as u16 * 3) / 4) as u8;
+                let b = ((color.blue() as u16 * 3) / 4) as u8;
+                
+                // Convert back to BGR format
+                let bgr_value = ((b as u16) << 10) | ((g as u16) << 5) | (r as u16);
+                BGR::new(bgr_value as HalfWord)
+            }
+            _ => color, // Unknown effect
+        }
+    }
+
     pub fn render(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
         match self.dispcnt.mode() {
             BgMode::Mode0 => self.render_with_mode0(vram, palette),
@@ -696,7 +776,10 @@ impl LCDController {
                     // Skip transparent pixels (palette index 0)
                     if palette_index != 0 {
                         // Get color from palette
-                        let color = BGR::new(palette.read_halfword(palette_index as Word * 2));
+                        let mut color = BGR::new(palette.read_halfword(palette_index as Word * 2));
+                        
+                        // Apply color special effects (BG0 = layer_id 0)
+                        color = self.apply_color_effect(color, 0, _effect_enable);
 
                         // Set pixel in output buffer
                         buf[buf_index] = color.red();
@@ -705,7 +788,11 @@ impl LCDController {
                         buf[buf_index + 3] = 0xFF;
                     } else {
                         // Transparent pixel - render backdrop color (palette index 0)
-                        let backdrop_color = BGR::new(palette.read_halfword(0));
+                        let mut backdrop_color = BGR::new(palette.read_halfword(0));
+                        
+                        // Apply color special effects to backdrop (BD = layer_id 5)
+                        backdrop_color = self.apply_color_effect(backdrop_color, 5, _effect_enable);
+                        
                         buf[buf_index] = backdrop_color.red();
                         buf[buf_index + 1] = backdrop_color.green();
                         buf[buf_index + 2] = backdrop_color.blue();
