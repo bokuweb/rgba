@@ -127,19 +127,29 @@ impl LCDController {
         }
     }
 
-    pub fn run(&mut self, cycles: usize) -> bool {
+    pub fn run(&mut self, cycles: usize) -> (bool, bool) {
         self.cycles += cycles;
+        let mut vblank_irq_requested = false;
 
         loop {
             if self.cycles < CYCLES_PER_LINE {
-                return false;
+                return (false, vblank_irq_requested);
             }
             self.cycles -= CYCLES_PER_LINE;
+            let prev_lines = self.lines;
             self.lines += 1;
+
+            // Check for VBlank transition (entering VBlank period)
+            if prev_lines == 159 && self.lines == 160 {
+                if self.dispstat.vblank_irq_enable() {
+                    vblank_irq_requested = true;
+                    println!("🔥 VBlank IRQ requested! (lines: {} -> {})", prev_lines, self.lines);
+                }
+            }
 
             if self.lines >= LINES_PER_FRAME {
                 self.lines -= LINES_PER_FRAME;
-                return true;
+                return (true, vblank_irq_requested);
             }
         }
     }
@@ -211,7 +221,18 @@ impl LCDController {
 
     pub fn write_halfword(&mut self, addr: Word, data: HalfWord) {
         match addr {
-            0x0000 => self.dispcnt.write(data),
+            0x0000 => {
+                self.dispcnt.write(data);
+                println!("🔧 DISPCNT write: 0x{:04x} (Mode: {}, BG0: {}, BG1: {}, BG2: {}, BG3: {}, OBJ: {})", 
+                    data, 
+                    self.dispcnt.mode() as u8,
+                    (data & 0x0100) != 0,
+                    (data & 0x0200) != 0,
+                    (data & 0x0400) != 0,
+                    (data & 0x0800) != 0,
+                    (data & 0x1000) != 0
+                );
+            }
             0x0004 => {
                 // DISPSTAT - General LCD Status (Read/Write)
                 self.dispstat.write(data);
@@ -222,10 +243,50 @@ impl LCDController {
                     (data & 0x0020) != 0
                 );
             }
-            0x0008 => self.bg0cnt.write(data),
-            0x000A => self.bg1cnt.write(data),
-            0x000C => self.bg2cnt.write(data),
-            0x000E => self.bg3cnt.write(data),
+            0x0008 => {
+                self.bg0cnt.write(data);
+                println!("🔧 BG0CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})", 
+                    data, 
+                    self.bg0cnt.bg_priority(),
+                    self.bg0cnt.character_base_block(),
+                    self.bg0cnt.screen_base_block(),
+                    if self.bg0cnt.colors_palettes() { "256/1" } else { "16/16" },
+                    self.bg0cnt.screen_size()
+                );
+            }
+            0x000A => {
+                self.bg1cnt.write(data);
+                println!("🔧 BG1CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})", 
+                    data, 
+                    self.bg1cnt.bg_priority(),
+                    self.bg1cnt.character_base_block(),
+                    self.bg1cnt.screen_base_block(),
+                    if self.bg1cnt.colors_palettes() { "256/1" } else { "16/16" },
+                    self.bg1cnt.screen_size()
+                );
+            }
+            0x000C => {
+                self.bg2cnt.write(data);
+                println!("🔧 BG2CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})", 
+                    data, 
+                    self.bg2cnt.bg_priority(),
+                    self.bg2cnt.character_base_block(),
+                    self.bg2cnt.screen_base_block(),
+                    if self.bg2cnt.colors_palettes() { "256/1" } else { "16/16" },
+                    self.bg2cnt.screen_size()
+                );
+            }
+            0x000E => {
+                self.bg3cnt.write(data);
+                println!("🔧 BG3CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})", 
+                    data, 
+                    self.bg3cnt.bg_priority(),
+                    self.bg3cnt.character_base_block(),
+                    self.bg3cnt.screen_base_block(),
+                    if self.bg3cnt.colors_palettes() { "256/1" } else { "16/16" },
+                    self.bg3cnt.screen_size()
+                );
+            }
             0x0010 => {
                 // BG0HOFS - BG0 X-Offset (Write Only)
                 self.bg0hofs = data & 0x01FF; // 9-bit mask

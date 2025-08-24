@@ -284,7 +284,7 @@ impl BusAccessor for CpuBus {
             0x0500_0000..=0x0500_03FF => self.palette.write_halfword(addr - 0x0500_0000, data),
             0x0600_0000..=0x0601_7FFF => {
                 let vram_addr = addr - 0x0600_0000;
-                if vram_addr < 0x100 { // Log first 256 bytes of VRAM writes
+                if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
                     println!("📝 VRAM halfword write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:04x}", addr, vram_addr, data);
                 }
                 self.vram.write_halfword(vram_addr, data);
@@ -361,7 +361,7 @@ impl BusAccessor for CpuBus {
             0x0500_0000..=0x0500_03FF => self.palette.write_word(addr - 0x0500_0000, data),
             0x0600_0000..=0x0601_7FFF => {
                 let vram_addr = addr - 0x0600_0000;
-                if vram_addr < 0x100 { // Log first 256 bytes of VRAM writes
+                if vram_addr < 0x10000 { // Log first 64KB of VRAM writes  
                     println!("📝 VRAM word write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:08x}", addr, vram_addr, data);
                 }
                 self.vram.write_word(vram_addr, data);
@@ -506,7 +506,7 @@ impl CpuBus {
         match addr {
             0x0600_0000..=0x0601_7FFF => {
                 let vram_addr = addr - 0x0600_0000;
-                if vram_addr < 0x100 { // Log first 256 bytes of VRAM writes
+                if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
                     println!("📝 DMA VRAM word write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:08x}", addr, vram_addr, data);
                 }
                 self.vram.write_word(vram_addr, data);
@@ -527,7 +527,7 @@ impl CpuBus {
         match addr {
             0x0600_0000..=0x0601_7FFF => {
                 let vram_addr = addr - 0x0600_0000;
-                if vram_addr < 0x100 { // Log first 256 bytes of VRAM writes
+                if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
                     println!("📝 DMA VRAM halfword write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:04x}", addr, vram_addr, data);
                 }
                 self.vram.write_halfword(vram_addr, data);
