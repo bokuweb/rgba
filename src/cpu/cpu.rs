@@ -32,6 +32,7 @@ pub struct ARM {
     irq_disable: bool,
     fiq_disable: bool,
     optimise_swi: bool,
+    irq_pending: bool,
 }
 
 impl ARM {
@@ -47,6 +48,7 @@ impl ARM {
             irq_disable: false,
             fiq_disable: false,
             optimise_swi: false,
+            irq_pending: false,
         }
     }
 
@@ -110,6 +112,48 @@ impl ARM {
         self.gpr[n] = data;
     }
 
+    pub fn request_irq(&mut self) {
+        self.irq_pending = true;
+        println!("🔥 IRQ requested and pending flag set");
+    }
+
+    fn handle_irq<T>(&mut self, bus: &mut T) -> Cycle
+    where
+        T: BusAccessor,
+    {
+        println!("🔥 Handling IRQ - switching to IRQ mode");
+        
+        // Save current CPSR to SPSR_irq
+        self.spsr = self.cpsr;
+        
+        // Save current PC (return address) to LR
+        // For IRQ, return address should be current PC (instruction being interrupted)
+        let return_addr = if self.cpsr.get_cpu_state() == crate::cpu::registers::psr::CpuState::Thumb {
+            self.gpr[PC] - 2 // Thumb mode: adjust for 2-byte instruction pipeline
+        } else {
+            self.gpr[PC] - 4 // ARM mode: adjust for 4-byte instruction pipeline
+        };
+        self.gpr[LR] = return_addr;
+        
+        // Switch to IRQ mode and disable IRQ in CPSR
+        self.cpsr.set_mode(crate::cpu::registers::psr::Mode::IRQ);
+        self.cpsr.set_I(true); // Disable IRQ
+        self.cpsr.set_T(false); // Switch to ARM mode (IRQ handlers are always ARM)
+        
+        // Jump to IRQ vector (0x18)
+        self.gpr[PC] = 0x18;
+        self.flush_pipeline();
+        
+        // Clear pending IRQ
+        self.irq_pending = false;
+        
+        println!("🔥 IRQ handler setup complete: PC=0x{:x}, LR=0x{:x}, CPSR.I={}", 
+            self.gpr[PC], self.gpr[LR], self.cpsr.get_I());
+        
+        // Return cycle count for IRQ handling
+        2 // Approximate cycle cost for IRQ handling
+    }
+
     // wait_pipeline_filled consumes 1N + 2S cycle to fill pipeline and fetch next instruction.
     fn wait_pipeline_filled<T>(&mut self, bus: &mut T) -> Cycle
     where
@@ -137,6 +181,13 @@ impl ARM {
     where
         T: BusAccessor,
     {
+        // Check for pending IRQ before executing instruction
+        if self.irq_pending && !self.cpsr.get_I() {
+            println!("🔥 Processing pending IRQ");
+            let irq_cycle = self.handle_irq(bus);
+            return Ok(irq_cycle);
+        }
+        
         let cycle = if self.pipeline_wait > 0 { self.wait_pipeline_filled(bus) } else { 0 };
         // let log = format!("{:?}", self.gpr);
         // dbg!(&self.gpr);

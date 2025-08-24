@@ -66,6 +66,10 @@ pub struct LCDController {
     // Window registers
     win0h: HalfWord,   // WIN0H - Window 0 Horizontal Dimensions (0x4000040)
     win1h: HalfWord,   // WIN1H - Window 1 Horizontal Dimensions (0x4000042)
+    win0v: HalfWord,   // WIN0V - Window 0 Vertical Dimensions (0x4000044)
+    win1v: HalfWord,   // WIN1V - Window 1 Vertical Dimensions (0x4000046)
+    winin: HalfWord,   // WININ - Inside of Window 0 and 1 (0x4000048)
+    winout: HalfWord,  // WINOUT - Outside of Windows & Inside of Window OBJ (0x400004A)
 }
 
 impl LCDController {
@@ -109,22 +113,40 @@ impl LCDController {
             // Initialize window registers
             win0h: 0,      // WIN0H - Window 0 Horizontal Dimensions
             win1h: 0,      // WIN1H - Window 1 Horizontal Dimensions
+            win0v: 0,      // WIN0V - Window 0 Vertical Dimensions
+            win1v: 0,      // WIN1V - Window 1 Vertical Dimensions
+            winin: 0,      // WININ - Inside of Window 0 and 1
+            winout: 0,     // WINOUT - Outside of Windows & Inside of Window OBJ
         }
     }
 
-    pub fn run(&mut self, cycles: usize) -> bool {
+    pub fn run(&mut self, cycles: usize) -> (bool, bool) {
         self.cycles += cycles;
+        let mut vblank_entered = false;
 
         loop {
             if self.cycles < CYCLES_PER_LINE {
-                return false;
+                return (false, vblank_entered);
             }
             self.cycles -= CYCLES_PER_LINE;
+            let prev_lines = self.lines;
             self.lines += 1;
 
+            // Debug: Print line progression
+            if self.lines % 50 == 0 || self.lines >= 158 {
+                println!("🔧 LCD line: {} -> {}", prev_lines, self.lines);
+            }
+
+            // Check for VBlank entry (line 160)
+            if prev_lines == 159 && self.lines == 160 {
+                vblank_entered = true;
+                println!("🔥 VBlank entered at line 160!");
+            }
+
             if self.lines >= LINES_PER_FRAME {
+                println!("🔧 Frame completed: lines {} -> 0", self.lines);
                 self.lines -= LINES_PER_FRAME;
-                return true;
+                return (true, vblank_entered);
             }
         }
     }
@@ -148,6 +170,10 @@ impl LCDController {
             0x0036 => self.bg3pd, // BG3PD - BG3 Rotation/Scaling Parameter D (dmy)
             0x0040 => self.win0h, // WIN0H - Window 0 Horizontal Dimensions
             0x0042 => self.win1h, // WIN1H - Window 1 Horizontal Dimensions
+            0x0044 => self.win0v, // WIN0V - Window 0 Vertical Dimensions
+            0x0046 => self.win1v, // WIN1V - Window 1 Vertical Dimensions
+            0x0048 => self.winin, // WININ - Inside of Window 0 and 1
+            0x004A => self.winout, // WINOUT - Outside of Windows & Inside of Window OBJ
             _ => todo!(),
         }
     }
@@ -176,6 +202,10 @@ impl LCDController {
             0x003C => self.bg3y,         // BG3Y - BG3 Reference Point Y-Coordinate
             0x0040 => self.win0h as Word, // WIN0H - Window 0 Horizontal Dimensions
             0x0042 => self.win1h as Word, // WIN1H - Window 1 Horizontal Dimensions
+            0x0044 => self.win0v as Word, // WIN0V - Window 0 Vertical Dimensions
+            0x0046 => self.win1v as Word, // WIN1V - Window 1 Vertical Dimensions
+            0x0048 => self.winin as Word, // WININ - Inside of Window 0 and 1
+            0x004A => self.winout as Word, // WINOUT - Outside of Windows & Inside of Window OBJ
             _ => todo!(),
         }
     }
@@ -341,6 +371,34 @@ impl LCDController {
                 let x2 = data & 0xFF;         // Bit 0-7: X2, Rightmost coordinate + 1
                 // println!("WIN1H write: 0x{:04x} (X1:{}, X2:{})", data, x1, x2);
             }
+            0x0044 => {
+                // WIN0V - Window 0 Vertical Dimensions (Write Only)
+                self.win0v = data;
+                let y1 = (data >> 8) & 0xFF;  // Bit 8-15: Y1, Top coordinate
+                let y2 = data & 0xFF;         // Bit 0-7: Y2, Bottom coordinate + 1
+                // println!("WIN0V write: 0x{:04x} (Y1:{}, Y2:{})", data, y1, y2);
+            }
+            0x0046 => {
+                // WIN1V - Window 1 Vertical Dimensions (Write Only)
+                self.win1v = data;
+                let y1 = (data >> 8) & 0xFF;  // Bit 8-15: Y1, Top coordinate
+                let y2 = data & 0xFF;         // Bit 0-7: Y2, Bottom coordinate + 1
+                // println!("WIN1V write: 0x{:04x} (Y1:{}, Y2:{})", data, y1, y2);
+            }
+            0x0048 => {
+                // WININ - Inside of Window 0 and 1 (Write Only)
+                self.winin = data;
+                // Bit 0-5: Win0 BG0-3, OBJ, Color Special Effect
+                // Bit 8-13: Win1 BG0-3, OBJ, Color Special Effect
+                // println!("WININ write: 0x{:04x}", data);
+            }
+            0x004A => {
+                // WINOUT - Outside of Windows & Inside of Window OBJ (Write Only)
+                self.winout = data;
+                // Bit 0-5: Outside Window BG0-3, OBJ, Color Special Effect
+                // Bit 8-13: Inside OBJ Window BG0-3, OBJ, Color Special Effect
+                // println!("WINOUT write: 0x{:04x}", data);
+            }
             0x004C => {
                 // MOSAIC - Mosaic Size (Write Only)
                 self.mosaic = data;
@@ -493,6 +551,26 @@ impl LCDController {
                 self.win1h = data;
                 let x1 = (data >> 8) & 0xFF;  // Bit 8-15: X1, Leftmost coordinate
                 let x2 = data & 0xFF;         // Bit 0-7: X2, Rightmost coordinate + 1
+            }
+            0x0044 => {
+                // WIN0V - Window 0 Vertical Dimensions (Write Only)
+                self.win0v = data;
+                let y1 = (data >> 8) & 0xFF;  // Bit 8-15: Y1, Top coordinate
+                let y2 = data & 0xFF;         // Bit 0-7: Y2, Bottom coordinate + 1
+            }
+            0x0046 => {
+                // WIN1V - Window 1 Vertical Dimensions (Write Only)
+                self.win1v = data;
+                let y1 = (data >> 8) & 0xFF;  // Bit 8-15: Y1, Top coordinate
+                let y2 = data & 0xFF;         // Bit 0-7: Y2, Bottom coordinate + 1
+            }
+            0x0048 => {
+                // WININ - Inside of Window 0 and 1 (Write Only)
+                self.winin = data;
+            }
+            0x004A => {
+                // WINOUT - Outside of Windows & Inside of Window OBJ (Write Only)
+                self.winout = data;
             }
             0x004C => {
                 // MOSAIC - Mosaic Size (Write Only)

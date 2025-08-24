@@ -150,6 +150,7 @@ pub struct CpuBus {
     oam: Ram,
     sram: Ram, // SRAM/FRAM/Flash save memory (0x0E000000-0x0E00FFFF, 64KB max)
     key: io::Key,
+    interrupt_controller: std::cell::RefCell<crate::interrupt::InterruptController>,
 }
 
 impl BusAccessor for CpuBus {
@@ -185,6 +186,9 @@ impl BusAccessor for CpuBus {
             0x0300_8000..=0x03FF_FFFF => 0,
             0x0400_0000..=0x0400_005F => self.lcdc.read_halfword(addr - 0x0400_0000),
             0x0400_0130 => self.key.read(),
+            0x0400_0200 => self.interrupt_controller.borrow().read_ie(), // IE register
+            0x0400_0202 => self.interrupt_controller.borrow().read_if(), // IF register
+            0x0400_0208 => self.interrupt_controller.borrow().read_ime(), // IME register
             0x0400_0060..=0x0400_03FF => 0,
             0x0500_0000..=0x0500_03FF => self.palette.read_halfword(addr - 0x0500_0000),
             0x0600_0000..=0x0601_7FFF => self.vram.read_halfword(addr - 0x0600_0000),
@@ -267,6 +271,9 @@ impl BusAccessor for CpuBus {
                 self.wram.write_halfword(addr - 0x0300_0000, data);
             }
             0x0400_0000..=0x0400_005F => self.lcdc.write_halfword(addr - 0x0400_0000, data),
+            0x0400_0200 => self.interrupt_controller.borrow_mut().write_ie(data), // IE register
+            0x0400_0202 => self.interrupt_controller.borrow_mut().write_if(data), // IF register  
+            0x0400_0208 => self.interrupt_controller.borrow_mut().write_ime(data), // IME register
             0x0400_0060..=0x0400_03FF => {}
             0x0500_0000..=0x0500_03FF => self.palette.write_halfword(addr - 0x0500_0000, data),
             0x0600_0000..=0x0601_7FFF => {
@@ -354,11 +361,20 @@ impl CpuBus {
             oam,
             sram,
             key,
+            interrupt_controller: std::cell::RefCell::new(crate::interrupt::InterruptController::new()),
         }
     }
 
     pub(crate) fn update_key(&mut self, key: io::Key) {
         self.key = key;
+    }
+    
+    pub(crate) fn request_vblank_interrupt(&mut self) {
+        self.interrupt_controller.borrow_mut().request_interrupt(crate::interrupt::InterruptType::VBlank);
+    }
+    
+    pub(crate) fn should_service_interrupt(&self) -> bool {
+        self.interrupt_controller.borrow().should_service_interrupt()
     }
 
     pub(crate) fn borrow_mut_lcdc(&mut self) -> &mut lcd::LCDController {
