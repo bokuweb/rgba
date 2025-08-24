@@ -68,6 +68,8 @@ pub struct LCDController {
     win1h: HalfWord,   // WIN1H - Window 1 Horizontal Dimensions (0x4000042)
     win0v: HalfWord,   // WIN0V - Window 0 Vertical Dimensions (0x4000044)
     win1v: HalfWord,   // WIN1V - Window 1 Vertical Dimensions (0x4000046)
+    winin: HalfWord,   // WININ - Control of Inside of Window(s) (0x4000048)
+    winout: HalfWord,  // WINOUT - Control of Outside of Windows & Inside of OBJ Window (0x400004A)
 }
 
 impl LCDController {
@@ -113,6 +115,8 @@ impl LCDController {
             win1h: 0,      // WIN1H - Window 1 Horizontal Dimensions
             win0v: 0,      // WIN0V - Window 0 Vertical Dimensions
             win1v: 0,      // WIN1V - Window 1 Vertical Dimensions
+            winin: 0,      // WININ - Control of Inside of Window(s)
+            winout: 0,     // WINOUT - Control of Outside of Windows & Inside of OBJ Window
         }
     }
 
@@ -154,6 +158,8 @@ impl LCDController {
             0x0042 => self.win1h, // WIN1H - Window 1 Horizontal Dimensions
             0x0044 => self.win0v, // WIN0V - Window 0 Vertical Dimensions
             0x0046 => self.win1v, // WIN1V - Window 1 Vertical Dimensions
+            0x0048 => self.winin,  // WININ - Control of Inside of Window(s)
+            0x004A => self.winout, // WINOUT - Control of Outside of Windows & Inside of OBJ Window
             _ => todo!(),
         }
     }
@@ -184,6 +190,8 @@ impl LCDController {
             0x0042 => self.win1h as Word, // WIN1H - Window 1 Horizontal Dimensions
             0x0044 => self.win0v as Word, // WIN0V - Window 0 Vertical Dimensions
             0x0046 => self.win1v as Word, // WIN1V - Window 1 Vertical Dimensions
+            0x0048 => self.winin as Word,  // WININ - Control of Inside of Window(s)
+            0x004A => self.winout as Word, // WINOUT - Control of Outside of Windows & Inside of OBJ Window
             _ => todo!(),
         }
     }
@@ -363,6 +371,30 @@ impl LCDController {
                 let y2 = data & 0xFF;         // Bit 0-7: Y2, Bottom-most coordinate + 1
                 // println!("WIN1V write: 0x{:04x} (Y1:{}, Y2:{})", data, y1, y2);
             }
+            0x0048 => {
+                // WININ - Control of Inside of Window(s) (Read/Write)
+                self.winin = data;
+                let win0_bg0_3 = data & 0x000F;        // Bit 0-3: Window 0 BG0-BG3 Enable
+                let win0_obj = (data & 0x0010) != 0;   // Bit 4: Window 0 OBJ Enable
+                let win0_effect = (data & 0x0020) != 0; // Bit 5: Window 0 Color Special Effect
+                let win1_bg0_3 = (data & 0x0F00) >> 8; // Bit 8-11: Window 1 BG0-BG3 Enable
+                let win1_obj = (data & 0x1000) != 0;   // Bit 12: Window 1 OBJ Enable
+                let win1_effect = (data & 0x2000) != 0; // Bit 13: Window 1 Color Special Effect
+                // println!("WININ write: 0x{:04x} (Win0: BG:{:04b} OBJ:{} FX:{}, Win1: BG:{:04b} OBJ:{} FX:{})", 
+                //     data, win0_bg0_3, win0_obj, win0_effect, win1_bg0_3, win1_obj, win1_effect);
+            }
+            0x004A => {
+                // WINOUT - Control of Outside of Windows & Inside of OBJ Window (Read/Write)
+                self.winout = data;
+                let out_bg0_3 = data & 0x000F;         // Bit 0-3: Outside BG0-BG3 Enable
+                let out_obj = (data & 0x0010) != 0;    // Bit 4: Outside OBJ Enable
+                let out_effect = (data & 0x0020) != 0; // Bit 5: Outside Color Special Effect
+                let objwin_bg0_3 = (data & 0x0F00) >> 8; // Bit 8-11: OBJ Window BG0-BG3 Enable
+                let objwin_obj = (data & 0x1000) != 0;   // Bit 12: OBJ Window OBJ Enable
+                let objwin_effect = (data & 0x2000) != 0; // Bit 13: OBJ Window Color Special Effect
+                // println!("WINOUT write: 0x{:04x} (Out: BG:{:04b} OBJ:{} FX:{}, ObjWin: BG:{:04b} OBJ:{} FX:{})", 
+                //     data, out_bg0_3, out_obj, out_effect, objwin_bg0_3, objwin_obj, objwin_effect);
+            }
             0x004C => {
                 // MOSAIC - Mosaic Size (Write Only)
                 self.mosaic = data;
@@ -528,6 +560,14 @@ impl LCDController {
                 let y1 = (data >> 8) & 0xFF;  // Bit 8-15: Y1, Top-most coordinate
                 let y2 = data & 0xFF;         // Bit 0-7: Y2, Bottom-most coordinate + 1
             }
+            0x0048 => {
+                // WININ - Control of Inside of Window(s) (Read/Write)
+                self.winin = data;
+            }
+            0x004A => {
+                // WINOUT - Control of Outside of Windows & Inside of OBJ Window (Read/Write)
+                self.winout = data;
+            }
             0x004C => {
                 // MOSAIC - Mosaic Size (Write Only)
                 self.mosaic = data;
@@ -572,6 +612,40 @@ impl LCDController {
         x_in_range && y_in_range
     }
 
+    // Helper function to determine which layers should be rendered for a pixel
+    fn get_window_control(&self, x: Word, y: Word) -> (bool, bool, bool, bool, bool, bool) {
+        // Check which window the pixel is in (Window 0 has highest priority)
+        let in_win0 = self.is_pixel_in_window(x, y, self.win0h, self.win0v);
+        let in_win1 = self.is_pixel_in_window(x, y, self.win1h, self.win1v);
+        
+        // For now, we don't implement OBJ Window, so in_objwin is always false
+        let in_objwin = false;
+        
+        let control_bits = if in_win0 {
+            // Inside Window 0 - use WININ bits 0-5
+            self.winin & 0x003F
+        } else if in_win1 {
+            // Inside Window 1 - use WININ bits 8-13
+            (self.winin >> 8) & 0x003F
+        } else if in_objwin {
+            // Inside OBJ Window - use WINOUT bits 8-13
+            (self.winout >> 8) & 0x003F
+        } else {
+            // Outside all windows - use WINOUT bits 0-5
+            self.winout & 0x003F
+        };
+        
+        // Extract individual layer enable bits
+        let bg0_enable = (control_bits & 0x0001) != 0;
+        let bg1_enable = (control_bits & 0x0002) != 0;
+        let bg2_enable = (control_bits & 0x0004) != 0;
+        let bg3_enable = (control_bits & 0x0008) != 0;
+        let obj_enable = (control_bits & 0x0010) != 0;
+        let effect_enable = (control_bits & 0x0020) != 0;
+        
+        (bg0_enable, bg1_enable, bg2_enable, bg3_enable, obj_enable, effect_enable)
+    }
+
     pub fn render(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
         match self.dispcnt.mode() {
             BgMode::Mode0 => self.render_with_mode0(vram, palette),
@@ -590,21 +664,17 @@ impl LCDController {
         let scroll_x = self.bg0hofs as Word;
         let scroll_y = self.bg0vofs as Word;
 
-        // Render pixel by pixel with scroll support and window clipping
+        // Render pixel by pixel with scroll support and proper window control
         for screen_y in 0..160 {
             for screen_x in 0..240 {
-                // Check window clipping
-                let in_win0 = self.is_pixel_in_window(screen_x, screen_y, self.win0h, self.win0v);
-                let in_win1 = self.is_pixel_in_window(screen_x, screen_y, self.win1h, self.win1v);
-                
-                // For now, if pixel is outside all windows, render normally
-                // In a full implementation, this would depend on WININ/WINOUT registers
-                // For simplicity, we'll render the background if not in any window
-                let should_render_bg = !in_win0 && !in_win1;
+                // Get window control for this pixel
+                let (bg0_enable, _bg1_enable, _bg2_enable, _bg3_enable, _obj_enable, _effect_enable) = 
+                    self.get_window_control(screen_x, screen_y);
                 
                 let buf_index = ((screen_y * 240 + screen_x) * 4) as usize;
                 
-                if should_render_bg {
+                if bg0_enable {
+                    // BG0 is enabled for this pixel - render normally
                     // Calculate the actual position in the background map considering scroll
                     let bg_x = (screen_x + scroll_x) & 0x1FF; // Wrap at 512 pixels (64 tiles * 8 pixels)
                     let bg_y = (screen_y + scroll_y) & 0x1FF; // Wrap at 512 pixels (64 tiles * 8 pixels)
@@ -623,30 +693,31 @@ impl LCDController {
                     let pixel_addr = tile_offset + tile_index * 64 + pixel_y * 8 + pixel_x;
                     let palette_index = vram.read_byte(pixel_addr);
 
-                    // Get color from palette
-                    let color = BGR::new(palette.read_halfword(palette_index as Word * 2));
+                    // Skip transparent pixels (palette index 0)
+                    if palette_index != 0 {
+                        // Get color from palette
+                        let color = BGR::new(palette.read_halfword(palette_index as Word * 2));
 
-                    // Set pixel in output buffer
-                    buf[buf_index] = color.red();
-                    buf[buf_index + 1] = color.green();
-                    buf[buf_index + 2] = color.blue();
-                    buf[buf_index + 3] = 0xFF;
-                } else {
-                    // Inside a window - render with different color (for demonstration)
-                    // In a real implementation, this would depend on window control registers
-                    if in_win0 {
-                        // Window 0 - render with red tint
-                        buf[buf_index] = 0xFF;
-                        buf[buf_index + 1] = 0x00;
-                        buf[buf_index + 2] = 0x00;
+                        // Set pixel in output buffer
+                        buf[buf_index] = color.red();
+                        buf[buf_index + 1] = color.green();
+                        buf[buf_index + 2] = color.blue();
                         buf[buf_index + 3] = 0xFF;
-                    } else if in_win1 {
-                        // Window 1 - render with blue tint
-                        buf[buf_index] = 0x00;
-                        buf[buf_index + 1] = 0x00;
-                        buf[buf_index + 2] = 0xFF;
+                    } else {
+                        // Transparent pixel - render backdrop color (palette index 0)
+                        let backdrop_color = BGR::new(palette.read_halfword(0));
+                        buf[buf_index] = backdrop_color.red();
+                        buf[buf_index + 1] = backdrop_color.green();
+                        buf[buf_index + 2] = backdrop_color.blue();
                         buf[buf_index + 3] = 0xFF;
                     }
+                } else {
+                    // BG0 is disabled for this pixel - render backdrop color or black
+                    // In a full implementation, other layers (BG1-3, OBJ) would be checked here
+                    buf[buf_index] = 0x00;     // Black
+                    buf[buf_index + 1] = 0x00;
+                    buf[buf_index + 2] = 0x00;
+                    buf[buf_index + 3] = 0xFF;
                 }
             }
         }
