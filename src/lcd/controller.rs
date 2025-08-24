@@ -50,6 +50,22 @@ pub struct LCDController {
     // BG2/BG3 reference point registers (32-bit)
     bg2x: Word,        // BG2 Reference Point X-Coordinate (0x4000028-0x400002A)
     bg2y: Word,        // BG2 Reference Point Y-Coordinate (0x400002C-0x400002E)
+    // BG2 rotation/scaling parameters (16-bit each)
+    bg2pa: HalfWord,   // BG2 Rotation/Scaling Parameter A (dx) (0x4000020)
+    bg2pb: HalfWord,   // BG2 Rotation/Scaling Parameter B (dmx) (0x4000022)
+    bg2pc: HalfWord,   // BG2 Rotation/Scaling Parameter C (dy) (0x4000024)
+    bg2pd: HalfWord,   // BG2 Rotation/Scaling Parameter D (dmy) (0x4000026)
+    // BG3 reference point registers (32-bit)
+    bg3x: Word,        // BG3 Reference Point X-Coordinate (0x4000038-0x400003A)
+    bg3y: Word,        // BG3 Reference Point Y-Coordinate (0x400003C-0x400003E)
+    // BG3 rotation/scaling parameters (16-bit each)
+    bg3pa: HalfWord,   // BG3 Rotation/Scaling Parameter A (dx) (0x4000030)
+    bg3pb: HalfWord,   // BG3 Rotation/Scaling Parameter B (dmx) (0x4000032)
+    bg3pc: HalfWord,   // BG3 Rotation/Scaling Parameter C (dy) (0x4000034)
+    bg3pd: HalfWord,   // BG3 Rotation/Scaling Parameter D (dmy) (0x4000036)
+    // Window registers
+    win0h: HalfWord,   // WIN0H - Window 0 Horizontal Dimensions (0x4000040)
+    win1h: HalfWord,   // WIN1H - Window 1 Horizontal Dimensions (0x4000042)
 }
 
 impl LCDController {
@@ -77,6 +93,22 @@ impl LCDController {
             // Initialize BG2/BG3 reference point registers
             bg2x: 0,
             bg2y: 0,
+            // Initialize BG2 rotation/scaling parameters
+            bg2pa: 0x0100, // Default scaling factor (1.0 in 8.8 fixed point)
+            bg2pb: 0,
+            bg2pc: 0,
+            bg2pd: 0x0100, // Default scaling factor (1.0 in 8.8 fixed point)
+            // Initialize BG3 reference point registers
+            bg3x: 0,
+            bg3y: 0,
+            // Initialize BG3 rotation/scaling parameters
+            bg3pa: 0x0100, // Default scaling factor (1.0 in 8.8 fixed point)
+            bg3pb: 0,
+            bg3pc: 0,
+            bg3pd: 0x0100, // Default scaling factor (1.0 in 8.8 fixed point)
+            // Initialize window registers
+            win0h: 0,      // WIN0H - Window 0 Horizontal Dimensions
+            win1h: 0,      // WIN1H - Window 1 Horizontal Dimensions
         }
     }
 
@@ -106,6 +138,16 @@ impl LCDController {
             0x000A => self.bg1cnt.read(),
             0x000C => self.bg2cnt.read(),
             0x000E => self.bg3cnt.read(),
+            0x0020 => self.bg2pa, // BG2PA - BG2 Rotation/Scaling Parameter A (dx)
+            0x0022 => self.bg2pb, // BG2PB - BG2 Rotation/Scaling Parameter B (dmx)
+            0x0024 => self.bg2pc, // BG2PC - BG2 Rotation/Scaling Parameter C (dy)
+            0x0026 => self.bg2pd, // BG2PD - BG2 Rotation/Scaling Parameter D (dmy)
+            0x0030 => self.bg3pa, // BG3PA - BG3 Rotation/Scaling Parameter A (dx)
+            0x0032 => self.bg3pb, // BG3PB - BG3 Rotation/Scaling Parameter B (dmx)
+            0x0034 => self.bg3pc, // BG3PC - BG3 Rotation/Scaling Parameter C (dy)
+            0x0036 => self.bg3pd, // BG3PD - BG3 Rotation/Scaling Parameter D (dmy)
+            0x0040 => self.win0h, // WIN0H - Window 0 Horizontal Dimensions
+            0x0042 => self.win1h, // WIN1H - Window 1 Horizontal Dimensions
             _ => todo!(),
         }
     }
@@ -119,6 +161,20 @@ impl LCDController {
             0x000A => self.bg1cnt.read() as Word,
             0x000C => self.bg2cnt.read() as Word,
             0x000E => self.bg3cnt.read() as Word,
+            0x0020 => self.bg2pa as Word, // BG2PA - BG2 Rotation/Scaling Parameter A (dx)
+            0x0022 => self.bg2pb as Word, // BG2PB - BG2 Rotation/Scaling Parameter B (dmx)
+            0x0024 => self.bg2pc as Word, // BG2PC - BG2 Rotation/Scaling Parameter C (dy)
+            0x0026 => self.bg2pd as Word, // BG2PD - BG2 Rotation/Scaling Parameter D (dmy)
+            0x0028 => self.bg2x,         // BG2X - BG2 Reference Point X-Coordinate
+            0x002C => self.bg2y,         // BG2Y - BG2 Reference Point Y-Coordinate
+            0x0030 => self.bg3pa as Word, // BG3PA - BG3 Rotation/Scaling Parameter A (dx)
+            0x0032 => self.bg3pb as Word, // BG3PB - BG3 Rotation/Scaling Parameter B (dmx)
+            0x0034 => self.bg3pc as Word, // BG3PC - BG3 Rotation/Scaling Parameter C (dy)
+            0x0036 => self.bg3pd as Word, // BG3PD - BG3 Rotation/Scaling Parameter D (dmy)
+            0x0038 => self.bg3x,         // BG3X - BG3 Reference Point X-Coordinate
+            0x003C => self.bg3y,         // BG3Y - BG3 Reference Point Y-Coordinate
+            0x0040 => self.win0h as Word, // WIN0H - Window 0 Horizontal Dimensions
+            0x0042 => self.win1h as Word, // WIN1H - Window 1 Horizontal Dimensions
             _ => todo!(),
         }
     }
@@ -174,6 +230,26 @@ impl LCDController {
                 // BG3VOFS - BG3 Y-Offset (Write Only)
                 self.bg3vofs = data & 0x01FF;
             }
+            0x0020 => {
+                // BG2PA - BG2 Rotation/Scaling Parameter A (dx) (Write Only)
+                self.bg2pa = data;
+                // println!("BG2PA write: 0x{:04x}", data);
+            }
+            0x0022 => {
+                // BG2PB - BG2 Rotation/Scaling Parameter B (dmx) (Write Only)
+                self.bg2pb = data;
+                // println!("BG2PB write: 0x{:04x}", data);
+            }
+            0x0024 => {
+                // BG2PC - BG2 Rotation/Scaling Parameter C (dy) (Write Only)
+                self.bg2pc = data;
+                // println!("BG2PC write: 0x{:04x}", data);
+            }
+            0x0026 => {
+                // BG2PD - BG2 Rotation/Scaling Parameter D (dmy) (Write Only)
+                self.bg2pd = data;
+                // println!("BG2PD write: 0x{:04x}", data);
+            }
             0x0028 => {
                 // BG2X_L - BG2 Reference Point X-Coordinate, lower 16 bit (Write Only)
                 self.bg2x = (self.bg2x & 0xFFFF_0000) | (data as Word);
@@ -201,6 +277,68 @@ impl LCDController {
                     self.bg2y |= 0xF000_0000;
                 }
                 // println!("BG2Y_H write: 0x{:04x}, BG2Y now: 0x{:08x}", data, self.bg2y);
+            }
+            0x0030 => {
+                // BG3PA - BG3 Rotation/Scaling Parameter A (dx) (Write Only)
+                self.bg3pa = data;
+                // println!("BG3PA write: 0x{:04x}", data);
+            }
+            0x0032 => {
+                // BG3PB - BG3 Rotation/Scaling Parameter B (dmx) (Write Only)
+                self.bg3pb = data;
+                // println!("BG3PB write: 0x{:04x}", data);
+            }
+            0x0034 => {
+                // BG3PC - BG3 Rotation/Scaling Parameter C (dy) (Write Only)
+                self.bg3pc = data;
+                // println!("BG3PC write: 0x{:04x}", data);
+            }
+            0x0036 => {
+                // BG3PD - BG3 Rotation/Scaling Parameter D (dmy) (Write Only)
+                self.bg3pd = data;
+                // println!("BG3PD write: 0x{:04x}", data);
+            }
+            0x0038 => {
+                // BG3X_L - BG3 Reference Point X-Coordinate, lower 16 bit (Write Only)
+                self.bg3x = (self.bg3x & 0xFFFF_0000) | (data as Word);
+                // println!("BG3X_L write: 0x{:04x}, BG3X now: 0x{:08x}", data, self.bg3x);
+            }
+            0x003A => {
+                // BG3X_H - BG3 Reference Point X-Coordinate, upper 12 bit (Write Only)
+                self.bg3x = (self.bg3x & 0x0000_FFFF) | ((data as Word & 0x0FFF) << 16);
+                // Sign extend if bit 27 is set (28-bit signed value)
+                if (self.bg3x & 0x0800_0000) != 0 {
+                    self.bg3x |= 0xF000_0000;
+                }
+                // println!("BG3X_H write: 0x{:04x}, BG3X now: 0x{:08x}", data, self.bg3x);
+            }
+            0x003C => {
+                // BG3Y_L - BG3 Reference Point Y-Coordinate, lower 16 bit (Write Only)
+                self.bg3y = (self.bg3y & 0xFFFF_0000) | (data as Word);
+                // println!("BG3Y_L write: 0x{:04x}, BG3Y now: 0x{:08x}", data, self.bg3y);
+            }
+            0x003E => {
+                // BG3Y_H - BG3 Reference Point Y-Coordinate, upper 12 bit (Write Only)
+                self.bg3y = (self.bg3y & 0x0000_FFFF) | ((data as Word & 0x0FFF) << 16);
+                // Sign extend if bit 27 is set (28-bit signed value)
+                if (self.bg3y & 0x0800_0000) != 0 {
+                    self.bg3y |= 0xF000_0000;
+                }
+                // println!("BG3Y_H write: 0x{:04x}, BG3Y now: 0x{:08x}", data, self.bg3y);
+            }
+            0x0040 => {
+                // WIN0H - Window 0 Horizontal Dimensions (Write Only)
+                self.win0h = data;
+                let x1 = (data >> 8) & 0xFF;  // Bit 8-15: X1, Leftmost coordinate
+                let x2 = data & 0xFF;         // Bit 0-7: X2, Rightmost coordinate + 1
+                // println!("WIN0H write: 0x{:04x} (X1:{}, X2:{})", data, x1, x2);
+            }
+            0x0042 => {
+                // WIN1H - Window 1 Horizontal Dimensions (Write Only)
+                self.win1h = data;
+                let x1 = (data >> 8) & 0xFF;  // Bit 8-15: X1, Leftmost coordinate
+                let x2 = data & 0xFF;         // Bit 0-7: X2, Rightmost coordinate + 1
+                // println!("WIN1H write: 0x{:04x} (X1:{}, X2:{})", data, x1, x2);
             }
             0x004C => {
                 // MOSAIC - Mosaic Size (Write Only)
@@ -263,6 +401,22 @@ impl LCDController {
                 // BG3VOFS - BG3 Y-Offset (Write Only)
                 self.bg3vofs = data & 0x01FF;
             }
+            0x0020 => {
+                // BG2PA - BG2 Rotation/Scaling Parameter A (dx) (Write Only)
+                self.bg2pa = data;
+            }
+            0x0022 => {
+                // BG2PB - BG2 Rotation/Scaling Parameter B (dmx) (Write Only)
+                self.bg2pb = data;
+            }
+            0x0024 => {
+                // BG2PC - BG2 Rotation/Scaling Parameter C (dy) (Write Only)
+                self.bg2pc = data;
+            }
+            0x0026 => {
+                // BG2PD - BG2 Rotation/Scaling Parameter D (dmy) (Write Only)
+                self.bg2pd = data;
+            }
             0x0028 => {
                 // BG2X_L - BG2 Reference Point X-Coordinate, lower 16 bit (Write Only)
                 self.bg2x = (self.bg2x & 0xFFFF_0000) | (data as Word);
@@ -286,6 +440,58 @@ impl LCDController {
                 if (self.bg2y & 0x0800_0000) != 0 {
                     self.bg2y |= 0xF000_0000;
                 }
+            }
+            0x0030 => {
+                // BG3PA - BG3 Rotation/Scaling Parameter A (dx) (Write Only)
+                self.bg3pa = data;
+            }
+            0x0032 => {
+                // BG3PB - BG3 Rotation/Scaling Parameter B (dmx) (Write Only)
+                self.bg3pb = data;
+            }
+            0x0034 => {
+                // BG3PC - BG3 Rotation/Scaling Parameter C (dy) (Write Only)
+                self.bg3pc = data;
+            }
+            0x0036 => {
+                // BG3PD - BG3 Rotation/Scaling Parameter D (dmy) (Write Only)
+                self.bg3pd = data;
+            }
+            0x0038 => {
+                // BG3X_L - BG3 Reference Point X-Coordinate, lower 16 bit (Write Only)
+                self.bg3x = (self.bg3x & 0xFFFF_0000) | (data as Word);
+            }
+            0x003A => {
+                // BG3X_H - BG3 Reference Point X-Coordinate, upper 12 bit (Write Only)
+                self.bg3x = (self.bg3x & 0x0000_FFFF) | ((data as Word & 0x0FFF) << 16);
+                // Sign extend if bit 27 is set (28-bit signed value)
+                if (self.bg3x & 0x0800_0000) != 0 {
+                    self.bg3x |= 0xF000_0000;
+                }
+            }
+            0x003C => {
+                // BG3Y_L - BG3 Reference Point Y-Coordinate, lower 16 bit (Write Only)
+                self.bg3y = (self.bg3y & 0xFFFF_0000) | (data as Word);
+            }
+            0x003E => {
+                // BG3Y_H - BG3 Reference Point Y-Coordinate, upper 12 bit (Write Only)
+                self.bg3y = (self.bg3y & 0x0000_FFFF) | ((data as Word & 0x0FFF) << 16);
+                // Sign extend if bit 27 is set (28-bit signed value)
+                if (self.bg3y & 0x0800_0000) != 0 {
+                    self.bg3y |= 0xF000_0000;
+                }
+            }
+            0x0040 => {
+                // WIN0H - Window 0 Horizontal Dimensions (Write Only)
+                self.win0h = data;
+                let x1 = (data >> 8) & 0xFF;  // Bit 8-15: X1, Leftmost coordinate
+                let x2 = data & 0xFF;         // Bit 0-7: X2, Rightmost coordinate + 1
+            }
+            0x0042 => {
+                // WIN1H - Window 1 Horizontal Dimensions (Write Only)
+                self.win1h = data;
+                let x1 = (data >> 8) & 0xFF;  // Bit 8-15: X1, Leftmost coordinate
+                let x2 = data & 0xFF;         // Bit 0-7: X2, Rightmost coordinate + 1
             }
             0x004C => {
                 // MOSAIC - Mosaic Size (Write Only)
