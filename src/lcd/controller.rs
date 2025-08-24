@@ -70,8 +70,10 @@ pub struct LCDController {
     win1v: HalfWord,   // WIN1V - Window 1 Vertical Dimensions (0x4000046)
     winin: HalfWord,   // WININ - Control of Inside of Window(s) (0x4000048)
     winout: HalfWord,  // WINOUT - Control of Outside of Windows & Inside of OBJ Window (0x400004A)
-    // Color special effects register
+    // Color special effects registers
     bldcnt: HalfWord,  // BLDCNT - Color Special Effects Selection (0x4000050)
+    bldalpha: HalfWord, // BLDALPHA - Alpha Blending Coefficients (0x4000052)
+    bldy: HalfWord,    // BLDY - Brightness (Fade-In/Out) Coefficient (0x4000054)
 }
 
 impl LCDController {
@@ -120,6 +122,8 @@ impl LCDController {
             winin: 0,      // WININ - Control of Inside of Window(s)
             winout: 0,     // WINOUT - Control of Outside of Windows & Inside of OBJ Window
             bldcnt: 0,     // BLDCNT - Color Special Effects Selection
+            bldalpha: 0,   // BLDALPHA - Alpha Blending Coefficients
+            bldy: 0,       // BLDY - Brightness (Fade-In/Out) Coefficient
         }
     }
 
@@ -164,6 +168,8 @@ impl LCDController {
             0x0048 => self.winin,  // WININ - Control of Inside of Window(s)
             0x004A => self.winout, // WINOUT - Control of Outside of Windows & Inside of OBJ Window
             0x0050 => self.bldcnt, // BLDCNT - Color Special Effects Selection
+            0x0052 => self.bldalpha, // BLDALPHA - Alpha Blending Coefficients
+            0x0054 => 0, // BLDY - Brightness Coefficient (Write Only, reads as 0)
             _ => todo!(),
         }
     }
@@ -197,6 +203,8 @@ impl LCDController {
             0x0048 => self.winin as Word,  // WININ - Control of Inside of Window(s)
             0x004A => self.winout as Word, // WINOUT - Control of Outside of Windows & Inside of OBJ Window
             0x0050 => self.bldcnt as Word, // BLDCNT - Color Special Effects Selection
+            0x0052 => self.bldalpha as Word, // BLDALPHA - Alpha Blending Coefficients
+            0x0054 => 0, // BLDY - Brightness Coefficient (Write Only, reads as 0)
             _ => todo!(),
         }
     }
@@ -428,6 +436,29 @@ impl LCDController {
                 // println!("BLDCNT write: 0x{:04x} (1st:{:06b}, Effect:{}, 2nd:{:06b})", 
                 //     data, first_target, effect_name, second_target);
             }
+            0x0052 => {
+                // BLDALPHA - Alpha Blending Coefficients (Read/Write)
+                self.bldalpha = data;
+                let eva = data & 0x001F;         // Bit 0-4: EVA Coefficient (1st Target)
+                let evb = (data >> 8) & 0x001F;  // Bit 8-12: EVB Coefficient (2nd Target)
+                
+                // Clamp coefficients to valid range (0-16)
+                let eva_clamped = if eva > 16 { 16 } else { eva };
+                let evb_clamped = if evb > 16 { 16 } else { evb };
+                
+                // println!("BLDALPHA write: 0x{:04x} (EVA:{}/{}, EVB:{}/{})", 
+                //     data, eva, eva_clamped, evb, evb_clamped);
+            }
+            0x0054 => {
+                // BLDY - Brightness (Fade-In/Out) Coefficient (Write Only)
+                self.bldy = data;
+                let evy = data & 0x001F;  // Bit 0-4: EVY Coefficient (Brightness)
+                
+                // Clamp coefficient to valid range (0-16)
+                let evy_clamped = if evy > 16 { 16 } else { evy };
+                
+                // println!("BLDY write: 0x{:04x} (EVY:{}/{})", data, evy, evy_clamped);
+            }
             _ => {
                 todo!("Unhandled LCD register write: addr=0x{:04x}, data=0x{:04x}", addr, data);
             }
@@ -605,6 +636,14 @@ impl LCDController {
                 // BLDCNT - Color Special Effects Selection (Read/Write)
                 self.bldcnt = data;
             }
+            0x0052 => {
+                // BLDALPHA - Alpha Blending Coefficients (Read/Write)
+                self.bldalpha = data;
+            }
+            0x0054 => {
+                // BLDY - Brightness (Fade-In/Out) Coefficient (Write Only)
+                self.bldy = data;
+            }
             _ => {
                 todo!("Unhandled LCD register word write: addr=0x{:04x}, data=0x{:08x}", addr, data);
             }
@@ -673,6 +712,35 @@ impl LCDController {
         (bg0_enable, bg1_enable, bg2_enable, bg3_enable, obj_enable, effect_enable)
     }
 
+    // Helper function to perform alpha blending between two colors
+    fn alpha_blend(&self, first_color: BGR, second_color: BGR) -> BGR {
+        let eva = self.bldalpha & 0x001F;         // Bit 0-4: EVA Coefficient (1st Target)
+        let evb = (self.bldalpha >> 8) & 0x001F;  // Bit 8-12: EVB Coefficient (2nd Target)
+        
+        // Clamp coefficients to valid range (0-16)
+        let eva_clamped = if eva > 16 { 16 } else { eva };
+        let evb_clamped = if evb > 16 { 16 } else { evb };
+        
+        // Extract RGB components from first color (convert from 5-bit to 8-bit)
+        let r1 = (first_color.red() >> 3) as u16;   // Convert 8-bit back to 5-bit
+        let g1 = (first_color.green() >> 3) as u16;
+        let b1 = (first_color.blue() >> 3) as u16;
+        
+        // Extract RGB components from second color (convert from 5-bit to 8-bit)
+        let r2 = (second_color.red() >> 3) as u16;   // Convert 8-bit back to 5-bit
+        let g2 = (second_color.green() >> 3) as u16;
+        let b2 = (second_color.blue() >> 3) as u16;
+        
+        // Perform alpha blending: I = MIN(31, I1st*EVA + I2nd*EVB) / 16
+        let r_blended = ((r1 * eva_clamped + r2 * evb_clamped) / 16).min(31);
+        let g_blended = ((g1 * eva_clamped + g2 * evb_clamped) / 16).min(31);
+        let b_blended = ((b1 * eva_clamped + b2 * evb_clamped) / 16).min(31);
+        
+        // Convert back to BGR format (5-bit per component)
+        let bgr_value = (b_blended << 10) | (g_blended << 5) | r_blended;
+        BGR::new(bgr_value as HalfWord)
+    }
+
     // Helper function to apply color special effects
     fn apply_color_effect(&self, color: BGR, layer_id: u8, effect_enable: bool) -> BGR {
         if !effect_enable {
@@ -693,33 +761,62 @@ impl LCDController {
         match effect_type {
             0 => color, // None - no effect
             1 => {
-                // Alpha Blending - for now, just return the original color
-                // In a full implementation, this would blend with the 2nd target layer
-                color
+                // Alpha Blending - blend with backdrop color as a simple demonstration
+                // In a full implementation, this would blend with the actual 2nd target layer
+                let second_target = (self.bldcnt >> 8) & 0x003F; // Bit 8-13: 2nd Target
+                let backdrop_is_second_target = (second_target & 0x0020) != 0; // BD bit
+                
+                if backdrop_is_second_target {
+                    // Create a simple backdrop color (dark gray)
+                    let backdrop_color = BGR::new(0x4210); // Dark gray in BGR555 format
+                    self.alpha_blend(color, backdrop_color)
+                } else {
+                    // No valid 2nd target, return original color
+                    color
+                }
             }
             2 => {
-                // Brightness Increase (make whiter)
-                let r = ((color.red() as u16 * 3) / 4).min(255) as u8;
-                let g = ((color.green() as u16 * 3) / 4).min(255) as u8;
-                let b = ((color.blue() as u16 * 3) / 4).min(255) as u8;
+                // Brightness Increase (fade to white)
+                // Formula: I = I1st + (31-I1st)*EVY/16
+                let evy = self.bldy & 0x001F;  // Bit 0-4: EVY Coefficient
+                let evy_clamped = if evy > 16 { 16 } else { evy };
                 
-                // Increase brightness by adding white
-                let r = (r as u16 + 64).min(255) as u8;
-                let g = (g as u16 + 64).min(255) as u8;
-                let b = (b as u16 + 64).min(255) as u8;
+                // Extract RGB components (convert from 8-bit back to 5-bit)
+                let r1 = (color.red() >> 3) as u16;   // Convert 8-bit to 5-bit
+                let g1 = (color.green() >> 3) as u16;
+                let b1 = (color.blue() >> 3) as u16;
                 
-                // Convert back to BGR format
-                let bgr_value = ((b as u16) << 10) | ((g as u16) << 5) | (r as u16);
+                // Apply brightness increase formula: I = I1st + (31-I1st)*EVY/16
+                let r_bright = r1 + ((31 - r1) * evy_clamped / 16);
+                let g_bright = g1 + ((31 - g1) * evy_clamped / 16);
+                let b_bright = b1 + ((31 - b1) * evy_clamped / 16);
+                
+                // Clamp to 5-bit range and convert back to BGR format
+                let r_final = r_bright.min(31);
+                let g_final = g_bright.min(31);
+                let b_final = b_bright.min(31);
+                
+                let bgr_value = (b_final << 10) | (g_final << 5) | r_final;
                 BGR::new(bgr_value as HalfWord)
             }
             3 => {
-                // Brightness Decrease (make blacker)
-                let r = ((color.red() as u16 * 3) / 4) as u8;
-                let g = ((color.green() as u16 * 3) / 4) as u8;
-                let b = ((color.blue() as u16 * 3) / 4) as u8;
+                // Brightness Decrease (fade to black)
+                // Formula: I = I1st - I1st*EVY/16
+                let evy = self.bldy & 0x001F;  // Bit 0-4: EVY Coefficient
+                let evy_clamped = if evy > 16 { 16 } else { evy };
                 
-                // Convert back to BGR format
-                let bgr_value = ((b as u16) << 10) | ((g as u16) << 5) | (r as u16);
+                // Extract RGB components (convert from 8-bit back to 5-bit)
+                let r1 = (color.red() >> 3) as u16;   // Convert 8-bit to 5-bit
+                let g1 = (color.green() >> 3) as u16;
+                let b1 = (color.blue() >> 3) as u16;
+                
+                // Apply brightness decrease formula: I = I1st - I1st*EVY/16
+                let r_dark = r1 - (r1 * evy_clamped / 16);
+                let g_dark = g1 - (g1 * evy_clamped / 16);
+                let b_dark = b1 - (b1 * evy_clamped / 16);
+                
+                // Convert back to BGR format (no need to clamp as subtraction won't exceed range)
+                let bgr_value = (b_dark << 10) | (g_dark << 5) | r_dark;
                 BGR::new(bgr_value as HalfWord)
             }
             _ => color, // Unknown effect
