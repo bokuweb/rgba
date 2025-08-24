@@ -61,9 +61,10 @@ impl GBA {
         let vram = Ram::new(vec![0; 0x1_8000]);
         let palette = Ram::new(vec![0; 0x0400]);
         let oam = Ram::new(vec![0; 0x0400]);
+        let sram = Ram::new(vec![0; 0x1_0000]); // 64KB SRAM/FRAM/Flash save memory
         let lcdc = lcd::LCDController::new();
         let key = io::Key::new();
-        let bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, key);
+        let bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, sram, key);
         let mut arm = cpu::ARM::new();
 
         arm.reset();
@@ -119,9 +120,10 @@ mod test {
         let vram = Ram::new(vec![0; 0x1_8000]);
         let palette = Ram::new(vec![0; 0x0400]);
         let oam = Ram::new(vec![0; 0x0400]);
+        let sram = Ram::new(vec![0; 0x1_0000]); // 64KB SRAM/FRAM/Flash save memory
         let lcdc = lcd::LCDController::new();
         let key = io::Key::new();
-        let mut bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, key);
+        let mut bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, sram, key);
         let mut arm = cpu::ARM::new();
         for _ in 0..step {
             arm.step(&mut bus, false).expect("should step");
