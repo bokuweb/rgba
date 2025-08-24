@@ -238,7 +238,12 @@ impl BusAccessor for CpuBus {
                 self.wram.write_byte(addr - 0x0300_0000, data);
             }
             0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
-            0x0400_0060..=0x0400_03FF => {}
+            0x0400_0060..=0x0400_03FF => {
+                // TODO: Implement DMA, Timer, and other I/O registers
+                if addr >= 0x0400_00B0 && addr <= 0x0400_00DE {
+                    println!("🔧 DMA register byte write: 0x{:08x} = 0x{:02x} (not implemented)", addr, data);
+                }
+            }
             0x0500_0000..=0x0500_03FF => self.palette.write_byte(addr - 0x0500_0000, data),
             0x0600_0000..=0x0601_7FFF => self.vram.write_byte(addr - 0x0600_0000, data),
             0x0700_0000..=0x0700_03FF => self.oam.write_byte(addr - 0x0700_0000, data),
@@ -267,10 +272,20 @@ impl BusAccessor for CpuBus {
                 self.wram.write_halfword(addr - 0x0300_0000, data);
             }
             0x0400_0000..=0x0400_005F => self.lcdc.write_halfword(addr - 0x0400_0000, data),
-            0x0400_0060..=0x0400_03FF => {}
+            0x0400_0060..=0x0400_03FF => {
+                // TODO: Implement DMA, Timer, and other I/O registers
+                // For now, just log DMA register writes to help debug
+                if addr >= 0x0400_00B0 && addr <= 0x0400_00DE {
+                    println!("🔧 DMA register write: 0x{:08x} = 0x{:04x} (not implemented)", addr, data);
+                }
+            }
             0x0500_0000..=0x0500_03FF => self.palette.write_halfword(addr - 0x0500_0000, data),
             0x0600_0000..=0x0601_7FFF => {
-                self.vram.write_halfword(addr - 0x0600_0000, data);
+                let vram_addr = addr - 0x0600_0000;
+                if vram_addr < 0x100 { // Log first 256 bytes of VRAM writes
+                    println!("📝 VRAM halfword write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:04x}", addr, vram_addr, data);
+                }
+                self.vram.write_halfword(vram_addr, data);
             }
             0x0E00_0000..=0x0E00_FFFF => {
                 println!("⚠️  WARNING: Invalid halfword write to SRAM at 0x{:08x} = 0x{:04x} (SRAM is byte-access only, ignored)", addr, data);
@@ -301,10 +316,19 @@ impl BusAccessor for CpuBus {
                 println!("⚠️  WARNING: Write to unused area 0x{:08x} = 0x{:08x} (ignored)", addr, data);
             }
             0x0400_0000..=0x0400_005F => self.lcdc.write_word(addr - 0x0400_0000, data),
-            0x0400_0060..=0x0400_03FF => {}
+            0x0400_0060..=0x0400_03FF => {
+                // TODO: Implement DMA, Timer, and other I/O registers
+                if addr >= 0x0400_00B0 && addr <= 0x0400_00DE {
+                    println!("🔧 DMA register word write: 0x{:08x} = 0x{:08x} (not implemented)", addr, data);
+                }
+            }
             0x0500_0000..=0x0500_03FF => self.palette.write_word(addr - 0x0500_0000, data),
             0x0600_0000..=0x0601_7FFF => {
-                self.vram.write_word(addr - 0x0600_0000, data);
+                let vram_addr = addr - 0x0600_0000;
+                if vram_addr < 0x100 { // Log first 256 bytes of VRAM writes
+                    println!("📝 VRAM word write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:08x}", addr, vram_addr, data);
+                }
+                self.vram.write_word(vram_addr, data);
             }
             0x0E00_0000..=0x0E00_FFFF => {
                 println!("⚠️  WARNING: Invalid word write to SRAM at 0x{:08x} = 0x{:08x} (SRAM is byte-access only, ignored)", addr, data);
