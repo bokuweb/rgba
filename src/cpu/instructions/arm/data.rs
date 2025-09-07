@@ -170,10 +170,19 @@ where
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
+        let d = value.wrapping_sub(gpr[rn]);
         if s {
-            unimplemented!()
+            if rd == PC {
+                unimplemented!("data processing Rd = PC with S flag.");
+            } else {
+                cpsr.set_N_from(d as u32);
+                cpsr.set_Z_from(d as u32);
+                cpsr.set_C(value >= gpr[rn]);
+                let (_, v) = (value as i32).overflowing_sub(gpr[rn] as i32);
+                cpsr.set_V(v);
+            }
         }
-        gpr[rd] = value.wrapping_sub(gpr[rn]);
+        gpr[rd] = d;
     })
 }
 
