@@ -231,9 +231,9 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    let c = cpsr.get_C();
+    let c_flag = cpsr.get_C();
     let result = exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
-        let c = if c { 1 } else { 0 } as u32;
+        let c = if c_flag { 1 } else { 0 } as u32;
         let d = gpr[rn] as u64 + value as u64 + c as u64;
         if s {
             if rd == PC {
@@ -242,13 +242,13 @@ where
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
                 cpsr.set_C_from(d);
-                // より安全な方法でオーバーフローを検出
+                // V: (~(op1 ^ (op2 + Cin)) & (op1 ^ result)) の MSB
                 let op1 = gpr[rn] as i32;
                 let op2 = value as i32;
-                let cin = c as i32;
+                let cin = if c_flag { 1i32 } else { 0i32 };
                 let result = op1.wrapping_add(op2).wrapping_add(cin);
-                // signed overflow: 同符号の加算で結果の符号が違う場合
-                let v = ((op1 ^ result) & (op2 ^ result) & (0x8000_0000u32 as i32)) != 0;
+                let op2c = op2.wrapping_add(cin);
+                let v = (((!(op1 ^ op2c)) & (op1 ^ result)) as u32 & 0x8000_0000) != 0;
                 cpsr.set_V(v);
             }
         }
@@ -274,8 +274,8 @@ where
             } else {
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
-                cpsr.set_C(gpr[rn] >= value + c);
-                let (_, v) = (gpr[rn] as i32).overflowing_sub((value + c) as i32);
+                cpsr.set_C(gpr[rn] >= value.wrapping_add(c));
+                let (_, v) = (gpr[rn] as i32).overflowing_sub(value.wrapping_add(c) as i32);
                 cpsr.set_V(v);
             }
         }
@@ -365,11 +365,12 @@ where
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let rn = gpr[rn];
         let cmn = (rn as u64).wrapping_add(value as u64);
-        cpsr.set_N((cmn as i32) < 0);
-        cpsr.set_Z((cmn as u32) == 0);
+        let res = rn.wrapping_add(value);
+        cpsr.set_N_from(res);
+        cpsr.set_Z_from(res);
         let (_, v) = (rn as i32).overflowing_add(value as i32);
         cpsr.set_V(v);
-        cpsr.set_C(cmn & (1 << 32) != 0);
+        cpsr.set_C(cmn > 0xFFFF_FFFF);
     })
 }
 
