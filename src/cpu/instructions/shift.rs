@@ -1,15 +1,21 @@
 use crate::cpu::types::*;
 
 pub fn shift(shift_type: Shift, value: u32, shift: u32, c: bool, shift_by_reg: bool) -> u32 {
+    // レジスタ指定のときは下位8bitのみ有効
+    let amount = if shift_by_reg { shift & 0xFF } else { shift };
+
     match shift_type {
-        Shift::LSL => lsl(value, shift),
-        Shift::LSR => lsr(value, shift, shift_by_reg),
-        Shift::ASR => asr(value, shift, shift_by_reg),
-        Shift::ROR => ror(value, shift, c, shift_by_reg),
+        Shift::LSL => lsl(value, amount),
+        Shift::LSR => lsr(value, amount, shift_by_reg),
+        Shift::ASR => asr(value, amount, shift_by_reg),
+        Shift::ROR => ror(value, amount, c, shift_by_reg),
     }
 }
 
 pub fn is_carry_over(shift_type: Shift, value: u32, shift: u32, current: bool, shift_by_reg: bool) -> bool {
+    // レジスタ指定のときは下位8bitのみ有効
+    let shift = if shift_by_reg { shift & 0xFF } else { shift };
+    
     if shift == 0 {
         if !shift_by_reg {
             match shift_type {
@@ -50,10 +56,21 @@ pub fn is_carry_over(shift_type: Shift, value: u32, shift: u32, current: bool, s
             }
             Shift::ROR => {
                 let effective_shift = shift % 32;
-                if effective_shift == 0 {
-                    current // ROR by multiple of 32 doesn't change carry
+                if shift_by_reg {
+                    if effective_shift == 0 {
+                        // Rs % 32 == 0 かつ shift != 0 → C = Rm[31]
+                        (value & 0x8000_0000) != 0
+                    } else {
+                        (value & (1 << (effective_shift - 1))) != 0
+                    }
                 } else {
-                    (value & (1 << (effective_shift - 1))) != 0
+                    // 即値 ROR：shift==0 は上の大枠の分岐で RRX として処理済み
+                    if effective_shift == 0 {
+                        // 実際にはここに来ない（ROR #32 はエンコードされない想定）
+                        current
+                    } else {
+                        (value & (1 << (effective_shift - 1))) != 0
+                    }
                 }
             }
         }
@@ -240,5 +257,28 @@ mod tests {
         // Carry for large shifts
         assert_eq!(is_carry_over(Shift::LSL, 0x00000001, 32, false, false), true);  // bit 0 -> carry
         assert_eq!(is_carry_over(Shift::LSL, 0x00000001, 33, false, false), false); // > 32 -> false
+    }
+
+    #[test]
+    fn test_register_shift_normalization() {
+        // 下位8bitのみ有効：0x100 は実質 0
+        assert_eq!(shift(Shift::LSL, 0x1234_5678, 0x100, false, true), 0x1234_5678);
+        assert_eq!(is_carry_over(Shift::LSL, 0x8000_0000, 0x100, false, true), false); // 変化なし
+
+        // ROR(by reg), Rs=32 → 結果は同じ・Cはbit31
+        assert_eq!(shift(Shift::ROR, 0x8000_0001, 32, false, true), 0x8000_0001);
+        assert!(is_carry_over(Shift::ROR, 0x8000_0001, 32, false, true));
+
+        // Rs=0x100（≒0）→ 変化なし・Cも変化なし
+        assert_eq!(shift(Shift::ROR, 0xDEAD_BEEF, 0x100, true, true), 0xDEAD_BEEF);
+        assert_eq!(is_carry_over(Shift::ROR, 0xDEAD_BEEF, 0x100, true, true), true);
+        
+        // LSR by register with upper bits set should be normalized
+        assert_eq!(shift(Shift::LSR, 0xFFFF_FFFF, 0x101, false, true), 0x7FFF_FFFF); // 0x101 & 0xFF = 1
+        assert!(is_carry_over(Shift::LSR, 0xFFFF_FFFF, 0x101, false, true));
+        
+        // ASR by register with upper bits set should be normalized  
+        assert_eq!(shift(Shift::ASR, 0x8000_0000, 0x201, false, true), 0xC000_0000); // 0x201 & 0xFF = 1
+        assert!(!is_carry_over(Shift::ASR, 0x8000_0000, 0x201, false, true)); // bit 0 is 0
     }
 }

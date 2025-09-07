@@ -18,14 +18,15 @@ where
     let rm = dec.get_Rm() as usize;
 
     let (value, carry) = if dec.get_I() {
-        if dec.get_rotate() == 0 {
-            (dec.get_imm(), cpsr.get_C())
+        let imm = dec.get_imm();
+        let rot = dec.get_rotate(); // 0..15
+        if rot == 0 {
+            (imm, cpsr.get_C())
         } else {
-            let shift_value = dec.get_rotate() * 2;
-            (
-                ror(dec.get_imm(), shift_value, cpsr.get_C(), true),
-                is_carry_over(dec.get_sh().into(), dec.get_imm(), shift_value, cpsr.get_C(), true),
-            )
+            let amount = (rot * 2) & 31; // 2,4,...,30
+            let res = ror(imm, amount, cpsr.get_C(), false);
+            let carry = (res & 0x8000_0000) != 0; // 即値回転のCは結果bit31
+            (res, carry)
         }
     } else if dec.get_bit4() {
         let rm = gpr[rm] + if rm == PC { 4 } else { 0 };
@@ -201,11 +202,9 @@ where
     T: BusAccessor,
 {
     let s = dec.get_S();
-    let i = dec.get_I();
-    let r = dec.get_R();
     let rd = dec.get_Rd() as usize;
-    let rn = dec.get_Rn();
-    let op1 = get_operand(gpr, rn, i, r);
+    let rn = dec.get_Rn() as usize;
+    let op1 = gpr[rn]; // 常にこれ（PCは+8の値が入っている前提）
     let result = exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let d = op1 as u64 + value as u64;
         // dbg!(d, gpr[rn], value);
@@ -243,7 +242,13 @@ where
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
                 cpsr.set_C_from(d);
-                let (_, v) = (gpr[rn] as i32).overflowing_add((value + c) as i32);
+                // より安全な方法でオーバーフローを検出
+                let op1 = gpr[rn] as i32;
+                let op2 = value as i32;
+                let cin = c as i32;
+                let result = op1.wrapping_add(op2).wrapping_add(cin);
+                // signed overflow: 同符号の加算で結果の符号が違う場合
+                let v = ((op1 ^ result) & (op2 ^ result) & (0x8000_0000u32 as i32)) != 0;
                 cpsr.set_V(v);
             }
         }
@@ -285,18 +290,22 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    let c = cpsr.get_C();
+    let cin = cpsr.get_C() as u32; // 1 or 0
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
-        let c = if c { 0 } else { 1 };
-        let d = value.wrapping_sub(gpr[rn]).wrapping_sub(c);
+        let borrow_in = 1 - cin; // (1 - C)
+        let subtrahend = gpr[rn].wrapping_add(borrow_in);
+        let d = value.wrapping_sub(subtrahend);
+
         if s {
             if rd == PC {
                 unimplemented!("data processing Rd = PC with S flag.");
             } else {
-                cpsr.set_N_from(d as u32);
-                cpsr.set_Z_from(d as u32);
-                cpsr.set_C(gpr[rn] >= d);
-                let (_, v) = (gpr[rn] as i32).overflowing_sub(c as i32);
+                cpsr.set_N_from(d);
+                cpsr.set_Z_from(d);
+                // C = no borrow
+                cpsr.set_C(value >= subtrahend);
+                // V: signed overflow of value - subtrahend
+                let (_, v) = (value as i32).overflowing_sub(subtrahend as i32);
                 cpsr.set_V(v);
             }
         }
@@ -435,11 +444,18 @@ where
 {
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
-    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry, cpsr| {
+        let d = !value;
         if s {
-            unimplemented!()
+            if rd == PC {
+                unimplemented!("data processing Rd = PC with S flag.");
+            } else {
+                cpsr.set_N_from(d);
+                cpsr.set_Z_from(d);
+                cpsr.set_C(carry);
+            }
         }
-        gpr[rd] = !value
+        gpr[rd] = d;
     })
 }
 
