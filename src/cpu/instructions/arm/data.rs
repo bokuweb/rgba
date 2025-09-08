@@ -264,18 +264,24 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    let c = cpsr.get_C();
+    let cin = cpsr.get_C();
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
-        let c = u32::from(!c);
-        let d = gpr[rn].wrapping_sub(value).wrapping_sub(c);
+        let borrow_in = if cin { 0u32 } else { 1u32 };
+        let d = gpr[rn].wrapping_sub(value).wrapping_sub(borrow_in);
         if s {
             if rd == PC {
                 unimplemented!("data processing Rd = PC with S flag.");
             } else {
-                cpsr.set_N_from(d as u32);
-                cpsr.set_Z_from(d as u32);
-                cpsr.set_C(gpr[rn] >= value.wrapping_add(c));
-                let (_, v) = (gpr[rn] as i32).overflowing_sub(value.wrapping_add(c) as i32);
+                cpsr.set_N_from(d);
+                cpsr.set_Z_from(d);
+                // C（ノーボロー）を 64bit で厳密に
+                let rn64 = gpr[rn] as u64;
+                let sub64 = (value as u64) + (borrow_in as u64);
+                cpsr.set_C(rn64 >= sub64);
+                // V（符号オーバーフロー）
+                let op1 = gpr[rn] as i32;
+                let op2c = (value as i32).wrapping_add(borrow_in as i32);
+                let (_, v) = op1.overflowing_sub(op2c);
                 cpsr.set_V(v);
             }
         }
@@ -290,11 +296,10 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    let cin = cpsr.get_C() as u32; // 1 or 0
+    let cin = cpsr.get_C() as u32;
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
-        let borrow_in = 1 - cin; // (1 - C)
-        let subtrahend = gpr[rn].wrapping_add(borrow_in);
-        let d = value.wrapping_sub(subtrahend);
+        let borrow_in = 1 - cin;
+        let d = value.wrapping_sub(gpr[rn].wrapping_add(borrow_in));
 
         if s {
             if rd == PC {
@@ -302,10 +307,13 @@ where
             } else {
                 cpsr.set_N_from(d);
                 cpsr.set_Z_from(d);
-                // C = no borrow
-                cpsr.set_C(value >= subtrahend);
-                // V: signed overflow of value - subtrahend
-                let (_, v) = (value as i32).overflowing_sub(subtrahend as i32);
+                // C（ノーボロー）を 64bit で厳密に
+                let op2_64 = value as u64;
+                let subtrahend64 = (gpr[rn] as u64) + (borrow_in as u64);
+                cpsr.set_C(op2_64 >= subtrahend64);
+                // V（符号オーバーフロー）
+                let (_, v) = (value as i32)
+                    .overflowing_sub((gpr[rn] as i32).wrapping_add(borrow_in as i32));
                 cpsr.set_V(v);
             }
         }
