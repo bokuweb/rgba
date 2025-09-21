@@ -295,7 +295,6 @@ impl BusAccessor for CpuBus {
                     println!("🔧 DMA register write: 0x{:08x} = 0x{:04x} (not implemented)", addr, data);
                 }
             }
->>>>>>> origin/master
             0x0500_0000..=0x0500_03FF => self.palette.write_halfword(addr - 0x0500_0000, data),
             0x0600_0000..=0x0601_7FFF => {
                 let vram_addr = addr - 0x0600_0000;

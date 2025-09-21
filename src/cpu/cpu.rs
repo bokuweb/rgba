@@ -124,10 +124,10 @@ impl ARM {
         T: BusAccessor,
     {
         println!("🔥 Handling IRQ - switching to IRQ mode");
-        
+
         // Save current CPSR to SPSR_irq
         self.spsr = self.cpsr;
-        
+
         // Save current PC (return address) to LR
         // For IRQ, return address should be current PC (instruction being interrupted)
         let return_addr = if self.cpsr.get_cpu_state() == crate::cpu::registers::psr::CpuState::Thumb {
@@ -136,22 +136,26 @@ impl ARM {
             self.gpr[PC] - 4 // ARM mode: adjust for 4-byte instruction pipeline
         };
         self.gpr[LR] = return_addr;
-        
+
         // Switch to IRQ mode and disable IRQ in CPSR
         self.cpsr.set_mode(crate::cpu::registers::psr::Mode::IRQ);
         self.cpsr.set_I(true); // Disable IRQ
         self.cpsr.set_T(false); // Switch to ARM mode (IRQ handlers are always ARM)
-        
+
         // Jump to IRQ vector (0x18)
         self.gpr[PC] = 0x18;
         self.flush_pipeline();
-        
+
         // Clear pending IRQ
         self.irq_pending = false;
-        
-        println!("🔥 IRQ handler setup complete: PC=0x{:x}, LR=0x{:x}, CPSR.I={}", 
-            self.gpr[PC], self.gpr[LR], self.cpsr.get_I());
-        
+
+        println!(
+            "🔥 IRQ handler setup complete: PC=0x{:x}, LR=0x{:x}, CPSR.I={}",
+            self.gpr[PC],
+            self.gpr[LR],
+            self.cpsr.get_I()
+        );
+
         // Return cycle count for IRQ handling
         2 // Approximate cycle cost for IRQ handling
     }
@@ -189,16 +193,16 @@ impl ARM {
             let irq_cycle = self.handle_irq(bus);
             return Ok(irq_cycle);
         }
-        
+
         let cycle = if self.pipeline_wait > 0 { self.wait_pipeline_filled(bus) } else { 0 };
-        
+
         // Check for pending IRQ before executing normal instructions
         if self.irq_pending && !self.cpsr.get_I() {
             println!("🔥 IRQ detected - handling interrupt (CPSR.I: {})", self.cpsr.get_I());
             let irq_cycle = self.handle_irq(bus);
             return Ok(cycle + irq_cycle);
         }
-        
+
         // let log = format!("{:?}", self.gpr);
         // dbg!(&self.gpr);
         if self.gpr[15] == 134225604 {
@@ -227,8 +231,8 @@ impl ARM {
                     );
                 }
                 if self.gpr[15] >= 134217728 && self.gpr[15] <= 134225000 {
-                    println!("ARM: PC=0x{:08X}, instr=0x{:08X}, cond={:?}, CPSR=0x{:08X}, condition_ok={}", 
-                        self.gpr[15] - 8, fetched, cond, self.cpsr.get(), condition_result);
+                    // println!("ARM: PC=0x{:08X}, instr=0x{:08X}, cond={:?}, CPSR=0x{:08X}, condition_ok={}",
+                    //                        self.gpr[15] - 8, fetched, cond, self.cpsr.get(), condition_result);
                 }
                 if !condition_result {
                     let s = bus.compute_cycle(self.gpr[PC], AccessType::Seq(AccessWidth::Word));
@@ -245,7 +249,7 @@ impl ARM {
                     );
                 }
                 let cycle = cycle + self.execute_arm(instruction, bus)?;
-                
+
                 Ok(cycle)
             }
             CpuState::Thumb => {

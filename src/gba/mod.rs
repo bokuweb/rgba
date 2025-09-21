@@ -82,57 +82,21 @@ impl GBA {
     }
 
     pub fn frame(&mut self, started: bool) -> Vec<u8> {
-        let mut step_count = 0;
-        let mut total_cycles = 0;
         loop {
-            let cpu_cycles = self.arm.step(&mut self.bus, started).unwrap();
-            step_count += 1;
-            total_cycles += cpu_cycles;
-            
-            // For VBlank interrupt to occur, we need to ensure LCD progresses
-            // Even if CPU is in a wait loop, LCD should continue advancing
-            let effective_cycles = if cpu_cycles < 100 {
-                // If CPU is waiting (low cycle count), advance LCD at minimum rate
-                // VBlank occurs at line 160, need 1232 cycles per line, so boost significantly
-                std::cmp::max(cpu_cycles, 100)
-            } else {
-                cpu_cycles
-            };
-            
-            // Debug: Print cycles every 1000 steps
-            if step_count % 5000 == 0 {
-                println!("🔧 Step {}: CPU cycles = {}, Total = {}, Effective = {}", 
-                    step_count, cpu_cycles, total_cycles, effective_cycles);
-            }
-            
-            // Execute any pending DMA transfers
-            // TODO: self.bus.execute_dma_transfers();
-            
-            let lcdc = self.bus.borrow_mut_lcdc();
-            let (ready, vblank_entered) = lcdc.run(effective_cycles);
-            
-            // Check for VBlank IRQ and trigger CPU interrupt if needed
-            if vblank_entered {
-                println!("🔥 VBlank detected, requesting interrupt");
-                self.bus.request_vblank_interrupt();
-                if self.bus.should_service_interrupt() {
-                    self.arm.request_irq();
-                }
             let cycles = self.arm.step(&mut self.bus, started).unwrap();
-            
+
             // Execute any pending DMA transfers
             self.bus.execute_dma_transfers();
-            
+
             let lcdc = self.bus.borrow_mut_lcdc();
             let (ready, vblank_irq) = lcdc.run(cycles);
-            
+
             // Check for VBlank IRQ and trigger CPU interrupt if needed
             if vblank_irq {
                 self.arm.request_irq();
             }
-            
+
             if ready {
-                println!("🔧 Frame completed after {} steps", step_count);
                 break;
             }
         }
