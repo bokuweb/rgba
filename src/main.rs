@@ -6,6 +6,7 @@ extern crate bitfield;
 
 mod cpu;
 mod gba;
+mod interrupt;
 mod io;
 mod lcd;
 mod memory;

@@ -18,22 +18,24 @@ where
     let rm = dec.get_Rm() as usize;
 
     let (value, carry) = if dec.get_I() {
-        if dec.get_rotate() == 0 {
-            (dec.get_imm(), cpsr.get_C())
+        let imm = dec.get_imm();
+        let rot = dec.get_rotate(); // 0..15
+        if rot == 0 {
+            (imm, cpsr.get_C())
         } else {
-            let shift_value = dec.get_rotate() * 2;
-            (
-                ror(dec.get_imm(), shift_value, cpsr.get_C(), true),
-                is_carry_over(dec.get_sh().into(), dec.get_imm(), shift_value, cpsr.get_C(), true),
-            )
+            let amount = (rot * 2) & 31; // 2,4,...,30
+            let res = ror(imm, amount, cpsr.get_C(), false);
+            let carry = (res & 0x8000_0000) != 0; // 即値回転のCは結果bit31
+            (res, carry)
         }
     } else if dec.get_bit4() {
+        // Shift by register: if Rm is PC, use PC+12 equivalently（gpr[PC]≒PC+8 なので+4）
         let rm = gpr[rm] + if rm == PC { 4 } else { 0 };
         // if shifted by register, consume 1I cycle.
         cycle += 1;
-        // only lower 8bit used.
+        // only lower 8bit of Rs is used. Rs should not be PC per ARM spec.
         let rs = dec.get_Rs() as usize;
-        let rs = gpr[rs] + if rs == PC { 4 } else { 0 };
+        let rs = gpr[rs];
         let shift_value = rs & 0xFF;
         // dbg!("shift", rm, shift_value);
         (
@@ -42,6 +44,8 @@ where
         )
     } else {
         let shift_value = dec.get_shamt5();
+        // Shift by immediate: our gpr[PC] already reflects PC+8 in ARM state
+        // so do NOT add any extra offset here.
         let rm = gpr[rm];
         (
             shift(dec.get_sh().into(), rm, shift_value, cpsr.get_C(), dec.get_bit4()),
@@ -170,10 +174,19 @@ where
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
+        let d = value.wrapping_sub(gpr[rn]);
         if s {
-            unimplemented!()
+            if rd == PC {
+                unimplemented!("data processing Rd = PC with S flag.");
+            } else {
+                cpsr.set_N_from(d as u32);
+                cpsr.set_Z_from(d as u32);
+                cpsr.set_C(value >= gpr[rn]);
+                let (_, v) = (value as i32).overflowing_sub(gpr[rn] as i32);
+                cpsr.set_V(v);
+            }
         }
-        gpr[rd] = value.wrapping_sub(gpr[rn]);
+        gpr[rd] = d;
     })
 }
 
@@ -192,14 +205,12 @@ where
     T: BusAccessor,
 {
     let s = dec.get_S();
-    let i = dec.get_I();
-    let r = dec.get_R();
     let rd = dec.get_Rd() as usize;
-    let rn = dec.get_Rn();
-    let op1 = get_operand(gpr, rn, i, r);
+    let rn = dec.get_Rn() as usize;
+    // Rn はその時点のレジスタ値を使用（PC は既にパイプライン相当オフセット込み）
+    let op1 = gpr[rn];
     let result = exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let d = op1 as u64 + value as u64;
-        // dbg!(d, gpr[rn], value);
         if s {
             if rd == PC {
                 unimplemented!("data processing Rd = PC with S flag.");
@@ -223,9 +234,9 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    let c = cpsr.get_C();
+    let c_flag = cpsr.get_C();
     let result = exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
-        let c = if c { 1 } else { 0 } as u32;
+        let c = if c_flag { 1 } else { 0 } as u32;
         let d = gpr[rn] as u64 + value as u64 + c as u64;
         if s {
             if rd == PC {
@@ -234,7 +245,13 @@ where
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
                 cpsr.set_C_from(d);
-                let (_, v) = (gpr[rn] as i32).overflowing_add((value + c) as i32);
+                // V: (~(op1 ^ (op2 + Cin)) & (op1 ^ result)) の MSB
+                let op1 = gpr[rn] as i32;
+                let op2 = value as i32;
+                let cin = if c_flag { 1i32 } else { 0i32 };
+                let result = op1.wrapping_add(op2).wrapping_add(cin);
+                let op2c = op2.wrapping_add(cin);
+                let v = (((!(op1 ^ op2c)) & (op1 ^ result)) as u32 & 0x8000_0000) != 0;
                 cpsr.set_V(v);
             }
         }
@@ -250,18 +267,24 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    let c = cpsr.get_C();
+    let cin = cpsr.get_C();
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
-        let c = u32::from(!c);
-        let d = gpr[rn].wrapping_sub(value).wrapping_sub(c);
+        let borrow_in = if cin { 0u32 } else { 1u32 };
+        let d = gpr[rn].wrapping_sub(value).wrapping_sub(borrow_in);
         if s {
             if rd == PC {
                 unimplemented!("data processing Rd = PC with S flag.");
             } else {
-                cpsr.set_N_from(d as u32);
-                cpsr.set_Z_from(d as u32);
-                cpsr.set_C(gpr[rn] >= value + c);
-                let (_, v) = (gpr[rn] as i32).overflowing_sub((value + c) as i32);
+                cpsr.set_N_from(d);
+                cpsr.set_Z_from(d);
+                // C（ノーボロー）を 64bit で厳密に
+                let rn64 = gpr[rn] as u64;
+                let sub64 = (value as u64) + (borrow_in as u64);
+                cpsr.set_C(rn64 >= sub64);
+                // V（符号オーバーフロー）
+                let op1 = gpr[rn] as i32;
+                let op2c = (value as i32).wrapping_add(borrow_in as i32);
+                let (_, v) = op1.overflowing_sub(op2c);
                 cpsr.set_V(v);
             }
         }
@@ -276,18 +299,24 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    let c = cpsr.get_C();
+    let cin = cpsr.get_C() as u32;
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
-        let c = if c { 0 } else { 1 };
-        let d = value.wrapping_sub(gpr[rn]).wrapping_sub(c);
+        let borrow_in = 1 - cin;
+        let d = value.wrapping_sub(gpr[rn].wrapping_add(borrow_in));
+
         if s {
             if rd == PC {
                 unimplemented!("data processing Rd = PC with S flag.");
             } else {
-                cpsr.set_N_from(d as u32);
-                cpsr.set_Z_from(d as u32);
-                cpsr.set_C(gpr[rn] >= d);
-                let (_, v) = (gpr[rn] as i32).overflowing_sub(c as i32);
+                cpsr.set_N_from(d);
+                cpsr.set_Z_from(d);
+                // C（ノーボロー）を 64bit で厳密に
+                let op2_64 = value as u64;
+                let subtrahend64 = (gpr[rn] as u64) + (borrow_in as u64);
+                cpsr.set_C(op2_64 >= subtrahend64);
+                // V（符号オーバーフロー）
+                let (_, v) = (value as i32)
+                    .overflowing_sub((gpr[rn] as i32).wrapping_add(borrow_in as i32));
                 cpsr.set_V(v);
             }
         }
@@ -326,16 +355,16 @@ where
     T: BusAccessor,
 {
     let rn = dec.get_Rn() as usize;
+    // Rn はその時点のレジスタ値を使用
+    let base_rn = gpr[rn];
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
-        let rn = gpr[rn];
-        let cmp = rn.wrapping_sub(value);
+        let rn_value = base_rn;
+        let cmp = rn_value.wrapping_sub(value);
         cpsr.set_N(cmp >> 31 != 0);
         cpsr.set_Z(cmp == 0);
-        // let (_, v) = (rn as i32).overflowing_sub(value as i32);
-        let (_, v) = (rn as i32).overflowing_sub(value as i32);
+        let (_, v) = (rn_value as i32).overflowing_sub(value as i32);
         cpsr.set_V(v);
-        // NOTE: Should we consider to shifted carry?
-        cpsr.set_C(rn >= value);
+        cpsr.set_C(rn_value >= value);
     })
 }
 
@@ -347,11 +376,12 @@ where
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let rn = gpr[rn];
         let cmn = (rn as u64).wrapping_add(value as u64);
-        cpsr.set_N((cmn as i32) < 0);
-        cpsr.set_Z((cmn as u32) == 0);
+        let res = rn.wrapping_add(value);
+        cpsr.set_N_from(res);
+        cpsr.set_Z_from(res);
         let (_, v) = (rn as i32).overflowing_add(value as i32);
         cpsr.set_V(v);
-        cpsr.set_C(cmn & (1 << 32) != 0);
+        cpsr.set_C(cmn > 0xFFFF_FFFF);
     })
 }
 
@@ -426,11 +456,18 @@ where
 {
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
-    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry, cpsr| {
+        let d = !value;
         if s {
-            unimplemented!()
+            if rd == PC {
+                unimplemented!("data processing Rd = PC with S flag.");
+            } else {
+                cpsr.set_N_from(d);
+                cpsr.set_Z_from(d);
+                cpsr.set_C(carry);
+            }
         }
-        gpr[rd] = !value
+        gpr[rd] = d;
     })
 }
 

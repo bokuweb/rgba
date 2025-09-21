@@ -61,13 +61,15 @@ impl ARM {
         self.irq_disable = true;
         self.fiq_disable = true;
 
-        // TODO: ResetSP
-        // this.cpu.switchMode(this.cpu.MODE_SUPERVISOR);
-        // this.cpu.gprs[this.cpu.SP] = 0x3007FE0;
-        // this.cpu.switchMode(this.cpu.MODE_IRQ);
-        // this.cpu.gprs[this.cpu.SP] = 0x3007FA0;
-        // this.cpu.switchMode(this.cpu.MODE_SYSTEM);
-        self.gpr[SP] = 0x3007F00;
+        // Initialize banked SPs for privileged modes to IWRAM per common GBA conventions
+        // SVC (Supervisor) stack
+        self.bank_gpr.write(crate::cpu::registers::psr::Mode::Supervisor, SP, 0x0300_7FE0);
+        // IRQ stack
+        self.bank_gpr.write(crate::cpu::registers::psr::Mode::IRQ, SP, 0x0300_7FA0);
+        // FIQ stack (rarely used on GBA; provide a sane default)
+        self.bank_gpr.write(crate::cpu::registers::psr::Mode::FIQ, SP, 0x0300_7F00);
+        // Set System/User stack (current visible SP in System mode)
+        self.gpr[SP] = 0x0300_7F00;
     }
 
     fn flush_pipeline(&mut self) {
@@ -122,10 +124,10 @@ impl ARM {
         T: BusAccessor,
     {
         println!("🔥 Handling IRQ - switching to IRQ mode");
-        
+
         // Save current CPSR to SPSR_irq
         self.spsr = self.cpsr;
-        
+
         // Save current PC (return address) to LR
         // For IRQ, return address should be current PC (instruction being interrupted)
         let return_addr = if self.cpsr.get_cpu_state() == crate::cpu::registers::psr::CpuState::Thumb {
@@ -134,22 +136,26 @@ impl ARM {
             self.gpr[PC] - 4 // ARM mode: adjust for 4-byte instruction pipeline
         };
         self.gpr[LR] = return_addr;
-        
+
         // Switch to IRQ mode and disable IRQ in CPSR
         self.cpsr.set_mode(crate::cpu::registers::psr::Mode::IRQ);
         self.cpsr.set_I(true); // Disable IRQ
         self.cpsr.set_T(false); // Switch to ARM mode (IRQ handlers are always ARM)
-        
+
         // Jump to IRQ vector (0x18)
         self.gpr[PC] = 0x18;
         self.flush_pipeline();
-        
+
         // Clear pending IRQ
         self.irq_pending = false;
-        
-        println!("🔥 IRQ handler setup complete: PC=0x{:x}, LR=0x{:x}, CPSR.I={}", 
-            self.gpr[PC], self.gpr[LR], self.cpsr.get_I());
-        
+
+        println!(
+            "🔥 IRQ handler setup complete: PC=0x{:x}, LR=0x{:x}, CPSR.I={}",
+            self.gpr[PC],
+            self.gpr[LR],
+            self.cpsr.get_I()
+        );
+
         // Return cycle count for IRQ handling
         2 // Approximate cycle cost for IRQ handling
     }
@@ -181,15 +187,22 @@ impl ARM {
     where
         T: BusAccessor,
     {
+        // Check for pending IRQ before executing instruction
+        if self.irq_pending && !self.cpsr.get_I() {
+            println!("🔥 Processing pending IRQ");
+            let irq_cycle = self.handle_irq(bus);
+            return Ok(irq_cycle);
+        }
+
         let cycle = if self.pipeline_wait > 0 { self.wait_pipeline_filled(bus) } else { 0 };
-        
+
         // Check for pending IRQ before executing normal instructions
         if self.irq_pending && !self.cpsr.get_I() {
             println!("🔥 IRQ detected - handling interrupt (CPSR.I: {})", self.cpsr.get_I());
             let irq_cycle = self.handle_irq(bus);
             return Ok(cycle + irq_cycle);
         }
-        
+
         // let log = format!("{:?}", self.gpr);
         // dbg!(&self.gpr);
         if self.gpr[15] == 134225604 {
@@ -205,13 +218,38 @@ impl ARM {
                 }
                 let fetched = self.get_arm_executable(bus);
                 let cond: Cond = fetched.wrapping_shr(28).into();
-                if !self.cpsr.condition_ok(cond) {
+                let condition_result = self.cpsr.condition_ok(cond);
+                // Log SWI fetch regardless of PC range to verify decode/cond behavior
+                if (fetched & 0x0F00_0000) == 0x0F00_0000 {
+                    println!(
+                        "SWI fetched: PC=0x{:08X}, instr=0x{:08X}, cond={:?}, CPSR=0x{:08X}, cond_ok={}",
+                        self.gpr[15] - 8,
+                        fetched,
+                        cond,
+                        self.cpsr.get(),
+                        condition_result
+                    );
+                }
+                if self.gpr[15] >= 134217728 && self.gpr[15] <= 134225000 {
+                    // println!("ARM: PC=0x{:08X}, instr=0x{:08X}, cond={:?}, CPSR=0x{:08X}, condition_ok={}",
+                    //                        self.gpr[15] - 8, fetched, cond, self.cpsr.get(), condition_result);
+                }
+                if !condition_result {
                     let s = bus.compute_cycle(self.gpr[PC], AccessType::Seq(AccessWidth::Word));
                     self.increment_pc();
                     return Ok(s + cycle);
                 }
                 let instruction = arm::decode(fetched);
+                if (fetched & 0x0F00_0000) == 0x0F00_0000 {
+                    println!(
+                        "Decoded at SWI site: PC=0x{:08X}, instr=0x{:08X}, variant={:?}",
+                        self.gpr[15] - 8,
+                        fetched,
+                        instruction
+                    );
+                }
                 let cycle = cycle + self.execute_arm(instruction, bus)?;
+
                 Ok(cycle)
             }
             CpuState::Thumb => {
@@ -256,6 +294,9 @@ impl ARM {
         // }
         // }
         let (cycle, pipeline_status) = {
+            if let arm::Instruction::SWI = &instruction {
+                println!("about to execute SWI (will unimplemented!)");
+            }
             match instruction {
                 arm::Instruction::AND(dec) => exec_arm_and(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::EOR(dec) => exec_arm_eor(bus, dec, &mut self.gpr, &mut self.cpsr)?,
