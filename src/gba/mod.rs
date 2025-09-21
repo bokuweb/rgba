@@ -84,18 +84,18 @@ impl GBA {
     pub fn frame(&mut self, started: bool) -> Vec<u8> {
         loop {
             let cycles = self.arm.step(&mut self.bus, started).unwrap();
-            
+
             // Execute any pending DMA transfers
             self.bus.execute_dma_transfers();
-            
+
             let lcdc = self.bus.borrow_mut_lcdc();
             let (ready, vblank_irq) = lcdc.run(cycles);
-            
+
             // Check for VBlank IRQ and trigger CPU interrupt if needed
             if vblank_irq {
                 self.arm.request_irq();
             }
-            
+
             if ready {
                 break;
             }

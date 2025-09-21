@@ -34,35 +34,45 @@ where
     T: BusAccessor,
 {
     let value = if dec.get_I() {
-        dbg!("----", dec.get_rotate(), dec.get_imm());
-        // dec.get_rotate().rotate_right();
-        ror(
+        println!("MSR immediate: rotate={}, imm=0x{:02X}", dec.get_rotate(), dec.get_imm());
+        let rotated_value = ror(
             dec.get_imm(),
             dec.get_rotate().checked_shl(1).unwrap_or_default(),
             cpsr.get_C(),
             true,
-        )
+        );
+        println!("MSR rotated value: 0x{:08X}", rotated_value);
+        rotated_value
     } else {
-        dbg!("----9999");
+        println!("MSR register: Rm={}", dec.get_Rm());
         gpr[dec.get_Rm() as usize]
     };
 
     let mut mask = 0;
     if dec.get_F() {
         mask |= 0xff << 24;
+        println!("MSR: F flag set, mask=0x{:08X}", mask);
     }
     if dec.get_C() {
         mask |= 0xff;
+        println!("MSR: C flag set, mask=0x{:08X}", mask);
     }
+    println!("MSR: Final mask=0x{:08X}, value=0x{:08X}", mask, value);
 
     if dec.get_Pd() {
         spsr.set(spsr.get() & !mask | value & mask)
     } else {
         if mask & 0xF000_0000 != 0 {
+            println!("MSR: Setting flags - N={}, Z={}, C={}, V={}", 
+                value & 0x8000_0000 != 0,
+                value & 0x4000_0000 != 0, 
+                value & 0x2000_0000 != 0,
+                value & 0x1000_0000 != 0);
             cpsr.set_N(value & 0x8000_0000 != 0);
             cpsr.set_Z(value & 0x4000_0000 != 0);
             cpsr.set_C(value & 0x2000_0000 != 0);
             cpsr.set_V(value & 0x1000_0000 != 0);
+            println!("MSR: After setting - CPSR=0x{:08X}", cpsr.get());
         }
 
         let current_mode = cpsr.get_mode();
