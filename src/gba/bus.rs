@@ -208,7 +208,14 @@ impl BusAccessor for CpuBus {
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_word(addr),
             0x0200_0000..=0x0203_FFFF => self.eram.read_word(addr - 0x0200_0000),
-            0x0300_0000..=0x0300_7FFF => self.wram.read_word(addr - 0x0300_0000),
+            0x0300_0000..=0x0300_7FFF => {
+                let off = addr - 0x0300_0000;
+                let v = self.wram.read_word(off);
+                if off == 0 || off == 4 || off == 8 {
+                    println!("IWRAM read_word [0x{:08x}] -> 0x{:08x}", addr, v);
+                }
+                v
+            },
             0x0300_8000..=0x03FF_FFFF => 0,
             0x0400_0000..=0x0400_005F => self.lcdc.read_word(addr - 0x0400_0000),
             0x0400_0060..=0x0400_03FF => 0,
@@ -301,7 +308,11 @@ impl BusAccessor for CpuBus {
             // WRAM
             0x0300_0000..=0x0300_7FFF => {
                 // info!("wram addr = {:x} {:x}", addr, data);
-                self.wram.write_word(addr - 0x0300_0000, data);
+                let off = addr - 0x0300_0000;
+                if off == 0 || off == 4 || off == 8 {
+                    println!("IWRAM write_word [0x{:08x}] = 0x{:08x}", addr, data);
+                }
+                self.wram.write_word(off, data);
             }
             // Unused
             0x0300_8000..=0x03FF_FFFF => {

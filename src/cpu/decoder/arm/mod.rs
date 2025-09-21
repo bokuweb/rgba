@@ -226,6 +226,8 @@ pub fn decode(raw: Word) -> Instruction {
     // dbg!(raw);
 
     let instruction_type = match raw {
+        // SWI must be detected before other overlapping classes
+        v if (v & 0x0F00_0000) == 0x0F00_0000 => InstructionType::Swi,
         v if ((v & 0x0ffffff0) == 0x012fff10) => InstructionType::BranchAndExchange,
         v if (v & 0x0F80_0FF0) == 0x0100_0090 => InstructionType::SingleDataSwap,
         v if (v & 0x0E00_0000) == 0x0A00_0000 => InstructionType::Branch,
@@ -238,7 +240,6 @@ pub fn decode(raw: Word) -> Instruction {
         v if (v & 0x0E40_0090) == 0x0040_0090 => InstructionType::ExtraMemory,
         v if (v & 0x0C00_0000) == 0x0400_0000 => InstructionType::Memory,
         v if (v & 0x0C00_0000) == 0x0000_0000 => InstructionType::DataProcessing,
-        v if (v & 0x0F00_0000) == 0x0F00_0000 => InstructionType::Swi,
         _ => panic!("Unsupported instruction"),
     };
 

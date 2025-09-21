@@ -29,12 +29,13 @@ where
             (res, carry)
         }
     } else if dec.get_bit4() {
+        // Shift by register: if Rm is PC, use PC+12 equivalently（gpr[PC]≒PC+8 なので+4）
         let rm = gpr[rm] + if rm == PC { 4 } else { 0 };
         // if shifted by register, consume 1I cycle.
         cycle += 1;
-        // only lower 8bit used.
+        // only lower 8bit of Rs is used. Rs should not be PC per ARM spec.
         let rs = dec.get_Rs() as usize;
-        let rs = gpr[rs] + if rs == PC { 4 } else { 0 };
+        let rs = gpr[rs];
         let shift_value = rs & 0xFF;
         // dbg!("shift", rm, shift_value);
         (
@@ -43,6 +44,8 @@ where
         )
     } else {
         let shift_value = dec.get_shamt5();
+        // Shift by immediate: our gpr[PC] already reflects PC+8 in ARM state
+        // so do NOT add any extra offset here.
         let rm = gpr[rm];
         (
             shift(dec.get_sh().into(), rm, shift_value, cpsr.get_C(), dec.get_bit4()),
@@ -204,10 +207,10 @@ where
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
     let rn = dec.get_Rn() as usize;
-    let op1 = gpr[rn]; // 常にこれ（PCは+8の値が入っている前提）
+    // Rn はその時点のレジスタ値を使用（PC は既にパイプライン相当オフセット込み）
+    let op1 = gpr[rn];
     let result = exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let d = op1 as u64 + value as u64;
-        // dbg!(d, gpr[rn], value);
         if s {
             if rd == PC {
                 unimplemented!("data processing Rd = PC with S flag.");
@@ -352,16 +355,16 @@ where
     T: BusAccessor,
 {
     let rn = dec.get_Rn() as usize;
+    // Rn はその時点のレジスタ値を使用
+    let base_rn = gpr[rn];
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
-        let rn = gpr[rn];
-        let cmp = rn.wrapping_sub(value);
+        let rn_value = base_rn;
+        let cmp = rn_value.wrapping_sub(value);
         cpsr.set_N(cmp >> 31 != 0);
         cpsr.set_Z(cmp == 0);
-        // let (_, v) = (rn as i32).overflowing_sub(value as i32);
-        let (_, v) = (rn as i32).overflowing_sub(value as i32);
+        let (_, v) = (rn_value as i32).overflowing_sub(value as i32);
         cpsr.set_V(v);
-        // NOTE: Should we consider to shifted carry?
-        cpsr.set_C(rn >= value);
+        cpsr.set_C(rn_value >= value);
     })
 }
 
