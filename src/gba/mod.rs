@@ -1,4 +1,5 @@
 mod bus;
+mod dma;
 
 use crate::io;
 use crate::lcd;
@@ -117,6 +118,17 @@ impl GBA {
                 if self.bus.should_service_interrupt() {
                     self.arm.request_irq();
                 }
+            let cycles = self.arm.step(&mut self.bus, started).unwrap();
+            
+            // Execute any pending DMA transfers
+            self.bus.execute_dma_transfers();
+            
+            let lcdc = self.bus.borrow_mut_lcdc();
+            let (ready, vblank_irq) = lcdc.run(cycles);
+            
+            // Check for VBlank IRQ and trigger CPU interrupt if needed
+            if vblank_irq {
+                self.arm.request_irq();
             }
             
             if ready {

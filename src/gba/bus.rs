@@ -18,6 +18,7 @@ use std::io::Read;
 use std::path::Path;
 
 use types::*;
+use super::dma::DMAController;
 
 pub const BIOS_ADDR: u32 = 0x0000_0000;
 pub const EWRAM_ADDR: u32 = 0x0200_0000;
@@ -141,6 +142,7 @@ impl CycleLUT {
 pub struct CpuBus {
     cycleLUT: CycleLUT,
     lcdc: lcd::LCDController,
+    dma: DMAController,
     bios: Rom,
     rom: Rom,
     wram: Ram,
@@ -249,7 +251,12 @@ impl BusAccessor for CpuBus {
                 self.wram.write_byte(addr - 0x0300_0000, data);
             }
             0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
-            0x0400_0060..=0x0400_03FF => {}
+            0x0400_0060..=0x0400_03FF => {
+                // TODO: Implement DMA, Timer, and other I/O registers
+                if addr >= 0x0400_00B0 && addr <= 0x0400_00DE {
+                    println!("🔧 DMA register byte write: 0x{:08x} = 0x{:02x} (not implemented)", addr, data);
+                }
+            }
             0x0500_0000..=0x0500_03FF => self.palette.write_byte(addr - 0x0500_0000, data),
             0x0600_0000..=0x0601_7FFF => self.vram.write_byte(addr - 0x0600_0000, data),
             0x0700_0000..=0x0700_03FF => self.oam.write_byte(addr - 0x0700_0000, data),
@@ -281,10 +288,21 @@ impl BusAccessor for CpuBus {
             0x0400_0200 => self.interrupt_controller.borrow_mut().write_ie(data), // IE register
             0x0400_0202 => self.interrupt_controller.borrow_mut().write_if(data), // IF register  
             0x0400_0208 => self.interrupt_controller.borrow_mut().write_ime(data), // IME register
-            0x0400_0060..=0x0400_03FF => {}
+            0x0400_0060..=0x0400_03FF => {
+                // TODO: Implement DMA, Timer, and other I/O registers
+                // For now, just log DMA register writes to help debug
+                if addr >= 0x0400_00B0 && addr <= 0x0400_00DE {
+                    println!("🔧 DMA register write: 0x{:08x} = 0x{:04x} (not implemented)", addr, data);
+                }
+            }
+>>>>>>> origin/master
             0x0500_0000..=0x0500_03FF => self.palette.write_halfword(addr - 0x0500_0000, data),
             0x0600_0000..=0x0601_7FFF => {
-                self.vram.write_halfword(addr - 0x0600_0000, data);
+                let vram_addr = addr - 0x0600_0000;
+                if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
+                    println!("📝 VRAM halfword write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:04x}", addr, vram_addr, data);
+                }
+                self.vram.write_halfword(vram_addr, data);
             }
             0x0E00_0000..=0x0E00_FFFF => {
                 println!("⚠️  WARNING: Invalid halfword write to SRAM at 0x{:08x} = 0x{:04x} (SRAM is byte-access only, ignored)", addr, data);
@@ -319,10 +337,53 @@ impl BusAccessor for CpuBus {
                 println!("⚠️  WARNING: Write to unused area 0x{:08x} = 0x{:08x} (ignored)", addr, data);
             }
             0x0400_0000..=0x0400_005F => self.lcdc.write_word(addr - 0x0400_0000, data),
-            0x0400_0060..=0x0400_03FF => {}
+            0x0400_0060..=0x0400_03FF => {
+                // DMA and other I/O registers
+                match addr {
+                    // DMA0 registers
+                    0x0400_00B0 => self.dma.write_source(0, data),
+                    0x0400_00B4 => self.dma.write_destination(0, data),
+                    0x0400_00B8 => self.dma.write_count(0, data as HalfWord),
+                    0x0400_00BA => self.dma.write_control(0, data as HalfWord),
+                    
+                    // DMA1 registers
+                    0x0400_00BC => self.dma.write_source(1, data),
+                    0x0400_00C0 => self.dma.write_destination(1, data),
+                    0x0400_00C4 => self.dma.write_count(1, data as HalfWord),
+                    0x0400_00C6 => self.dma.write_control(1, data as HalfWord),
+                    
+                    // DMA2 registers
+                    0x0400_00C8 => self.dma.write_source(2, data),
+                    0x0400_00CC => self.dma.write_destination(2, data),
+                    0x0400_00D0 => self.dma.write_count(2, data as HalfWord),
+                    0x0400_00D2 => self.dma.write_control(2, data as HalfWord),
+                    
+                    // DMA3 registers (most commonly used)
+                    0x0400_00D4 => self.dma.write_source(3, data),
+                    0x0400_00D8 => self.dma.write_destination(3, data),
+                    0x0400_00DC => {
+                        // DMA3CNT_L (count) and DMA3CNT_H (control) are written together as 32-bit
+                        let count = (data & 0xFFFF) as HalfWord;
+                        let control = ((data >> 16) & 0xFFFF) as HalfWord;
+                        self.dma.write_count(3, count);
+                        self.dma.write_control(3, control);
+                    }
+                    
+                    _ => {
+                        // Other I/O registers (Timer, etc.)
+                        if addr >= 0x0400_00B0 && addr <= 0x0400_00DE {
+                            println!("🔧 Unknown DMA register word write: 0x{:08x} = 0x{:08x} (ignored)", addr, data);
+                        }
+                    }
+                }
+            }
             0x0500_0000..=0x0500_03FF => self.palette.write_word(addr - 0x0500_0000, data),
             0x0600_0000..=0x0601_7FFF => {
-                self.vram.write_word(addr - 0x0600_0000, data);
+                let vram_addr = addr - 0x0600_0000;
+                if vram_addr < 0x10000 { // Log first 64KB of VRAM writes  
+                    println!("📝 VRAM word write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:08x}", addr, vram_addr, data);
+                }
+                self.vram.write_word(vram_addr, data);
             }
             0x0E00_0000..=0x0E00_FFFF => {
                 println!("⚠️  WARNING: Invalid word write to SRAM at 0x{:08x} = 0x{:08x} (SRAM is byte-access only, ignored)", addr, data);
@@ -363,6 +424,7 @@ impl CpuBus {
         CpuBus {
             cycleLUT: CycleLUT::new(),
             lcdc,
+            dma: DMAController::new(),
             bios,
             rom,
             wram,
@@ -386,6 +448,128 @@ impl CpuBus {
     
     pub(crate) fn should_service_interrupt(&self) -> bool {
         self.interrupt_controller.borrow().should_service_interrupt()
+    }
+
+    pub(crate) fn execute_dma_transfers(&mut self) {
+        // Check for pending DMA transfers and execute them
+        for channel in 0..4 {
+            if let Some((source, dest, count, transfer_size)) = self.dma.get_pending_transfer(channel) {
+                self.perform_dma_transfer(channel, source, dest, count, transfer_size);
+                self.dma.complete_transfer(channel);
+            }
+        }
+    }
+
+    fn perform_dma_transfer(&mut self, channel: usize, mut source: Word, mut dest: Word, count: usize, transfer_size: usize) {
+        println!("🚀 Executing DMA{} transfer: 0x{:08x} -> 0x{:08x}, {} words of {} bytes", 
+            channel, source, dest, count, transfer_size);
+
+        for i in 0..count {
+            if transfer_size == 4 {
+                // 32-bit transfer
+                let data = self.read_word_internal(source);
+                self.write_word_internal(dest, data);
+                if i < 5 { // Log first few transfers
+                    println!("  DMA{} [{}]: 0x{:08x} -> 0x{:08x} = 0x{:08x}", channel, i, source, dest, data);
+                }
+            } else {
+                // 16-bit transfer
+                let data = self.read_halfword_internal(source);
+                self.write_halfword_internal(dest, data);
+                if i < 5 { // Log first few transfers
+                    println!("  DMA{} [{}]: 0x{:08x} -> 0x{:08x} = 0x{:04x}", channel, i, source, dest, data);
+                }
+            }
+
+            // Update addresses based on control settings
+            let src_control = self.dma.channels[channel].get_source_control();
+            let dest_control = self.dma.channels[channel].get_dest_control();
+
+            match src_control {
+                0 => source += transfer_size as u32, // Increment
+                1 => source -= transfer_size as u32, // Decrement
+                2 => {}, // Fixed
+                3 => {}, // Prohibited
+                _ => {}
+            }
+
+            match dest_control {
+                0 => dest += transfer_size as u32, // Increment
+                1 => dest -= transfer_size as u32, // Decrement
+                2 => {}, // Fixed
+                3 => dest += transfer_size as u32, // Increment/Reload
+                _ => {}
+            }
+        }
+
+        println!("✅ DMA{} transfer completed: {} transfers", channel, count);
+    }
+
+    // Internal memory access methods that bypass DMA triggering
+    fn read_word_internal(&self, addr: Word) -> Word {
+        match addr {
+            0x0800_0000..=0x09FF_FFFF => self.rom.read_word(addr - 0x0800_0000),
+            0x0300_0000..=0x0300_7FFF => self.wram.read_word(addr - 0x0300_0000),
+            0x0200_0000..=0x0203_FFFF => self.eram.read_word(addr - 0x0200_0000),
+            _ => {
+                println!("⚠️  DMA read_word from unsupported address: 0x{:08x}", addr);
+                0
+            }
+        }
+    }
+
+    fn read_halfword_internal(&self, addr: Word) -> HalfWord {
+        match addr {
+            0x0800_0000..=0x09FF_FFFF => self.rom.read_halfword(addr - 0x0800_0000),
+            0x0300_0000..=0x0300_7FFF => self.wram.read_halfword(addr - 0x0300_0000),
+            0x0200_0000..=0x0203_FFFF => self.eram.read_halfword(addr - 0x0200_0000),
+            _ => {
+                println!("⚠️  DMA read_halfword from unsupported address: 0x{:08x}", addr);
+                0
+            }
+        }
+    }
+
+    fn write_word_internal(&mut self, addr: Word, data: Word) {
+        match addr {
+            0x0600_0000..=0x0601_7FFF => {
+                let vram_addr = addr - 0x0600_0000;
+                if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
+                    println!("📝 DMA VRAM word write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:08x}", addr, vram_addr, data);
+                }
+                self.vram.write_word(vram_addr, data);
+            }
+            0x0500_0000..=0x0500_03FF => {
+                println!("📝 DMA Palette word write: 0x{:08x} = 0x{:08x}", addr, data);
+                self.palette.write_word(addr - 0x0500_0000, data);
+            }
+            0x0300_0000..=0x0300_7FFF => self.wram.write_word(addr - 0x0300_0000, data),
+            0x0200_0000..=0x0203_FFFF => self.eram.write_word(addr - 0x0200_0000, data),
+            _ => {
+                println!("⚠️  DMA write_word to unsupported address: 0x{:08x} = 0x{:08x}", addr, data);
+            }
+        }
+    }
+
+    fn write_halfword_internal(&mut self, addr: Word, data: HalfWord) {
+        match addr {
+            0x0600_0000..=0x0601_7FFF => {
+                let vram_addr = addr - 0x0600_0000;
+                if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
+                    println!("📝 DMA VRAM halfword write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:04x}", addr, vram_addr, data);
+                }
+                self.vram.write_halfword(vram_addr, data);
+            }
+            0x0500_0000..=0x0500_03FF => {
+                println!("📝 DMA Palette halfword write: 0x{:08x} = 0x{:04x}", addr, data);
+                self.palette.write_halfword(addr - 0x0500_0000, data);
+            }
+            0x0300_0000..=0x0300_7FFF => self.wram.write_halfword(addr - 0x0300_0000, data),
+            0x0200_0000..=0x0203_FFFF => self.eram.write_halfword(addr - 0x0200_0000, data),
+            _ => {
+                println!("⚠️  DMA write_halfword to unsupported address: 0x{:08x} = 0x{:04x}", addr, data);
+            }
+        }
     }
 
     pub(crate) fn borrow_mut_lcdc(&mut self) -> &mut lcd::LCDController {

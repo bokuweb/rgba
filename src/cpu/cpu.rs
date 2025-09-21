@@ -191,6 +191,14 @@ impl ARM {
         }
         
         let cycle = if self.pipeline_wait > 0 { self.wait_pipeline_filled(bus) } else { 0 };
+        
+        // Check for pending IRQ before executing normal instructions
+        if self.irq_pending && !self.cpsr.get_I() {
+            println!("🔥 IRQ detected - handling interrupt (CPSR.I: {})", self.cpsr.get_I());
+            let irq_cycle = self.handle_irq(bus);
+            return Ok(cycle + irq_cycle);
+        }
+        
         // let log = format!("{:?}", self.gpr);
         // dbg!(&self.gpr);
         if self.gpr[15] == 134225604 {
