@@ -2,7 +2,7 @@ use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::{arm, thumb};
 use crate::cpu::instructions::arm::{
-    block_data_transfer::*, branch::*, branch_and_exchange::*, data::*, extra_memory::*, memory::*, multiple::*, psr_transfer::*, single_data_swap::*,
+    block_data_transfer::*, branch::*, branch_and_exchange::*, data::*, extra_memory::*, memory::*, multiple::*, psr_transfer::*, single_data_swap::*, swi::*,
 };
 
 use crate::cpu::instructions::thumb::*;
@@ -294,8 +294,8 @@ impl ARM {
         // }
         // }
         let (cycle, pipeline_status) = {
-            if let arm::Instruction::SWI = &instruction {
-                println!("about to execute SWI (will unimplemented!)");
+            if let arm::Instruction::SWI(dec) = &instruction {
+                println!("about to execute SWI 0x{:02X}", dec.get_immediate());
             }
             match instruction {
                 arm::Instruction::AND(dec) => exec_arm_and(bus, dec, &mut self.gpr, &mut self.cpsr)?,
@@ -343,7 +343,7 @@ impl ARM {
                 arm::Instruction::SWP(dec) => exec_arm_swp(bus, dec, &mut self.gpr)?,
                 arm::Instruction::SWPB(dec) => exec_arm_swpb(bus, dec, &mut self.gpr)?,
                 arm::Instruction::Undefined => unimplemented!(),
-                arm::Instruction::SWI => unimplemented!(),
+                arm::Instruction::SWI(dec) => exec_arm_swi(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr)?,
                 // ArmOpcode::Unknown => self.execute_unknown(dec),
                 _ => unimplemented!(),
             }
