@@ -242,7 +242,7 @@ impl Bios {
             0x0B => Self::cpu_set(bus, gpr),
             0x0C => Self::cpu_fast_set(bus, gpr),
             _ => {
-                println!("BIOS: Unimplemented SWI 0x{:02X}", swi_number);
+                unimplemented!("BIOS: Unimplemented SWI 0x{:02X}", swi_number);
             }
         }
     }

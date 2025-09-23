@@ -355,6 +355,12 @@ impl ARM {
             println!("MI condition: N={}, condition_ok={}", self.cpsr.get_N(), cond_ok);
         }
 
+        // Debug Test 005 specifically
+        if self.gpr[PC] >= 0x08000150 && self.gpr[PC] <= 0x08000160 {
+            println!("TEST 005 DEBUG: PC=0x{:08X}, cond={:?}, CPSR=0x{:08X}, N={}, cond_ok={}",
+                self.gpr[PC], cond, self.cpsr.get(), self.cpsr.get_N(), cond_ok);
+        }
+
         // If condition is not met, instruction does not execute (takes 1 cycle)
         if !cond_ok {
             return Ok(1);

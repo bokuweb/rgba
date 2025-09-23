@@ -84,6 +84,11 @@ where
             dbg!("🔥value", value);
         }
         gpr[rd] = value;
+
+        // Critical debug: detect m_exit 5 execution
+        if rd == 12 && value == 5 {
+            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
+        }
     })
 }
 
@@ -107,6 +112,11 @@ where
             }
         }
         gpr[rd] = d;
+
+        // Critical debug: detect m_exit 5 execution
+        if rd == 12 && d == 5 {
+            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
+        }
         // dbg!("and1", value);
     })
 }
@@ -131,6 +141,11 @@ where
             }
         }
         gpr[rd] = d;
+
+        // Critical debug: detect m_exit 5 execution
+        if rd == 12 && d == 5 {
+            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
+        }
     })
 }
 
@@ -163,6 +178,11 @@ where
             }
         }
         gpr[rd] = d;
+
+        // Critical debug: detect m_exit 5 execution
+        if rd == 12 && d == 5 {
+            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
+        }
     })
 }
 
@@ -187,6 +207,11 @@ where
             }
         }
         gpr[rd] = d;
+
+        // Critical debug: detect m_exit 5 execution
+        if rd == 12 && d == 5 {
+            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
+        }
     })
 }
 
@@ -321,6 +346,11 @@ where
             }
         }
         gpr[rd] = d;
+
+        // Critical debug: detect m_exit 5 execution
+        if rd == 12 && d == 5 {
+            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
+        }
     })
 }
 
@@ -405,6 +435,11 @@ where
         }
         // dbg!(d, rn, value, &gpr);
         gpr[rd] = d;
+
+        // Critical debug: detect m_exit 5 execution
+        if rd == 12 && d == 5 {
+            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
+        }
     })
 }
 
@@ -425,6 +460,11 @@ where
             }
         }
         gpr[rd] = value;
+
+        // Critical debug: detect m_exit 5 execution
+        if rd == 12 && value == 5 {
+            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
+        }
     })
 }
 
@@ -447,6 +487,11 @@ where
             }
         }
         gpr[rd] = d;
+
+        // Critical debug: detect m_exit 5 execution
+        if rd == 12 && d == 5 {
+            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
+        }
     })
 }
 
@@ -468,6 +513,11 @@ where
             }
         }
         gpr[rd] = d;
+
+        // Critical debug: detect m_exit 5 execution
+        if rd == 12 && d == 5 {
+            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
+        }
     })
 }
 
@@ -484,5 +534,10 @@ where
             cpsr.set_C(carry);
         }
         gpr[rd] = value;
+
+        // Critical debug: detect m_exit 5 execution
+        if rd == 12 && value == 5 {
+            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
+        }
     })
 }
