@@ -15,7 +15,9 @@ pub fn exec_arm_b(dec: Branch, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()
     } else {
         imm
     }) as i32;
+    let old_pc = gpr[PC];
     gpr[PC] = (gpr[PC] as i32 + imm * 4) as Word;
+    println!("Branch executed: PC 0x{:08X} -> 0x{:08X} (offset: {})", old_pc, gpr[PC], imm);
     // dbg!("b");
     // b does not consume extra cycle.
     Ok((0, PipelineStatus::Flush))

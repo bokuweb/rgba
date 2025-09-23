@@ -38,12 +38,15 @@ where
     // Execute BIOS function directly (emulated BIOS)
     // Note: In a real GBA, this would jump to BIOS ROM and execute there
     // We implement the functions directly here for emulation efficiency
+    println!("SWI: Before BIOS execution - PC=0x{:08X}, CPSR=0x{:08X}, SPSR=0x{:08X}", gpr[15], cpsr.get(), spsr.get());
     Bios::execute_swi(_bus, swi_number, gpr);
+    println!("SWI: After BIOS execution - PC=0x{:08X}, LR=0x{:08X}", gpr[15], gpr[14]);
 
     // For emulated BIOS: restore mode and return to caller directly
     // This simulates the BIOS function completing and returning
     *cpsr = *spsr;  // Restore original CPSR (mode, flags, etc.)
     gpr[15] = lr_svc + 4;  // Return to instruction after SWI
+    println!("SWI: After restoration - PC=0x{:08X}, CPSR=0x{:08X}, returning to 0x{:08X}", gpr[15], cpsr.get(), lr_svc + 4);
 
     Ok((1, PipelineStatus::Flush))  // Flush pipeline due to PC change
 }

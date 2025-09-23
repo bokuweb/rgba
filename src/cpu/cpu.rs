@@ -230,6 +230,13 @@ impl ARM {
                         condition_result
                     );
                 }
+
+                // Debug log for all instructions after SWI
+                if self.gpr[15] >= 0x08001E10 && self.gpr[15] <= 0x08001E30 {
+                    println!("DEBUG: PC=0x{:08X}, instr=0x{:08X}, cond={:?}, CPSR=0x{:08X}, condition_ok={}",
+                                           self.gpr[15] - 8, fetched, cond, self.cpsr.get(), condition_result);
+                }
+
                 if self.gpr[15] >= 134217728 && self.gpr[15] <= 134225000 {
                     // println!("ARM: PC=0x{:08X}, instr=0x{:08X}, cond={:?}, CPSR=0x{:08X}, condition_ok={}",
                     //                        self.gpr[15] - 8, fetched, cond, self.cpsr.get(), condition_result);
@@ -284,15 +291,75 @@ impl ARM {
     where
         T: BusAccessor,
     {
-        // // dbg!(&instruction, &self.gpr);
-        //if (self.gpr[15] >= 134221712 && self.gpr[15] <= 134221748) {
-        //         dbg!(&self.gpr);
-        //     // dbg!("0");
+        // Extract condition code from instruction and check if it should execute
+        use crate::cpu::types::Cond;
+        let cond = match &instruction {
+            arm::Instruction::AND(dec) => dec.get_cond().into(),
+            arm::Instruction::EOR(dec) => dec.get_cond().into(),
+            arm::Instruction::SUB(dec) => dec.get_cond().into(),
+            arm::Instruction::RSB(dec) => dec.get_cond().into(),
+            arm::Instruction::ADD(dec) => dec.get_cond().into(),
+            arm::Instruction::ADC(dec) => dec.get_cond().into(),
+            arm::Instruction::SBC(dec) => dec.get_cond().into(),
+            arm::Instruction::RSC(dec) => dec.get_cond().into(),
+            arm::Instruction::TST(dec) => dec.get_cond().into(),
+            arm::Instruction::TEQ(dec) => dec.get_cond().into(),
+            arm::Instruction::CMP(dec) => dec.get_cond().into(),
+            arm::Instruction::CMN(dec) => dec.get_cond().into(),
+            arm::Instruction::ORR(dec) => dec.get_cond().into(),
+            arm::Instruction::MOV(dec) => dec.get_cond().into(),
+            arm::Instruction::LSL(dec) => dec.get_cond().into(),
+            arm::Instruction::LSR(dec) => dec.get_cond().into(),
+            arm::Instruction::ASR(dec) => dec.get_cond().into(),
+            arm::Instruction::RRX(dec) => dec.get_cond().into(),
+            arm::Instruction::ROR(dec) => dec.get_cond().into(),
+            arm::Instruction::BIC(dec) => dec.get_cond().into(),
+            arm::Instruction::MVN(dec) => dec.get_cond().into(),
+            arm::Instruction::MUL(dec) => dec.get_cond().into(),
+            arm::Instruction::MLA(dec) => dec.get_cond().into(),
+            arm::Instruction::UMULL(dec) => dec.get_cond().into(),
+            arm::Instruction::UMLAL(dec) => dec.get_cond().into(),
+            arm::Instruction::SMULL(dec) => dec.get_cond().into(),
+            arm::Instruction::SMLAL(dec) => dec.get_cond().into(),
+            arm::Instruction::LDR(dec) => dec.get_cond().into(),
+            arm::Instruction::STR(dec) => dec.get_cond().into(),
+            arm::Instruction::LDRB(dec) => dec.get_cond().into(),
+            arm::Instruction::STRB(dec) => dec.get_cond().into(),
+            arm::Instruction::STRH(dec) => dec.get_cond().into(),
+            arm::Instruction::LDRH(dec) => dec.get_cond().into(),
+            arm::Instruction::LDRSB(dec) => dec.get_cond().into(),
+            arm::Instruction::LDRSH(dec) => dec.get_cond().into(),
+            arm::Instruction::B(dec) => dec.get_cond().into(),
+            arm::Instruction::BL(dec) => dec.get_cond().into(),
+            arm::Instruction::BX(dec) => dec.get_cond().into(),
+            arm::Instruction::LDM(dec) => dec.get_cond().into(),
+            arm::Instruction::STM(dec) => dec.get_cond().into(),
+            arm::Instruction::MRS(dec) => dec.get_cond().into(),
+            arm::Instruction::MSR(dec) => dec.get_cond().into(),
+            arm::Instruction::SWP(dec) => dec.get_cond().into(),
+            arm::Instruction::SWPB(dec) => dec.get_cond().into(),
+            arm::Instruction::SWI(dec) => ((dec.raw >> 28) & 0xF).into(), // Extract condition from raw field
+            arm::Instruction::Undefined => Cond::AL, // Undefined instructions are always executed
+        };
 
-        // if self.gpr[15] >= 134225848 && self.gpr[15] <= 134224860 {
-        //     dbg!('🔥', &instruction, &self.gpr);
-        // }
-        // }
+        let cond_ok = self.cpsr.condition_ok(cond);
+
+        // Debug output for branches with conditions and MI-related conditions
+        if let arm::Instruction::B(_) | arm::Instruction::BL(_) = &instruction {
+            println!("Branch: cond={:?}, cond_ok={} (N={}, Z={}, C={}, V={})",
+                cond, cond_ok, self.cpsr.get_N(), self.cpsr.get_Z(), self.cpsr.get_C(), self.cpsr.get_V());
+        }
+
+        // Debug specifically for MI condition
+        if cond == crate::cpu::types::Cond::MI {
+            println!("MI condition: N={}, condition_ok={}", self.cpsr.get_N(), cond_ok);
+        }
+
+        // If condition is not met, instruction does not execute (takes 1 cycle)
+        if !cond_ok {
+            return Ok(1);
+        }
+
         let (cycle, pipeline_status) = {
             if let arm::Instruction::SWI(dec) = &instruction {
                 println!("about to execute SWI 0x{:02X}", dec.get_immediate());
