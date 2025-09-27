@@ -20,12 +20,18 @@ where
         let rm = dec.get_Rm() as usize;
         let sh = dec.get_sh().into();
         let shamt5 = dec.get_shamt5();
+        // t362 対応: 特殊シフト RRX
+        //  - ROR #0 は RRX として解釈され、CPSR.C をビット31に入れて右1シフトする。
+        //  - テストでは C=1, Rm=0 により RRX(0) = 0x8000_0000 となることを期待。
+        //  - ここで shift(...) を使って RRX を含むシフトを評価し、オフセットに反映する。
         shift(sh, gpr[rm], shamt5, cpsr.get_C(), false)
     };
+    // t362 の目的は RRX により 0x8000_0000 を生成し、プリインデックス/書き戻しで Rn に反映させること。
+    // 以前の 28bit マスクは外し、wrap演算の結果をそのまま使う（GBAのアドレスラップはバス側で処理）。
     let offset_base = if dec.get_U() {
-        (base.wrapping_add(offset) & 0x0FFF_FFFF) as Word
+        base.wrapping_add(offset)
     } else {
-        (base.wrapping_sub(offset) & 0x0FFF_FFFF) as Word
+        base.wrapping_sub(offset)
     };
     if dec.get_P() {
         base = offset_base;
@@ -61,9 +67,9 @@ where
         shift(sh, gpr[rm], shamt5, cpsr.get_C(), false)
     };
     let offset_base = if dec.get_U() {
-        (base.wrapping_add(offset) & 0x0FFF_FFFF) as Word
+        base.wrapping_add(offset)
     } else {
-        (base.wrapping_sub(offset) & 0x0FFF_FFFF) as Word
+        base.wrapping_sub(offset)
     };
     if dec.get_P() {
         base = offset_base;
@@ -125,7 +131,12 @@ where
         //  - gba-tests/arm/single_transfer.asm の t354（"ARM 7: Misaligned store"）がこの挙動を検証。
         //    本実装はその要件に合わせ、STR の実行側で 4 バイト境界へ丸める。
         let eff_addr = base & 0xFFFF_FFFC;
-        bus.write_word(eff_addr, gpr[rd]);
+        // t356: Store PC + 4
+        //  - Rd==PC の STR は「PC+4」を格納する仕様。
+        //    本エミュレータでは gpr[PC] は常に「現在命令アドレス+8」を表すため、実装上は gpr[PC]+4 (= 実効PC+12) を書き込む。
+        //  - 参照: fixtures/gba-tests/arm/single_transfer.asm の t356 ("ARM 7: Store PC + 4")
+        let value = if rd == PC { gpr[PC].wrapping_add(4) } else { gpr[rd] };
+        bus.write_word(eff_addr, value);
     });
     res
 }
