@@ -30,6 +30,12 @@ pub fn exec_arm_b(dec: Branch, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()
     }
 
     gpr[PC] = new_pc;
+
+    // Critical debug for Test 005
+    if old_pc >= 0x08000150 && old_pc <= 0x08000160 {
+        println!("BRANCH EXECUTION: PC changed from 0x{:08X} to 0x{:08X}, returning PipelineStatus::Flush", old_pc, new_pc);
+    }
+
     // dbg!("b");
     // b does not consume extra cycle.
     Ok((0, PipelineStatus::Flush))

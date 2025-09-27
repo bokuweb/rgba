@@ -43,10 +43,11 @@ where
     println!("SWI: After BIOS execution - PC=0x{:08X}, LR=0x{:08X}", gpr[15], gpr[14]);
 
     // For emulated BIOS: restore mode and return to caller directly
-    // This simulates the BIOS function completing and returning
+    // ARM semantics: LR_svc should contain the address to return to (PC after SWI)
+    // We saved LR_svc as (PC_at_SWI + 4). To resume correctly, set PC to LR_svc.
     *cpsr = *spsr;  // Restore original CPSR (mode, flags, etc.)
-    gpr[15] = lr_svc + 4;  // Return to instruction after SWI
-    println!("SWI: After restoration - PC=0x{:08X}, CPSR=0x{:08X}, returning to 0x{:08X}", gpr[15], cpsr.get(), lr_svc + 4);
+    gpr[15] = lr_svc;  // Return to instruction after SWI (no additional +4)
+    println!("SWI: After restoration - PC=0x{:08X}, CPSR=0x{:08X}, returning to 0x{:08X}", gpr[15], cpsr.get(), lr_svc);
 
     Ok((1, PipelineStatus::Flush))  // Flush pipeline due to PC change
 }

@@ -355,14 +355,24 @@ impl ARM {
             println!("MI condition: N={}, condition_ok={}", self.cpsr.get_N(), cond_ok);
         }
 
-        // Debug Test 005 specifically
+        // Debug Test 005 specifically - track multiple executions
+        use std::sync::{Mutex, OnceLock};
+        static EXECUTION_COUNT: OnceLock<Mutex<std::collections::HashMap<u32, u32>>> = OnceLock::new();
         if self.gpr[PC] >= 0x08000150 && self.gpr[PC] <= 0x08000160 {
-            println!("TEST 005 DEBUG: PC=0x{:08X}, cond={:?}, CPSR=0x{:08X}, N={}, cond_ok={}",
-                self.gpr[PC], cond, self.cpsr.get(), self.cpsr.get_N(), cond_ok);
+            let counter = EXECUTION_COUNT.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
+            let mut map = counter.lock().unwrap();
+            let count = map.entry(self.gpr[PC]).and_modify(|e| *e += 1).or_insert(1);
+            println!("TEST 005 DEBUG: PC=0x{:08X} (execution #{}) cond={:?}, CPSR=0x{:08X}, N={}, cond_ok={}, instruction={:?}",
+                self.gpr[PC], count, cond, self.cpsr.get(), self.cpsr.get_N(), cond_ok, instruction);
         }
 
         // If condition is not met, instruction does not execute (takes 1 cycle)
         if !cond_ok {
+            // Critical debug for Test 005 conditional failure
+            if self.gpr[PC] >= 0x08000150 && self.gpr[PC] <= 0x08000160 {
+                println!("🚨 CONDITION FAILED: PC=0x{:08X}, cond={:?}, N={}, Z={}, C={}, V={}",
+                    self.gpr[PC], cond, self.cpsr.get_N(), self.cpsr.get_Z(), self.cpsr.get_C(), self.cpsr.get_V());
+            }
             return Ok(1);
         }
 
