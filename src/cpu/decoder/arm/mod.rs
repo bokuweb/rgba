@@ -7,6 +7,7 @@ mod memory;
 mod multiple;
 mod psr_transfer;
 mod single_data_swap;
+mod swi;
 
 pub use block_data_transfer::*;
 pub use branch::*;
@@ -17,6 +18,7 @@ pub use memory::*;
 pub use multiple::*;
 pub use psr_transfer::*;
 pub use single_data_swap::*;
+pub use swi::*;
 
 use crate::cpu::types::Cond;
 use crate::types::Word;
@@ -80,7 +82,7 @@ pub enum Instruction {
     LDM(BlockDataTransfer),
     STM(BlockDataTransfer),
     Undefined,
-    SWI,
+    SWI(SoftwareInterrupt),
     MSR(PsrTransfer),
     MRS(PsrTransfer),
     SWP(SingleDataSwap),
@@ -254,7 +256,7 @@ pub fn decode(raw: Word) -> Instruction {
         InstructionType::Branch => decode_branch(raw),
         InstructionType::BranchAndExchange => Instruction::BX(BranchAndExchange(raw)),
         InstructionType::BlockDataTransfer => decode_block_data_transfer(raw),
-        InstructionType::Swi => Instruction::SWI,
+        InstructionType::Swi => Instruction::SWI(decode_swi(raw)),
         _ => panic!("unsupported instruction"),
     }
 

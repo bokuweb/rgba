@@ -128,6 +128,7 @@ impl LCDController {
     }
 
     pub fn run(&mut self, cycles: usize) -> (bool, bool) {
+        println!("🎮 LCD run: incoming cycles={}, total_cycles={}, lines={}", cycles, self.cycles + cycles, self.lines);
         self.cycles += cycles;
         let mut vblank_irq_requested = false;
 
@@ -157,7 +158,12 @@ impl LCDController {
     pub fn read_halfword(&self, addr: Word) -> HalfWord {
         match addr {
             0x0000 => self.dispcnt.read(),
-            0x0004 => self.dispstat.read(self.cycles, self.lines),
+            0x0004 => {
+                let result = self.dispstat.read(self.cycles, self.lines);
+                println!("🔍 DISPSTAT read: 0x{:04X} (lines: {}, cycles: {}, vblank: {})",
+                    result, self.lines, self.cycles, result & 0x0001);
+                result
+            },
             0x0006 => self.lines as HalfWord,
             0x0008 => self.bg0cnt.read(),
             0x000A => self.bg1cnt.read(),
@@ -187,7 +193,12 @@ impl LCDController {
     pub fn read_word(&self, addr: Word) -> Word {
         match addr {
             0x0000 => self.dispcnt.read() as Word,
-            0x0004 => self.dispstat.read(self.cycles, self.lines) as Word,
+            0x0004 => {
+                let result = self.dispstat.read(self.cycles, self.lines) as Word;
+                println!("🔍 DISPSTAT word read: 0x{:08X} (lines: {}, cycles: {}, vblank: {})",
+                    result, self.lines, self.cycles, result & 0x0001);
+                result
+            },
             0x0006 => self.lines as Word,
 
             0x0008 => self.bg0cnt.read() as Word,

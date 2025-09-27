@@ -82,24 +82,37 @@ impl GBA {
     }
 
     pub fn frame(&mut self, started: bool) -> Vec<u8> {
+        let mut total_cycles = 0;
         loop {
             let cycles = self.arm.step(&mut self.bus, started).unwrap();
+            total_cycles += cycles;
 
             // Execute any pending DMA transfers
             self.bus.execute_dma_transfers();
 
-            let lcdc = self.bus.borrow_mut_lcdc();
-            let (ready, vblank_irq) = lcdc.run(cycles);
+            // Process LCD controller with accumulated cycles more frequently for accurate DISPSTAT reads
+            if total_cycles >= 100 {
+                let lcdc = self.bus.borrow_mut_lcdc();
+                let (ready, vblank_irq) = lcdc.run(total_cycles);
+                total_cycles = 0;
 
-            // Check for VBlank IRQ and trigger CPU interrupt if needed
-            if vblank_irq {
-                self.arm.request_irq();
-            }
+                // Check for VBlank IRQ and trigger CPU interrupt if needed
+                if vblank_irq {
+                    self.arm.request_irq();
+                }
 
-            if ready {
-                break;
+                if ready {
+                    break;
+                }
             }
         }
+
+        // Process any remaining cycles
+        if total_cycles > 0 {
+            let lcdc = self.bus.borrow_mut_lcdc();
+            lcdc.run(total_cycles);
+        }
+
         let lcdc = self.bus.borrow_lcdc();
         let vram = self.bus.borrow_vram();
         let palette = self.bus.borrow_palette();
