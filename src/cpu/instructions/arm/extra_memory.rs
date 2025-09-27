@@ -88,15 +88,13 @@ where
     let rd = dec.get_Rd() as usize;
     exec_ex_memory_load(bus, gpr, dec, |gpr, base| {
         // t408: Misaligned load halfword (rotated)
-        //  - LDRH が未アラインド(odd)アドレスからロードする場合、読み取った16bit値を 8bit ROR して返す（ARM7TDMI仕様）。
+        //  - LDRH が奇数アドレスの場合、読み出し値は 32bit として 8bit ROR されたものになる（ARM7TDMI仕様）。
         //  - 参照: fixtures/gba-tests/arm/halfword_transfer.asm t408
         if (base & 1) != 0 {
-            let raw = bus.read_halfword(base & 0xFFFF_FFFE);
-            let rotated = ((raw as u32) >> 8) | (((raw as u32) & 0xFF) << 8);
-            gpr[rd] = (rotated & 0xFFFF) as u32;
+            let raw = bus.read_halfword(base & 0xFFFF_FFFE) as u32;
+            gpr[rd] = raw.rotate_right(8);
         } else {
-            let data = bus.read_halfword(base);
-            gpr[rd] = data as u32;
+            gpr[rd] = bus.read_halfword(base) as u32;
         }
     })
 }
