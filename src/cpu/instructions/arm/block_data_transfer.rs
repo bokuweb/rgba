@@ -209,7 +209,11 @@ where
                 AccessType::Seq(AccessWidth::Word)
             };
             cycle += bus.compute_cycle(address, access_type);
-            bus.write_word(address, gpr[i] as Word);
+            // t508: Memory alignment (block transfer)
+            //  - ARM7TDMI のワード転送は未アラインド時に bits[1:0] を無視して 4 バイト境界へ書き込む。
+            //  - ldm 側は既に読み出し時に &0xFFFF_FFFC でアラインしており、stm も同様にアラインする必要がある。
+            //  - 参照: fixtures/gba-tests/arm/block_transfer.asm t508
+            bus.write_word(address & 0xFFFF_FFFC, gpr[i] as Word);
             address = address.wrapping_add(4);
         }
     }
