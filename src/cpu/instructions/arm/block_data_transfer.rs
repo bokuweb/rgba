@@ -43,10 +43,7 @@ where
         for i in 0..0x10 {
             let m = 0x01 << i;
             if register_list & m != 0 {
-                if dec.get_W() && i == dec.get_Rn() && offset == 0 {
-                    register_list &= !m;
-                    immediate += 4;
-                }
+                // t516: LDM writeback base first must still load Rn; do not drop Rn from rlist
                 offset += 4;
             }
         }
@@ -57,10 +54,7 @@ where
         for i in 0..0x10 {
             let m = 0x01 << i;
             if register_list & m != 0 {
-                if dec.get_W() && i == dec.get_Rn() && offset == 0 {
-                    register_list &= !m;
-                    immediate += 4;
-                }
+                // t516: LDM writeback base first must still load Rn; do not drop Rn from rlist
                 immediate -= 4;
                 offset -= 4;
             }
