@@ -420,7 +420,7 @@ impl ARM {
                 arm::Instruction::BL(dec) => exec_arm_bl(dec, &mut self.gpr)?,
                 arm::Instruction::BX(dec) => exec_arm_bx(dec, &mut self.cpsr, &mut self.gpr)?,
                 arm::Instruction::LDM(dec) => exec_arm_ldm(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
-                arm::Instruction::STM(dec) => exec_arm_stm(bus, dec, &mut self.gpr)?,
+                arm::Instruction::STM(dec) => exec_arm_stm(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
                 arm::Instruction::MRS(dec) => exec_arm_mrs(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr)?,
                 arm::Instruction::MSR(dec) => exec_arm_msr(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
                 arm::Instruction::SWP(dec) => exec_arm_swp(bus, dec, &mut self.gpr)?,

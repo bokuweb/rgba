@@ -131,7 +131,15 @@ where
     }
 }
 
-pub fn exec_arm_stm<T>(bus: &mut T, dec: BlockDataTransfer, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
+pub fn exec_arm_stm<T>(
+    bus: &mut T,
+    dec: BlockDataTransfer,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -141,9 +149,10 @@ where
     let mut is_first_entry = true;
     let mut is_rn_skipped = false;
 
-    if dec.get_S() {
-        unimplemented!();
-    }
+    // t511, t512 など: Sビット処理（ユーザレジスタアクセス）
+    //  - 特権モードで S=1 の STM/ LDM は、転送対象レジスタはユーザモードのバンクを参照する。
+    //  - 本実装ではストア前のベース計算/書き戻しは現モードで行い、ストア直前に一時的に System(=User) に切替えて値を取得し、
+    //    終了後に元のモードへ戻す。
 
     let mut register_list = dec.get_register_list();
     let mut immediate = 0;
@@ -198,6 +207,11 @@ where
         gpr[dec.get_Rn() as usize] = v as u32;
     }
 
+    let current_mode = cpsr.get_mode();
+    if dec.get_S() {
+        cpsr.switch_mode(Mode::System, gpr, spsr, bank_gpr, bank_spsr);
+    }
+
     for i in 0..0x10 {
         // let reg = if !dec.get_U() { 0x0F - i } else { i } as usize;
         //    for i in 0..0x10 {
@@ -213,13 +227,18 @@ where
             //  - ARM7TDMI のワード転送は未アラインド時に bits[1:0] を無視して 4 バイト境界へ書き込む。
             //  - ldm 側は既に読み出し時に &0xFFFF_FFFC でアラインしており、stm も同様にアラインする必要がある。
             //  - 参照: fixtures/gba-tests/arm/block_transfer.asm t508
-            bus.write_word(address & 0xFFFF_FFFC, gpr[i] as Word);
+            // t510: Store PC + 4 in block store
+            //  - レジスタリストに PC を含む STM は PC+4 を保存する（本実装では gpr[PC] が常に+8のため +4 して実質 PC+12）。
+            //  - 参照: fixtures/gba-tests/arm/block_transfer.asm t510
+            let value = if i == PC { gpr[PC].wrapping_add(4) } else { gpr[i] };
+            bus.write_word(address & 0xFFFF_FFFC, value as Word);
             address = address.wrapping_add(4);
         }
     }
 
     if dec.get_S() {
-        unimplemented!();
+        // 元のモードに復帰
+        cpsr.switch_mode(current_mode, gpr, spsr, bank_gpr, bank_spsr);
     }
 
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));
