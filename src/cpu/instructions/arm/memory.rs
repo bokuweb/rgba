@@ -119,7 +119,13 @@ where
 {
     let rd = dec.get_Rd() as usize;
     let res = exec_memory_store(bus, gpr, dec, cpsr, |bus, gpr, base| {
-        bus.write_word(base, gpr[rd]);
+        // t354: Misaligned store
+        //  - ARMv4 (ARM7TDMI) 仕様では、ワードストアが未アラインドアドレスに対して行われた場合、
+        //    アドレスの下位2bitは無視され、4バイト境界にアラインされたアドレスへ書き込む。
+        //  - gba-tests/arm/single_transfer.asm の t354（"ARM 7: Misaligned store"）がこの挙動を検証。
+        //    本実装はその要件に合わせ、STR の実行側で 4 バイト境界へ丸める。
+        let eff_addr = base & 0xFFFF_FFFC;
+        bus.write_word(eff_addr, gpr[rd]);
     });
     res
 }
