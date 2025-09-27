@@ -350,12 +350,26 @@ where
     })
 }
 
-pub fn exec_arm_tst<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_tst<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
+    let rn = dec.get_Rn() as usize;
     let rn_value = get_operand(&*gpr, dec.get_Rn(), dec.get_I(), dec.get_bit4());
-    exec_data_processing(bus, gpr, dec, cpsr, &mut |_, value, carry, cpsr| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry, cpsr| {
+        // Bad TST with Rn == PC in privileged mode: restore CPSR from SPSR, do not update flags
+        if rn == PC && cpsr.get_mode() != Mode::User {
+            cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
+            return;
+        }
         let tst = rn_value & value;
         cpsr.set_N(tst >> 31 != 0);
         cpsr.set_Z(tst == 0);
@@ -363,12 +377,26 @@ where
     })
 }
 
-pub fn exec_arm_teq<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_teq<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
+    let rn = dec.get_Rn() as usize;
     let rn_value = get_operand(&*gpr, dec.get_Rn(), dec.get_I(), dec.get_bit4());
-    exec_data_processing(bus, gpr, dec, cpsr, &mut |_, value, carry, cpsr| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry, cpsr| {
+        // Bad TEQ with Rn == PC in privileged mode
+        if rn == PC && cpsr.get_mode() != Mode::User {
+            cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
+            return;
+        }
         let teq = rn_value ^ value;
         cpsr.set_N(teq >> 31 != 0);
         cpsr.set_Z(teq == 0);
@@ -376,12 +404,26 @@ where
     })
 }
 
-pub fn exec_arm_cmp<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_cmp<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
+    let rn = dec.get_Rn() as usize;
     let rn_value = get_operand(&*gpr, dec.get_Rn(), dec.get_I(), dec.get_bit4());
-    exec_data_processing(bus, gpr, dec, cpsr, &mut |_, value, _, cpsr| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
+        // Bad CMP with Rn == PC in privileged mode
+        if rn == PC && cpsr.get_mode() != Mode::User {
+            cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
+            return;
+        }
         let cmp = rn_value.wrapping_sub(value);
         cpsr.set_N(cmp >> 31 != 0);
         cpsr.set_Z(cmp == 0);
@@ -391,12 +433,26 @@ where
     })
 }
 
-pub fn exec_arm_cmn<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_cmn<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
+    let rn = dec.get_Rn() as usize;
     let rn_value = get_operand(&*gpr, dec.get_Rn(), dec.get_I(), dec.get_bit4());
-    exec_data_processing(bus, gpr, dec, cpsr, &mut |_, value, _, cpsr| {
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
+        // Bad CMN with Rn == PC in privileged mode
+        if rn == PC && cpsr.get_mode() != Mode::User {
+            cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
+            return;
+        }
         let cmn = (rn_value as u64).wrapping_add(value as u64);
         let res = rn_value.wrapping_add(value);
         cpsr.set_N_from(res);
