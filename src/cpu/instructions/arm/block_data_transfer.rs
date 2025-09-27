@@ -71,6 +71,37 @@ where
     let mut address = base.wrapping_add(immediate) as Word;
     let current_mode = cpsr.get_mode();
 
+    // t513: Load empty rlist
+    //  - LDM* with an empty register list loads PC from a single address determined by addressing mode
+    //    and performs writeback by +/- 0x40 bytes (as if 16 registers were transferred).
+    //  - IA: load from [Rn],    Rn += 0x40
+    //    IB: load from [Rn+4],  Rn += 0x40
+    //    DA: load from [Rn-0x3C], Rn -= 0x40
+    //    DB: load from [Rn-0x40], Rn -= 0x40
+    //  - After loading PC, the pipeline must be flushed.
+    if register_list == 0 {
+        let rn_val = gpr[dec.get_Rn() as usize];
+        let (pc_addr, wb): (Word, i64) = match (dec.get_U(), dec.get_P()) {
+            (true, false) => (rn_val, 0x40),                   // IA
+            (true, true) => (rn_val.wrapping_add(4), 0x40),    // IB
+            (false, false) => (rn_val.wrapping_sub(0x3C), -0x40), // DA
+            (false, true) => (rn_val.wrapping_sub(0x40), -0x40),  // DB
+        };
+
+        let access_type = if is_n_cycle { AccessType::NonSeq(AccessWidth::Word) } else { AccessType::Seq(AccessWidth::Word) };
+        cycle += bus.compute_cycle(pc_addr, access_type);
+        let data = bus.read_word(pc_addr & 0xFFFF_FFFC);
+        gpr[PC] = data;
+
+        if dec.get_W() {
+            gpr[dec.get_Rn() as usize] = (rn_val as i64 + wb) as u32;
+        }
+
+        // Consume 1I cycle and flush pipeline due to PC load
+        let cycle = cycle + 1;
+        return Ok((cycle, PipelineStatus::Flush));
+    }
+
     if dec.get_W() {
         let v = gpr[dec.get_Rn() as usize] as i64 + offset as i64;
         gpr[dec.get_Rn() as usize] = v as u32;
@@ -152,6 +183,7 @@ where
     // t511, t512 など: Sビット処理（ユーザレジスタアクセス）
     //  - 特権モードで S=1 の STM/ LDM は、転送対象レジスタはユーザモードのバンクを参照する。
     //  - 本実装ではストア前のベース計算/書き戻しは現モードで行い、ストア直前に一時的に System(=User) に切替えて値を取得し、
+    
     //    終了後に元のモードへ戻す。
 
     let mut register_list = dec.get_register_list();
