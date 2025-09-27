@@ -15,6 +15,7 @@ pub enum Cond {
     GT = 0b1100,
     LE = 0b1101,
     AL = 0b1110,
+    NV = 0b1111,
 }
 
 impl Into<Cond> for u32 {
@@ -35,6 +36,7 @@ impl Into<Cond> for u32 {
             0b1100 => Cond::GT,
             0b1101 => Cond::LE,
             0b1110 => Cond::AL,
+            0b1111 => Cond::NV,
             _ => panic!("illegal condition detected."),
         }
     }
@@ -58,6 +60,7 @@ impl Into<Cond> for u16 {
             0b1100 => Cond::GT,
             0b1101 => Cond::LE,
             0b1110 => Cond::AL,
+            0b1111 => Cond::NV,
             _ => panic!("illegal condition detected."),
         }
     }

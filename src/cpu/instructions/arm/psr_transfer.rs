@@ -62,7 +62,7 @@ where
     if dec.get_Pd() {
         spsr.set(spsr.get() & !mask | value & mask)
     } else {
-        if mask & 0xF000_0000 != 0 {
+        if mask & 0xFF00_0000 != 0 {
             println!("MSR: Setting flags - N={}, Z={}, C={}, V={}", 
                 value & 0x8000_0000 != 0,
                 value & 0x4000_0000 != 0, 
@@ -73,6 +73,12 @@ where
             cpsr.set_C(value & 0x2000_0000 != 0);
             cpsr.set_V(value & 0x1000_0000 != 0);
             println!("MSR: After setting - CPSR=0x{:08X}", cpsr.get());
+
+            // Special debug for Test 005
+            if gpr[PC] >= 0x08000150 && gpr[PC] <= 0x08000160 {
+                println!("MSR TEST 005: PC=0x{:08X}, Set N={}, Final CPSR=0x{:08X}",
+                    gpr[PC], cpsr.get_N(), cpsr.get());
+            }
         }
 
         let current_mode = cpsr.get_mode();

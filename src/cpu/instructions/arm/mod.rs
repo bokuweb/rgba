@@ -7,3 +7,6 @@ pub mod memory;
 pub mod multiple;
 pub mod single_data_swap;
 pub mod psr_transfer;
+pub mod swi;
+
+pub use swi::*;

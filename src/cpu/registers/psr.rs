@@ -225,11 +225,12 @@ impl PSR {
             Cond::VC => !self.get_V(),
             Cond::HI => self.get_C() && !self.get_Z(),
             Cond::LS => !self.get_C() || self.get_Z(),
-            Cond::GE => !self.get_N() == !self.get_V(),
-            Cond::LT => !self.get_N() != !self.get_V(),
-            Cond::GT => !self.get_Z() && !self.get_N() == !self.get_V(),
-            Cond::LE => self.get_Z() || !self.get_N() != !self.get_V(),
+            Cond::GE => self.get_N() == self.get_V(),
+            Cond::LT => self.get_N() != self.get_V(),
+            Cond::GT => !self.get_Z() && (self.get_N() == self.get_V()),
+            Cond::LE => self.get_Z() || (self.get_N() != self.get_V()),
             Cond::AL => true,
+            Cond::NV => false, // Never condition (ARMv4)
         }
     }
 }
