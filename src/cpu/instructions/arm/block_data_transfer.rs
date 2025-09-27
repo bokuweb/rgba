@@ -228,6 +228,33 @@ where
     let mut address = base.wrapping_add(immediate) as Word;
     // let current_mode = cpsr.get_mode();
 
+    // t515: Store empty rlist (STM* with {}): store PC+4 and writeback +/-0x40
+    //  - IA (U=1,P=0): store [Rn],        Rn += 0x40
+    //    IB (U=1,P=1): store [Rn+4],      Rn += 0x40
+    //    DA (U=0,P=0): store [Rn-0x3C],   Rn -= 0x40
+    //    DB (U=0,P=1): store [Rn-0x40],   Rn -= 0x40
+    //  - PC の保存値は PC+4（本実装では gpr[PC] が+8のため +4 で実効PC+12に相当）。
+    //  - 参照: fixtures/gba-tests/arm/block_transfer.asm t515
+    if register_list == 0 {
+        let rn_val = gpr[dec.get_Rn() as usize];
+        let (store_addr, wb): (Word, i64) = match (dec.get_U(), dec.get_P()) {
+            (true, false) => (rn_val, 0x40),                    // IA
+            (true, true) => (rn_val.wrapping_add(4), 0x40),     // IB
+            (false, false) => (rn_val.wrapping_sub(0x3C), -0x40), // DA
+            (false, true) => (rn_val.wrapping_sub(0x40), -0x40),  // DB
+        };
+
+        let access_type = if is_n_cycle { AccessType::NonSeq(AccessWidth::Word) } else { AccessType::Seq(AccessWidth::Word) };
+        cycle += bus.compute_cycle(store_addr, access_type);
+        let value = gpr[PC].wrapping_add(4);
+        bus.write_word(store_addr & 0xFFFF_FFFC, value as Word);
+        if dec.get_W() {
+            gpr[dec.get_Rn() as usize] = (rn_val as i64 + wb) as u32;
+        }
+        let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));
+        return Ok((cycle, PipelineStatus::Continue));
+    }
+
     if dec.get_W() {
         let v = gpr[dec.get_Rn() as usize] as i64 + offset as i64;
         if overwrap {
