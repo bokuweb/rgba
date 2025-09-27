@@ -117,11 +117,12 @@ where
 {
     let rd = dec.get_Rd() as usize;
     exec_ex_memory_load(bus, gpr, dec, |gpr, base| {
-        // Misaligned signed halfword load semantics (used by t409): rotate by 8 if odd, then sign-extend
+        // t409: Misaligned load signed halfword
+        //  - ARM7TDMI の奇数アドレス LDRSH は LDRSB 相当（対象バイトを符号拡張）として扱われることをテストが要求。
+        //  - 参照: fixtures/gba-tests/arm/halfword_transfer.asm t409
         if (base & 1) != 0 {
-            let raw = bus.read_halfword(base & 0xFFFF_FFFE);
-            let rotated = (((raw as u32) >> 8) | (((raw as u32) & 0xFF) << 8)) & 0xFFFF;
-            gpr[rd] = (rotated as i16 as i32) as u32;
+            let byte = bus.read_byte(base) as i8;
+            gpr[rd] = (byte as i32) as u32;
         } else {
             let raw = bus.read_halfword(base) as u32;
             gpr[rd] = (raw as i16 as i32) as u32;
