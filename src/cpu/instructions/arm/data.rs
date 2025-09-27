@@ -54,7 +54,15 @@ where
 
     data_process(gpr, value, carry, cpsr);
 
-    if dec.get_Rd() == PC as u32 {
+    // For compare/test instructions (TST/TEQ/CMP/CMN), even if Rd field encodes PC (as in cmp pc, pc),
+    // the pipeline must NOT be flushed. Only flush when a real write to PC occurs.
+    let opcode = dec.get_opcode();
+    let is_compare = (opcode == 0b1000 && dec.get_S())
+        || (opcode == 0b1001 && dec.get_S())
+        || (opcode == 0b1010 && dec.get_S())
+        || (opcode == 0b1011 && dec.get_S());
+
+    if dec.get_Rd() == PC as u32 && !is_compare {
         // waiting for pipeline filled is executed by caller.
         Ok((cycle, PipelineStatus::Flush))
     } else {
