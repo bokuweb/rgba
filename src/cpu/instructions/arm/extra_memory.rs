@@ -15,9 +15,9 @@ where
 
     let offset = if dec.get_I() { dec.get_imm8() } else { gpr[dec.get_Rm() as usize] };
     let offset_base = if dec.get_U() {
-        (base.wrapping_add(offset) & 0x0FFF_FFFF) as Word
+        base.wrapping_add(offset)
     } else {
-        (base.wrapping_sub(offset) & 0x0FFF_FFFF) as Word
+        base.wrapping_sub(offset)
     };
     if dec.get_P() {
         base = offset_base;
@@ -56,14 +56,19 @@ where
     let mut base = gpr[dec.get_Rn() as usize];
     let offset = if dec.get_I() { dec.get_imm8() } else { gpr[dec.get_Rm() as usize] };
     let offset_base = if dec.get_U() {
-        (base.wrapping_add(offset) & 0x0FFF_FFFF) as Word
+        base.wrapping_add(offset)
     } else {
-        (base.wrapping_sub(offset) & 0x0FFF_FFFF) as Word
+        base.wrapping_sub(offset)
     };
     if dec.get_P() {
         base = offset_base;
     }
-    bus.write_word(base, gpr[rd] & 0xFFFF);
+    // t407: Aligned store halfword
+    //  - STRH は未アラインドアドレス時に bit0 を無視し、2バイト境界へ丸めて格納する（ARM7TDMI仕様）。
+    //  - gba-tests/arm/halfword_transfer.asm t407 がこの挙動を検証。
+    //  - 16bit 幅で書き込む必要があるため、write_halfword を使用する。
+    let eff_addr = base & 0xFFFF_FFFE;
+    bus.write_halfword(eff_addr, (gpr[rd] & 0xFFFF) as HalfWord);
     let store_cycle = bus.compute_cycle(base, access_type);
     if !dec.get_P() {
         gpr[dec.get_Rn() as usize] = offset_base;
@@ -82,8 +87,17 @@ where
 {
     let rd = dec.get_Rd() as usize;
     exec_ex_memory_load(bus, gpr, dec, |gpr, base| {
-        let data = bus.read_halfword(base);
-        gpr[rd] = data as u32;
+        // t408: Misaligned load halfword (rotated)
+        //  - LDRH が未アラインド(odd)アドレスからロードする場合、読み取った16bit値を 8bit ROR して返す（ARM7TDMI仕様）。
+        //  - 参照: fixtures/gba-tests/arm/halfword_transfer.asm t408
+        if (base & 1) != 0 {
+            let raw = bus.read_halfword(base & 0xFFFF_FFFE);
+            let rotated = ((raw as u32) >> 8) | (((raw as u32) & 0xFF) << 8);
+            gpr[rd] = (rotated & 0xFFFF) as u32;
+        } else {
+            let data = bus.read_halfword(base);
+            gpr[rd] = data as u32;
+        }
     })
 }
 
@@ -105,7 +119,14 @@ where
 {
     let rd = dec.get_Rd() as usize;
     exec_ex_memory_load(bus, gpr, dec, |gpr, base| {
-        let data = bus.read_word(base);
-        gpr[rd] = (data & 0xFFFF) as i16 as i32 as u32;
+        // Misaligned signed halfword load semantics (used by t409): rotate by 8 if odd, then sign-extend
+        if (base & 1) != 0 {
+            let raw = bus.read_halfword(base & 0xFFFF_FFFE);
+            let rotated = (((raw as u32) >> 8) | (((raw as u32) & 0xFF) << 8)) & 0xFFFF;
+            gpr[rd] = (rotated as i16 as i32) as u32;
+        } else {
+            let raw = bus.read_halfword(base) as u32;
+            gpr[rd] = (raw as i16 as i32) as u32;
+        }
     })
 }
