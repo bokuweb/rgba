@@ -2,7 +2,7 @@ use crate::cpu::bus::accessor::*;
 use crate::cpu::constants::*;
 use crate::cpu::decoder::{arm, thumb};
 use crate::cpu::instructions::arm::{
-    block_data_transfer::*, branch::*, branch_and_exchange::*, data::*, extra_memory::*, memory::*, multiple::*, psr_transfer::*, single_data_swap::*,
+    block_data_transfer::*, branch::*, branch_and_exchange::*, data::*, extra_memory::*, memory::*, multiple::*, psr_transfer::*, single_data_swap::*, swi::*,
 };
 
 use crate::cpu::instructions::thumb::*;
@@ -230,6 +230,13 @@ impl ARM {
                         condition_result
                     );
                 }
+
+                // Debug log for all instructions after SWI
+                if self.gpr[15] >= 0x08001E10 && self.gpr[15] <= 0x08001E30 {
+                    println!("DEBUG: PC=0x{:08X}, instr=0x{:08X}, cond={:?}, CPSR=0x{:08X}, condition_ok={}",
+                                           self.gpr[15] - 8, fetched, cond, self.cpsr.get(), condition_result);
+                }
+
                 if self.gpr[15] >= 134217728 && self.gpr[15] <= 134225000 {
                     // println!("ARM: PC=0x{:08X}, instr=0x{:08X}, cond={:?}, CPSR=0x{:08X}, condition_ok={}",
                     //                        self.gpr[15] - 8, fetched, cond, self.cpsr.get(), condition_result);
@@ -284,18 +291,94 @@ impl ARM {
     where
         T: BusAccessor,
     {
-        // // dbg!(&instruction, &self.gpr);
-        //if (self.gpr[15] >= 134221712 && self.gpr[15] <= 134221748) {
-        //         dbg!(&self.gpr);
-        //     // dbg!("0");
+        // Extract condition code from instruction and check if it should execute
+        use crate::cpu::types::Cond;
+        let cond = match &instruction {
+            arm::Instruction::AND(dec) => dec.get_cond().into(),
+            arm::Instruction::EOR(dec) => dec.get_cond().into(),
+            arm::Instruction::SUB(dec) => dec.get_cond().into(),
+            arm::Instruction::RSB(dec) => dec.get_cond().into(),
+            arm::Instruction::ADD(dec) => dec.get_cond().into(),
+            arm::Instruction::ADC(dec) => dec.get_cond().into(),
+            arm::Instruction::SBC(dec) => dec.get_cond().into(),
+            arm::Instruction::RSC(dec) => dec.get_cond().into(),
+            arm::Instruction::TST(dec) => dec.get_cond().into(),
+            arm::Instruction::TEQ(dec) => dec.get_cond().into(),
+            arm::Instruction::CMP(dec) => dec.get_cond().into(),
+            arm::Instruction::CMN(dec) => dec.get_cond().into(),
+            arm::Instruction::ORR(dec) => dec.get_cond().into(),
+            arm::Instruction::MOV(dec) => dec.get_cond().into(),
+            arm::Instruction::LSL(dec) => dec.get_cond().into(),
+            arm::Instruction::LSR(dec) => dec.get_cond().into(),
+            arm::Instruction::ASR(dec) => dec.get_cond().into(),
+            arm::Instruction::RRX(dec) => dec.get_cond().into(),
+            arm::Instruction::ROR(dec) => dec.get_cond().into(),
+            arm::Instruction::BIC(dec) => dec.get_cond().into(),
+            arm::Instruction::MVN(dec) => dec.get_cond().into(),
+            arm::Instruction::MUL(dec) => dec.get_cond().into(),
+            arm::Instruction::MLA(dec) => dec.get_cond().into(),
+            arm::Instruction::UMULL(dec) => dec.get_cond().into(),
+            arm::Instruction::UMLAL(dec) => dec.get_cond().into(),
+            arm::Instruction::SMULL(dec) => dec.get_cond().into(),
+            arm::Instruction::SMLAL(dec) => dec.get_cond().into(),
+            arm::Instruction::LDR(dec) => dec.get_cond().into(),
+            arm::Instruction::STR(dec) => dec.get_cond().into(),
+            arm::Instruction::LDRB(dec) => dec.get_cond().into(),
+            arm::Instruction::STRB(dec) => dec.get_cond().into(),
+            arm::Instruction::STRH(dec) => dec.get_cond().into(),
+            arm::Instruction::LDRH(dec) => dec.get_cond().into(),
+            arm::Instruction::LDRSB(dec) => dec.get_cond().into(),
+            arm::Instruction::LDRSH(dec) => dec.get_cond().into(),
+            arm::Instruction::B(dec) => dec.get_cond().into(),
+            arm::Instruction::BL(dec) => dec.get_cond().into(),
+            arm::Instruction::BX(dec) => dec.get_cond().into(),
+            arm::Instruction::LDM(dec) => dec.get_cond().into(),
+            arm::Instruction::STM(dec) => dec.get_cond().into(),
+            arm::Instruction::MRS(dec) => dec.get_cond().into(),
+            arm::Instruction::MSR(dec) => dec.get_cond().into(),
+            arm::Instruction::SWP(dec) => dec.get_cond().into(),
+            arm::Instruction::SWPB(dec) => dec.get_cond().into(),
+            arm::Instruction::SWI(dec) => ((dec.raw >> 28) & 0xF).into(), // Extract condition from raw field
+            arm::Instruction::Undefined => Cond::AL, // Undefined instructions are always executed
+        };
 
-        // if self.gpr[15] >= 134225848 && self.gpr[15] <= 134224860 {
-        //     dbg!('🔥', &instruction, &self.gpr);
-        // }
-        // }
+        let cond_ok = self.cpsr.condition_ok(cond);
+
+        // Debug output for branches with conditions and MI-related conditions
+        if let arm::Instruction::B(_) | arm::Instruction::BL(_) = &instruction {
+            println!("Branch: cond={:?}, cond_ok={} (N={}, Z={}, C={}, V={})",
+                cond, cond_ok, self.cpsr.get_N(), self.cpsr.get_Z(), self.cpsr.get_C(), self.cpsr.get_V());
+        }
+
+        // Debug specifically for MI condition
+        if cond == crate::cpu::types::Cond::MI {
+            println!("MI condition: N={}, condition_ok={}", self.cpsr.get_N(), cond_ok);
+        }
+
+        // Debug Test 005 specifically - track multiple executions
+        use std::sync::{Mutex, OnceLock};
+        static EXECUTION_COUNT: OnceLock<Mutex<std::collections::HashMap<u32, u32>>> = OnceLock::new();
+        if self.gpr[PC] >= 0x08000150 && self.gpr[PC] <= 0x08000160 {
+            let counter = EXECUTION_COUNT.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
+            let mut map = counter.lock().unwrap();
+            let count = map.entry(self.gpr[PC]).and_modify(|e| *e += 1).or_insert(1);
+            println!("TEST 005 DEBUG: PC=0x{:08X} (execution #{}) cond={:?}, CPSR=0x{:08X}, N={}, cond_ok={}, instruction={:?}",
+                self.gpr[PC], count, cond, self.cpsr.get(), self.cpsr.get_N(), cond_ok, instruction);
+        }
+
+        // If condition is not met, instruction does not execute (takes 1 cycle)
+        if !cond_ok {
+            // Critical debug for Test 005 conditional failure
+            if self.gpr[PC] >= 0x08000150 && self.gpr[PC] <= 0x08000160 {
+                println!("🚨 CONDITION FAILED: PC=0x{:08X}, cond={:?}, N={}, Z={}, C={}, V={}",
+                    self.gpr[PC], cond, self.cpsr.get_N(), self.cpsr.get_Z(), self.cpsr.get_C(), self.cpsr.get_V());
+            }
+            return Ok(1);
+        }
+
         let (cycle, pipeline_status) = {
-            if let arm::Instruction::SWI = &instruction {
-                println!("about to execute SWI (will unimplemented!)");
+            if let arm::Instruction::SWI(dec) = &instruction {
+                println!("about to execute SWI 0x{:02X}", dec.get_immediate());
             }
             match instruction {
                 arm::Instruction::AND(dec) => exec_arm_and(bus, dec, &mut self.gpr, &mut self.cpsr)?,
@@ -306,10 +389,10 @@ impl ARM {
                 arm::Instruction::ADC(dec) => exec_arm_adc(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::SBC(dec) => exec_arm_sbc(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::RSC(dec) => exec_arm_rsc(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                arm::Instruction::TST(dec) => exec_arm_tst(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                arm::Instruction::TEQ(dec) => exec_arm_teq(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                arm::Instruction::CMP(dec) => exec_arm_cmp(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                arm::Instruction::CMN(dec) => exec_arm_cmn(bus, dec, &mut self.gpr, &mut self.cpsr)?,
+                arm::Instruction::TST(dec) => exec_arm_tst(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
+                arm::Instruction::TEQ(dec) => exec_arm_teq(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
+                arm::Instruction::CMP(dec) => exec_arm_cmp(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
+                arm::Instruction::CMN(dec) => exec_arm_cmn(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
                 arm::Instruction::ORR(dec) => exec_arm_orr(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::MOV(dec) => exec_arm_mov(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::LSL(dec) => exec_arm_shift(bus, dec, &mut self.gpr, &mut self.cpsr)?,
@@ -337,13 +420,13 @@ impl ARM {
                 arm::Instruction::BL(dec) => exec_arm_bl(dec, &mut self.gpr)?,
                 arm::Instruction::BX(dec) => exec_arm_bx(dec, &mut self.cpsr, &mut self.gpr)?,
                 arm::Instruction::LDM(dec) => exec_arm_ldm(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
-                arm::Instruction::STM(dec) => exec_arm_stm(bus, dec, &mut self.gpr)?,
+                arm::Instruction::STM(dec) => exec_arm_stm(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
                 arm::Instruction::MRS(dec) => exec_arm_mrs(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr)?,
                 arm::Instruction::MSR(dec) => exec_arm_msr(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
                 arm::Instruction::SWP(dec) => exec_arm_swp(bus, dec, &mut self.gpr)?,
                 arm::Instruction::SWPB(dec) => exec_arm_swpb(bus, dec, &mut self.gpr)?,
                 arm::Instruction::Undefined => unimplemented!(),
-                arm::Instruction::SWI => unimplemented!(),
+                arm::Instruction::SWI(dec) => exec_arm_swi(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr)?,
                 // ArmOpcode::Unknown => self.execute_unknown(dec),
                 _ => unimplemented!(),
             }
