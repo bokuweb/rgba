@@ -291,8 +291,7 @@ where
 
     if dec.get_S() {
         // 元のモードに復帰
-        cpsr.switch_mode(current_mode, gpr, spsr, bank_gpr, bank_spsr);
-    }
+        cpsr.switch_mode(current_mode, gpr, spsr, bank_gpr, bank_spsr)    }
 
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));
     Ok((cycle, PipelineStatus::Continue))
