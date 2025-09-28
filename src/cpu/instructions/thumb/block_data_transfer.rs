@@ -20,13 +20,17 @@ where
     // 特殊ケース: 空のrlistはPCをストアし、ベースを+0x40進める（gba-tests準拠）
     if register_list == 0 {
         cycle += bus.compute_cycle(base, AccessType::NonSeq(AccessWidth::Word));
-        bus.write_word(base & 0xFFFF_FFFC, gpr[PC]);
+        // 空rlistのSTMは PC+2 を書き込む（次命令で読み出すPCと一致させるため）。
+        bus.write_word(base & 0xFFFF_FFFC, gpr[PC].wrapping_add(2));
         gpr[rn] = base.wrapping_add(0x40);
         // 次命令プリフェッチ相当
         let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
         return (cycle, PipelineStatus::Continue);
     }
 
+    // 総転送バイト数と初期ベースを保存（ベースがrlistに含まれる場合の格納値に使用）
+    let total_bytes = (register_list.count_ones() as u32) * 4;
+    let initial_base = base;
     for i in 0..0x8 {
         if register_list & (1 << i) != 0 {
             let access_type = if is_n_cycle {
@@ -37,7 +41,9 @@ where
             };
             cycle += bus.compute_cycle(base, access_type);
 
-            bus.write_word(base, gpr[i as usize] as Word);
+            // ベースがrlistに含まれる場合、格納するのは更新後ベース（initial_base + total_bytes）。
+            let value = if i as usize == rn { initial_base.wrapping_add(total_bytes) } else { gpr[i as usize] };
+            bus.write_word(base, value);
             base = base.wrapping_add(4);
         }
     }
@@ -74,10 +80,12 @@ where
         return (cycle, PipelineStatus::Flush);
     }
 
+    let total_bytes = (register_list.count_ones() as u32) * 4;
     for i in 0..0x8 {
         if register_list & (1 << i) != 0 {
             let d = bus.read_word(base & 0xFFFF_FFFC);
             // dbg!(base, d);
+            // 読み出し値は常にメモリの内容。ベースがrlistに含まれても、後段の書き戻しで最終アドレスをRnへ設定する。
             gpr[i] = d;
             let access_type = if is_n_cycle {
                 is_n_cycle = false;
@@ -90,9 +98,8 @@ where
             base = base.wrapping_add(4);
         }
     }
-    if (1 << rn) & register_list == 0 {
-        gpr[rn_idx] = base;
-    }
+    // ベースはリストに含まれていても必ず書き戻す（最終アドレス）。
+    gpr[rn_idx] = base;
 
     if started {
         dbg!("after ldmia", &gpr);
