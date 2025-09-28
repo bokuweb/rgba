@@ -171,7 +171,8 @@ impl BusAccessor for CpuBus {
             0x0600_0000..=0x06FF_FFFF => self.vram.read_byte(Self::map_vram_offset(addr)),
             // OAM 1KB mirrors
             0x0700_0000..=0x07FF_FFFF => self.oam.read_byte((addr - 0x0700_0000) & 0x3FF),
-            0x0800_0000..=0x09FF_FFFF => self.rom.read_byte(addr - 0x0800_0000),
+            // GamePak ROM mirrors across WS0/WS1/WS2 (0x08000000-0x0DFFFFFF)
+            0x0800_0000..=0x0DFF_FFFF => self.rom.read_byte(Self::map_gamepak_offset(addr)),
             0x0E00_0000..=0x0E00_FFFF => {
                 // SRAM/FRAM/Flash save memory (byte access only)
                 self.sram.read_byte(addr - 0x0E00_0000)
@@ -202,7 +203,7 @@ impl BusAccessor for CpuBus {
             0x0600_0000..=0x06FF_FFFF => self.vram.read_halfword(Self::map_vram_offset(addr)),
             // 修正(006): OAM 1KB ミラー（16bit 読み）
             0x0700_0000..=0x07FF_FFFF => self.oam.read_halfword((addr - 0x0700_0000) & 0x3FF),
-            0x0800_0000..=0x09FF_FFFF => self.rom.read_halfword(addr - 0x0800_0000),
+            0x0800_0000..=0x0DFF_FFFF => self.rom.read_halfword(Self::map_gamepak_offset(addr)),
             0x0E00_0000..=0x0E00_FFFF => {
                 println!("⚠️  WARNING: Invalid halfword access to SRAM at 0x{:08x} (SRAM is byte-access only) - returning 0xFFFF", addr);
                 0xFFFF
@@ -236,7 +237,7 @@ impl BusAccessor for CpuBus {
             0x0400_0000..=0x0400_005F => self.lcdc.read_word(addr - 0x0400_0000),
             0x0400_0060..=0x0400_03FF => 0,
             0x0500_0000..=0x05FF_FFFF => self.palette.read_word((addr - 0x0500_0000) & 0x3FF),
-            0x0800_0000..=0x09FF_FFFF => self.rom.read_word(addr - 0x0800_0000),
+            0x0800_0000..=0x0DFF_FFFF => self.rom.read_word(Self::map_gamepak_offset(addr)),
             0x0E00_0000..=0x0E00_FFFF => {
                 println!("⚠️  WARNING: Invalid word access to SRAM at 0x{:08x} (SRAM is byte-access only) - returning 0xFFFFFFFF", addr);
                 0xFFFFFFFF
@@ -490,6 +491,18 @@ impl CpuBus {
         if off_20000 >= 0x18000 { off_20000 - 0x8000 } else { off_20000 }
     }
 
+    // Map GamePak address (0x08000000-0x0DFFFFFF) to ROM offset
+    // WS0: 0x08000000-0x09FFFFFF, WS1: 0x0A000000-0x0BFFFFFF, WS2: 0x0C000000-0x0DFFFFFF
+    #[inline]
+    fn map_gamepak_offset(addr: u32) -> u32 {
+        match addr {
+            0x0800_0000..=0x09FF_FFFF => addr - 0x0800_0000,
+            0x0A00_0000..=0x0BFF_FFFF => addr - 0x0A00_0000,
+            0x0C00_0000..=0x0DFF_FFFF => addr - 0x0C00_0000,
+            _ => unreachable!("address out of gamepak range"),
+        }
+    }
+
     fn perform_dma_transfer(&mut self, channel: usize, mut source: Word, mut dest: Word, count: usize, transfer_size: usize) {
         println!("🚀 Executing DMA{} transfer: 0x{:08x} -> 0x{:08x}, {} words of {} bytes", 
             channel, source, dest, count, transfer_size);
@@ -538,7 +551,7 @@ impl CpuBus {
     // Internal memory access methods that bypass DMA triggering
     fn read_word_internal(&self, addr: Word) -> Word {
         match addr {
-            0x0800_0000..=0x09FF_FFFF => self.rom.read_word(addr - 0x0800_0000),
+            0x0800_0000..=0x0DFF_FFFF => self.rom.read_word(Self::map_gamepak_offset(addr)),
             0x0300_0000..=0x0300_7FFF => self.wram.read_word(addr - 0x0300_0000),
             0x0200_0000..=0x0203_FFFF => self.eram.read_word(addr - 0x0200_0000),
             0x0600_0000..=0x06FF_FFFF => self.vram.read_word(Self::map_vram_offset(addr)),
@@ -551,7 +564,7 @@ impl CpuBus {
 
     fn read_halfword_internal(&self, addr: Word) -> HalfWord {
         match addr {
-            0x0800_0000..=0x09FF_FFFF => self.rom.read_halfword(addr - 0x0800_0000),
+            0x0800_0000..=0x0DFF_FFFF => self.rom.read_halfword(Self::map_gamepak_offset(addr)),
             0x0300_0000..=0x0300_7FFF => self.wram.read_halfword(addr - 0x0300_0000),
             0x0200_0000..=0x0203_FFFF => self.eram.read_halfword(addr - 0x0200_0000),
             0x0600_0000..=0x06FF_FFFF => self.vram.read_halfword(Self::map_vram_offset(addr)),
