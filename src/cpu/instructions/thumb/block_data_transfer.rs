@@ -10,12 +10,28 @@ pub fn exec_thumb_stmia<T>(bus: &mut T, dec: BlockDataTransfer, gpr: &mut [Word;
 where
     T: BusAccessor,
 {
-    let mut base = gpr[dec.get_Rn() as usize];
+    let rn = dec.get_Rn() as usize;
+    let mut base = gpr[rn];
     let register_list = dec.get_register_list();
 
     let mut cycle: Cycle = 0;
     let mut is_n_cycle = true;
 
+    // 特殊ケース: 空のrlistはPCをストアし、ベースを+0x40進める（gba-tests準拠）
+    if register_list == 0 {
+        cycle += bus.compute_cycle(base, AccessType::NonSeq(AccessWidth::Word));
+        // 空rlistのSTMは PC+2 を書き込む（次命令で読み出すPCと一致させるため）。
+        bus.write_word(base & 0xFFFF_FFFC, gpr[PC].wrapping_add(2));
+        gpr[rn] = base.wrapping_add(0x40);
+        // 次命令プリフェッチ相当
+        let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
+        return (cycle, PipelineStatus::Continue);
+    }
+
+    // 総転送バイト数と初期ベースを保存（ベースがrlistに含まれる場合の格納値に使用）
+    let total_bytes = (register_list.count_ones() as u32) * 4;
+    let initial_base = base;
+    let first_index = register_list.trailing_zeros() as usize; // 最初に格納されるレジスタ番号
     for i in 0..0x8 {
         if register_list & (1 << i) != 0 {
             let access_type = if is_n_cycle {
@@ -26,11 +42,19 @@ where
             };
             cycle += bus.compute_cycle(base, access_type);
 
-            bus.write_word(base, gpr[i as usize] as Word);
+            // 修正(THUMB.15 test 230/232): ベースがrlistに含まれる場合の格納値は位置依存。
+            // - ベースがrlistの先頭（最小レジスタ）なら initial_base を格納（t232）
+            // - それ以外の位置なら 最終ベース(initial_base + total_bytes) を格納（t230）
+            let value = if i as usize == rn {
+                if rn == first_index { initial_base } else { initial_base.wrapping_add(total_bytes) }
+            } else {
+                gpr[i as usize]
+            };
+            bus.write_word(base, value);
             base = base.wrapping_add(4);
         }
     }
-    gpr[dec.get_Rn() as usize] = base;
+    gpr[rn] = base;
     // consume 1N cycle to prefetch next cycle
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     (cycle, PipelineStatus::Continue)
@@ -44,16 +68,31 @@ where
         dbg!("before ldmia", &gpr);
     }
     let rn = dec.get_Rn();
-    let mut base = gpr[rn as usize];
+    let rn_idx = rn as usize;
+    let mut base = gpr[rn_idx];
     let register_list = dec.get_register_list();
 
     let mut cycle: Cycle = 0;
     let mut is_n_cycle = true;
 
+    // 特殊ケース: 空のrlistは [base] からPCをロードし、ベースを+0x40進める（gba-tests準拠）
+    if register_list == 0 {
+        let data = bus.read_word(base & 0xFFFF_FFFC);
+        cycle += bus.compute_cycle(base, AccessType::NonSeq(AccessWidth::Word));
+        gpr[PC] = data & 0xFFFF_FFFE;
+        base = base.wrapping_add(0x40);
+        gpr[rn_idx] = base;
+        // Iサイクル + 次プリフェッチ相当
+        let cycle = cycle + 1 + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+        return (cycle, PipelineStatus::Flush);
+    }
+
+    let total_bytes = (register_list.count_ones() as u32) * 4;
     for i in 0..0x8 {
         if register_list & (1 << i) != 0 {
             let d = bus.read_word(base & 0xFFFF_FFFC);
             // dbg!(base, d);
+            // 読み出し値は常にメモリの内容。ベースがrlistに含まれても、後段の書き戻しで最終アドレスをRnへ設定する。
             gpr[i] = d;
             let access_type = if is_n_cycle {
                 is_n_cycle = false;
@@ -66,9 +105,8 @@ where
             base = base.wrapping_add(4);
         }
     }
-    if (1 << rn) & register_list == 0 {
-        gpr[rn as usize] = base;
-    }
+    // ベースはリストに含まれていても必ず書き戻す（最終アドレス）。
+    gpr[rn_idx] = base;
 
     if started {
         dbg!("after ldmia", &gpr);

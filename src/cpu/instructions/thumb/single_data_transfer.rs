@@ -119,12 +119,15 @@ where
     let rm = dec.get_Rm() as usize;
 
     let addr = gpr[rn].wrapping_add(gpr[rm]);
-    let data = bus.read_halfword(addr);
+    // 原因: アドレスが奇数のとき、LDRH は32bitにゼロ拡張した後に8bit右ローテートした値を返す必要がある。
+    let aligned = addr & !1;
+    let raw = bus.read_halfword(aligned) as u32;
+    let data32 = if (addr & 1) != 0 { raw.rotate_right(8) } else { raw };
 
     // 1N + 1I cycle
     let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
 
-    gpr[rd] = data as u32;
+    gpr[rd] = data32;
 
     // Add merged I + S cycle.
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
@@ -140,7 +143,13 @@ where
     let rm = dec.get_Rm() as usize;
 
     let addr = gpr[rn].wrapping_add(gpr[rm]);
-    let data = bus.read_halfword(addr) as i16;
+    // 原因: アドレスが奇数のとき、LDRSH は符号付きバイトとして読み出し（LDRSB と同等）になる仕様。
+    //       これまで常に半ワード読みを行っていたため、test 212 が失敗していた。
+    let data: i32 = if (addr & 1) != 0 {
+        bus.read_byte(addr) as i8 as i32
+    } else {
+        bus.read_halfword(addr) as i16 as i32
+    };
 
     // 1N + 1I cycle
     let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
@@ -183,13 +192,15 @@ where
     let offset = dec.get_off5() as u32;
 
     let addr = gpr[rn] + offset.wrapping_shl(1);
-
-    let data = bus.read_halfword(addr);
+    // Misaligned halfword: zero-extend to 32bit then ROR #8
+    let aligned = addr & !1;
+    let raw = bus.read_halfword(aligned) as u32;
+    let data32 = if (addr & 1) != 0 { raw.rotate_right(8) } else { raw };
 
     // 1N + 1I cycle
     let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
 
-    gpr[rd] = data as u32;
+    gpr[rd] = data32;
 
     // Add merged I + S cycle.
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));

@@ -10,35 +10,32 @@ use crate::types::*;
 
 /// Format 16
 pub fn exec_thumb_b(dec: Branch, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
-    let mut offset = dec.get_offset8() as i8;
-
+    // THUMB.16: conditional branch (0xD000..=0xD7FF except 0xD000 for BEQ etc.)
+    // Bits[11:8] are condition code, Bits[7:0] is signed 8-bit offset << 1
     let cond: Cond = dec.get_cond().into();
+    let offset8 = dec.get_offset8();
+    let signed = if (offset8 & 0x80) != 0 { (offset8 as u16 | 0xFF00) as i16 } else { offset8 as i16 };
     if cpsr.condition_ok(cond) {
-        if (gpr[PC] as i64 + (offset as i64).wrapping_shl(1)) == 134221503 {
-            // dbg!("0", &gpr);
-        }
-        gpr[PC] = (gpr[PC] as i64 + (offset as i64).wrapping_shl(1)) as u32;
+        let delta = (signed as i32).wrapping_shl(1) as i64;
+        gpr[PC] = (gpr[PC] as i64 + delta) as u32;
         return (0, PipelineStatus::Flush);
     }
-    // Consume 1S if condition false
+    // not taken: 1S
     (1, PipelineStatus::Continue)
 }
 
 /// Format 18
 pub fn exec_thumb_b2(dec: Branch, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
-    // TODO: Add cycle
-    let offset = dec.get_offset11();
-    let offset = if offset & 0x0400 != 0 {
-        (offset as u32 | 0xFFFF_F800 as u32) as i32
+    // THUMB.18: unconditional branch, 11-bit signed offset << 1
+    let offset11 = dec.get_offset11();
+    let signed = if (offset11 & 0x0400) != 0 {
+        ((offset11 as u32) | 0xFFFF_F800) as i32
     } else {
-        offset as i32
-    }
-    .wrapping_shl(1);
-    dbg!(offset, dec);
-
-    let pc = gpr[PC] as i64 + offset as i64;
-    gpr[PC] = pc as u32;
-    // Consume: 2S+1N
+        offset11 as i32
+    };
+    let delta = signed.wrapping_shl(1) as i64;
+    gpr[PC] = (gpr[PC] as i64 + delta) as u32;
+    // Consume: 2S+1N (モデル簡略化でここでは0を返しFlush)
     (0, PipelineStatus::Flush)
 }
 
