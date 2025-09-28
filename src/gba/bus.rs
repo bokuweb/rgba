@@ -200,6 +200,8 @@ impl BusAccessor for CpuBus {
             0x0500_0000..=0x05FF_FFFF => self.palette.read_halfword((addr - 0x0500_0000) & 0x3FF),
             // 修正(004): VRAMミラー対応
             0x0600_0000..=0x06FF_FFFF => self.vram.read_halfword(Self::map_vram_offset(addr)),
+            // 修正(006): OAM 1KB ミラー（16bit 読み）
+            0x0700_0000..=0x07FF_FFFF => self.oam.read_halfword((addr - 0x0700_0000) & 0x3FF),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_halfword(addr - 0x0800_0000),
             0x0E00_0000..=0x0E00_FFFF => {
                 println!("⚠️  WARNING: Invalid halfword access to SRAM at 0x{:08x} (SRAM is byte-access only) - returning 0xFFFF", addr);
@@ -229,6 +231,8 @@ impl BusAccessor for CpuBus {
                 let vram_addr = Self::map_vram_offset(addr);
                 self.vram.read_word(vram_addr)
             }
+            // 修正(006): OAM 1KB ミラー（32bit 読み）
+            0x0700_0000..=0x07FF_FFFF => self.oam.read_word((addr - 0x0700_0000) & 0x3FF),
             0x0400_0000..=0x0400_005F => self.lcdc.read_word(addr - 0x0400_0000),
             0x0400_0060..=0x0400_03FF => 0,
             0x0500_0000..=0x05FF_FFFF => self.palette.read_word((addr - 0x0500_0000) & 0x3FF),
@@ -315,6 +319,8 @@ impl BusAccessor for CpuBus {
                 }
                 self.vram.write_halfword(vram_addr, data);
             }
+            // 修正(006): OAM 1KB ミラー（16bit 書き）
+            0x0700_0000..=0x07FF_FFFF => self.oam.write_halfword((addr - 0x0700_0000) & 0x3FF, data),
             0x0E00_0000..=0x0E00_FFFF => {
                 println!("⚠️  WARNING: Invalid halfword write to SRAM at 0x{:08x} = 0x{:04x} (SRAM is byte-access only, ignored)", addr, data);
             }
@@ -397,6 +403,8 @@ impl BusAccessor for CpuBus {
                 }
                 self.vram.write_word(vram_addr, data);
             }
+            // 修正(006): OAM 1KB ミラー（32bit 書き）
+            0x0700_0000..=0x07FF_FFFF => self.oam.write_word((addr - 0x0700_0000) & 0x3FF, data),
             0x0E00_0000..=0x0E00_FFFF => {
                 println!("⚠️  WARNING: Invalid word write to SRAM at 0x{:08x} = 0x{:08x} (SRAM is byte-access only, ignored)", addr, data);
             }
