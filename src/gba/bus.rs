@@ -167,7 +167,8 @@ impl BusAccessor for CpuBus {
             0x0400_0060..=0x0400_03FF => 0,
             // Palette 1KB mirrors
             0x0500_0000..=0x05FF_FFFF => self.palette.read_byte((addr - 0x0500_0000) & 0x3FF),
-            0x0600_0000..=0x0601_7FFF => self.vram.read_byte(addr - 0x0600_0000),
+            // 修正(004): VRAMミラー (0x20000で折り返し、0x18000-0x1FFFFは0x10000-0x17FFFへ)
+            0x0600_0000..=0x06FF_FFFF => self.vram.read_byte(Self::map_vram_offset(addr)),
             // OAM 1KB mirrors
             0x0700_0000..=0x07FF_FFFF => self.oam.read_byte((addr - 0x0700_0000) & 0x3FF),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_byte(addr - 0x0800_0000),
@@ -197,7 +198,8 @@ impl BusAccessor for CpuBus {
             0x0400_0208 => self.interrupt_controller.borrow().read_ime(), // IME register
             0x0400_0060..=0x0400_03FF => 0,
             0x0500_0000..=0x05FF_FFFF => self.palette.read_halfword((addr - 0x0500_0000) & 0x3FF),
-            0x0600_0000..=0x0601_7FFF => self.vram.read_halfword(addr - 0x0600_0000),
+            // 修正(004): VRAMミラー対応
+            0x0600_0000..=0x06FF_FFFF => self.vram.read_halfword(Self::map_vram_offset(addr)),
             0x0800_0000..=0x09FF_FFFF => self.rom.read_halfword(addr - 0x0800_0000),
             0x0E00_0000..=0x0E00_FFFF => {
                 println!("⚠️  WARNING: Invalid halfword access to SRAM at 0x{:08x} (SRAM is byte-access only) - returning 0xFFFF", addr);
@@ -222,6 +224,11 @@ impl BusAccessor for CpuBus {
                 }
                 v
             },
+            // 修正(004): VRAMミラー（0x20000で折り返し、0x18000..は0x10000..へ）
+            0x0600_0000..=0x06FF_FFFF => {
+                let vram_addr = Self::map_vram_offset(addr);
+                self.vram.read_word(vram_addr)
+            }
             0x0400_0000..=0x0400_005F => self.lcdc.read_word(addr - 0x0400_0000),
             0x0400_0060..=0x0400_03FF => 0,
             0x0500_0000..=0x05FF_FFFF => self.palette.read_word((addr - 0x0500_0000) & 0x3FF),
@@ -261,7 +268,8 @@ impl BusAccessor for CpuBus {
                 }
             }
             0x0500_0000..=0x05FF_FFFF => self.palette.write_byte((addr - 0x0500_0000) & 0x3FF, data),
-            0x0600_0000..=0x0601_7FFF => self.vram.write_byte(addr - 0x0600_0000, data),
+            // 修正(004): VRAM書き込みもミラー
+            0x0600_0000..=0x06FF_FFFF => self.vram.write_byte(Self::map_vram_offset(addr), data),
             0x0700_0000..=0x07FF_FFFF => self.oam.write_byte((addr - 0x0700_0000) & 0x3FF, data),
             0x0E00_0000..=0x0E00_FFFF => {
                 // SRAM/FRAM/Flash save memory (byte access only)
@@ -299,8 +307,9 @@ impl BusAccessor for CpuBus {
                 }
             }
             0x0500_0000..=0x05FF_FFFF => self.palette.write_halfword((addr - 0x0500_0000) & 0x3FF, data),
-            0x0600_0000..=0x0601_7FFF => {
-                let vram_addr = addr - 0x0600_0000;
+            0x0600_0000..=0x06FF_FFFF => {
+                // 修正(004): halfword write もミラー
+                let vram_addr = Self::map_vram_offset(addr);
                 if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
                     println!("📝 VRAM halfword write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:04x}", addr, vram_addr, data);
                 }
@@ -380,9 +389,10 @@ impl BusAccessor for CpuBus {
                 }
             }
             0x0500_0000..=0x0500_03FF => self.palette.write_word(addr - 0x0500_0000, data),
-            0x0600_0000..=0x0601_7FFF => {
-                let vram_addr = addr - 0x0600_0000;
-                if vram_addr < 0x10000 { // Log first 64KB of VRAM writes  
+            0x0600_0000..=0x06FF_FFFF => {
+                // 修正(004): 書き込み側もミラー
+                let vram_addr = Self::map_vram_offset(addr);
+                if vram_addr < 0x10000 {
                     println!("📝 VRAM word write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:08x}", addr, vram_addr, data);
                 }
                 self.vram.write_word(vram_addr, data);
@@ -462,6 +472,16 @@ impl CpuBus {
         }
     }
 
+    // VRAM mirror mapping helper
+    // GBA VRAM is 96KB (0x18000) within a 128KB window (0x20000).
+    // 0x06000000-0x06FFFFFF should wrap every 0x20000, and offsets >= 0x18000
+    // mirror the last 32KB (map to 0x10000-0x17FFF).
+    fn map_vram_offset(addr: u32) -> u32 {
+        // 128KB window wrap first (0x20000-1 = 0x1_FFFF)
+        let off_20000 = (addr - 0x0600_0000) & 0x1_FFFF;
+        if off_20000 >= 0x18000 { off_20000 - 0x8000 } else { off_20000 }
+    }
+
     fn perform_dma_transfer(&mut self, channel: usize, mut source: Word, mut dest: Word, count: usize, transfer_size: usize) {
         println!("🚀 Executing DMA{} transfer: 0x{:08x} -> 0x{:08x}, {} words of {} bytes", 
             channel, source, dest, count, transfer_size);
@@ -513,6 +533,7 @@ impl CpuBus {
             0x0800_0000..=0x09FF_FFFF => self.rom.read_word(addr - 0x0800_0000),
             0x0300_0000..=0x0300_7FFF => self.wram.read_word(addr - 0x0300_0000),
             0x0200_0000..=0x0203_FFFF => self.eram.read_word(addr - 0x0200_0000),
+            0x0600_0000..=0x06FF_FFFF => self.vram.read_word(Self::map_vram_offset(addr)),
             _ => {
                 println!("⚠️  DMA read_word from unsupported address: 0x{:08x}", addr);
                 0
@@ -525,6 +546,7 @@ impl CpuBus {
             0x0800_0000..=0x09FF_FFFF => self.rom.read_halfword(addr - 0x0800_0000),
             0x0300_0000..=0x0300_7FFF => self.wram.read_halfword(addr - 0x0300_0000),
             0x0200_0000..=0x0203_FFFF => self.eram.read_halfword(addr - 0x0200_0000),
+            0x0600_0000..=0x06FF_FFFF => self.vram.read_halfword(Self::map_vram_offset(addr)),
             _ => {
                 println!("⚠️  DMA read_halfword from unsupported address: 0x{:08x}", addr);
                 0
@@ -534,8 +556,8 @@ impl CpuBus {
 
     fn write_word_internal(&mut self, addr: Word, data: Word) {
         match addr {
-            0x0600_0000..=0x0601_7FFF => {
-                let vram_addr = addr - 0x0600_0000;
+            0x0600_0000..=0x06FF_FFFF => {
+                let vram_addr = Self::map_vram_offset(addr);
                 if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
                     println!("📝 DMA VRAM word write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:08x}", addr, vram_addr, data);
                 }
@@ -555,8 +577,8 @@ impl CpuBus {
 
     fn write_halfword_internal(&mut self, addr: Word, data: HalfWord) {
         match addr {
-            0x0600_0000..=0x0601_7FFF => {
-                let vram_addr = addr - 0x0600_0000;
+            0x0600_0000..=0x06FF_FFFF => {
+                let vram_addr = Self::map_vram_offset(addr);
                 if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
                     println!("📝 DMA VRAM halfword write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:04x}", addr, vram_addr, data);
                 }
