@@ -31,6 +31,7 @@ where
     // 総転送バイト数と初期ベースを保存（ベースがrlistに含まれる場合の格納値に使用）
     let total_bytes = (register_list.count_ones() as u32) * 4;
     let initial_base = base;
+    let first_index = register_list.trailing_zeros() as usize; // 最初に格納されるレジスタ番号
     for i in 0..0x8 {
         if register_list & (1 << i) != 0 {
             let access_type = if is_n_cycle {
@@ -41,8 +42,14 @@ where
             };
             cycle += bus.compute_cycle(base, access_type);
 
-            // ベースがrlistに含まれる場合、格納するのは更新後ベース（initial_base + total_bytes）。
-            let value = if i as usize == rn { initial_base.wrapping_add(total_bytes) } else { gpr[i as usize] };
+            // 修正(THUMB.15 test 230/232): ベースがrlistに含まれる場合の格納値は位置依存。
+            // - ベースがrlistの先頭（最小レジスタ）なら initial_base を格納（t232）
+            // - それ以外の位置なら 最終ベース(initial_base + total_bytes) を格納（t230）
+            let value = if i as usize == rn {
+                if rn == first_index { initial_base } else { initial_base.wrapping_add(total_bytes) }
+            } else {
+                gpr[i as usize]
+            };
             bus.write_word(base, value);
             base = base.wrapping_add(4);
         }
