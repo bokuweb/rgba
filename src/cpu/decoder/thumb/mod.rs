@@ -4,11 +4,13 @@ mod block_data_transfer;
 mod branch;
 mod data_processing;
 mod single_data_transfer;
+mod swi;
 
 pub use block_data_transfer::*;
 pub use branch::*;
 pub use data_processing::*;
 pub use single_data_transfer::*;
+pub use swi::*;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Instruction {
@@ -70,6 +72,7 @@ pub enum Instruction {
     STMIA(BlockDataTransfer),
     POP(BlockDataTransfer),
     PUSH(BlockDataTransfer),
+    SWI(ThumbSoftwareInterrupt),
 }
 
 pub fn decode(raw: HalfWord) -> Instruction {
@@ -200,15 +203,20 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 _ => unreachable!(),
             }
         }
-        // THUMB.17
-        v if ((v & 0x7F00) == 0x5F00) => todo!("SWI"),
+        // THUMB.17 SWI
+        // 原因: 以前は todo!("SWI") で未実装のため、Thumb SWI 呼び出しが失敗していた。
+        //       jsmolka/gba-tests の Thumb テストでも SWI は 0xDF00 形式で使用されるため、
+        //       ここでデコードを実装し実行系へ渡す。
+        v if ((v & 0xFF00) == 0xDF00) => Instruction::SWI(decode_thumb_swi(v)),
         // THUMB.19
         v if ((v & 0xF000) == 0xF000) => Instruction::BL(Branch(v)),
-        v if ((v & 0x7000) == 0x5000) => Instruction::B(Branch(v)),
-        // THUMB.18
+        // THUMB.16 conditional branch
+        // 原因: 以前は todo!("conditional branch") で未実装だったため、条件分岐系テストが落ちていた。
+        //       cond は bits[11:8]、オフセットは sign-extend した 8bit << 1 を PC に加算する仕様。
+        //       仕様は gba-tests/thumb の分岐テスト（beq/bne/...）に準拠。
+        v if ((v & 0xF000) == 0xD000) => Instruction::B(Branch(v)),
+        // THUMB.18 unconditional branch
         v if ((v & 0xF800) == 0xE000) => Instruction::B2(Branch(v)),
-        // THUMB.16
-        v if ((v & 0xF000) == 0xD000) => todo!("conditional branch"),
         // THUMB.15
         v if ((v & 0xF000) == 0xC000) => {
             let dec = BlockDataTransfer(v);
