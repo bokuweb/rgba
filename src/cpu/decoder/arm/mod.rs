@@ -240,6 +240,10 @@ pub fn decode(raw: Word) -> Instruction {
         v if (v & 0x0E00_0010) == 0x0600_0010 => InstructionType::Undefined,
         v if (v & 0x0E40_0F90) == 0x0000_0090 => InstructionType::ExtraMemory,
         v if (v & 0x0E40_0090) == 0x0040_0090 => InstructionType::ExtraMemory,
+        // Coprocessor register transfer/data operations (e.g., MCR/MRC/CDP): undefined on ARM7TDMI
+        v if (v & 0x0F00_0000) == 0x0E00_0000 => InstructionType::Undefined,
+        // Coprocessor memory operations (LDC/STC): undefined on ARM7TDMI
+        v if (v & 0x0E00_0000) == 0x0C00_0000 => InstructionType::Undefined,
         v if (v & 0x0C00_0000) == 0x0400_0000 => InstructionType::Memory,
         v if (v & 0x0C00_0000) == 0x0000_0000 => InstructionType::DataProcessing,
         _ => panic!("Unsupported instruction"),
