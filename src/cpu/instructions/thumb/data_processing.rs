@@ -256,7 +256,8 @@ pub fn exec_thumb_lsr2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
 
     if sh != 0 {
         if sh < 32 {
-            cpsr.set_C(gpr[rd] & (1 << (rs - 1)) != 0);
+            // C はシフト前値の bit(sh-1)
+            cpsr.set_C(gpr[rd] & (1 << (sh - 1)) != 0);
             gpr[rd] = gpr[rd].wrapping_shr(sh);
         } else {
             if sh > 32 {
@@ -358,7 +359,8 @@ pub fn exec_thumb_cmp2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     cpsr.set_N_from(d as u32);
     cpsr.set_Z_from(d as u32);
     cpsr.set_C(d >= 0);
-    let (_, v) = (gpr[dec.get_Rd2_0() as usize] as i32).overflowing_sub(dec.get_Rm5_3() as i32);
+    // V は値で判定する必要がある（これまでレジスタ番号を減算していた）。
+    let (_, v) = (gpr[dec.get_Rd2_0() as usize] as i32).overflowing_sub(gpr[dec.get_Rm5_3() as usize] as i32);
     cpsr.set_V(v);
     // cpsr.set_V_from(gpr[dec.get_Rd2_0() as usize], d as u32);
     // dbg!("CMP2", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());

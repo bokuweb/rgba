@@ -507,6 +507,12 @@ impl ARM {
                 thumb::Instruction::LDMIA(dec) => exec_thumb_ldmia(bus, dec, &mut self.gpr, started),
                 thumb::Instruction::PUSH(dec) => exec_thumb_push(bus, dec, &mut self.gpr),
                 thumb::Instruction::POP(dec) => exec_thumb_pop(bus, dec, &mut self.gpr),
+                thumb::Instruction::SWI(dec) => {
+                    // 原因: Thumb SWI 未実装により BIOS 呼び出しができずテストが失敗。
+                    // この分岐で Thumb 用 SWI 実装へ委譲する。
+                    let (c, ps) = exec_thumb_swi(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr);
+                    (c, ps)
+                }
                 _ => {
                     // dbg!(&instruction, &self.gpr);
                     unimplemented!();
