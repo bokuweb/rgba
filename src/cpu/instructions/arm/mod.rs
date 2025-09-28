@@ -5,8 +5,10 @@ pub mod data;
 pub mod extra_memory;
 pub mod memory;
 pub mod multiple;
-pub mod single_data_swap;
 pub mod psr_transfer;
+pub mod single_data_swap;
 pub mod swi;
+pub mod undefined;
 
 pub use swi::*;
+pub use undefined::*;
