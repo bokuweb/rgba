@@ -33,6 +33,13 @@ pub struct ARM {
     fiq_disable: bool,
     optimise_swi: bool,
     irq_pending: bool,
+    // Three-stage prefetch buffers (current/next1/next2)
+    arm_pipe_curr: Option<(Word, Word)>,       // (addr, instr)
+    arm_pipe_next1: Option<(Word, Word)>,
+    arm_pipe_next2: Option<(Word, Word)>,
+    thumb_pipe_curr: Option<(Word, HalfWord)>, // (addr, instr)
+    thumb_pipe_next1: Option<(Word, HalfWord)>,
+    thumb_pipe_next2: Option<(Word, HalfWord)>,
 }
 
 impl ARM {
@@ -49,6 +56,12 @@ impl ARM {
             fiq_disable: false,
             optimise_swi: false,
             irq_pending: false,
+            arm_pipe_curr: None,
+            arm_pipe_next1: None,
+            arm_pipe_next2: None,
+            thumb_pipe_curr: None,
+            thumb_pipe_next1: None,
+            thumb_pipe_next2: None,
         }
     }
 
@@ -74,6 +87,12 @@ impl ARM {
 
     fn flush_pipeline(&mut self) {
         self.pipeline_wait = INITIAL_PIPELINE_WAIT;
+        self.arm_pipe_curr = None;
+        self.arm_pipe_next1 = None;
+        self.arm_pipe_next2 = None;
+        self.thumb_pipe_curr = None;
+        self.thumb_pipe_next1 = None;
+        self.thumb_pipe_next2 = None;
     }
 
     fn increment_pc(&mut self) {
@@ -87,10 +106,21 @@ impl ARM {
     }
 
     fn get_inst_addr(&self) -> Word {
-        if self.cpsr.get_cpu_state() == CpuState::ARM {
-            self.gpr[PC] - (PC_OFFSET * 4) as Word
+        // During pipeline refill after a flush/reset, PC may point to the branch target
+        // (not yet the usual "visible PC"). In that case, use the aligned PC directly
+        // as the fetch address for the first instruction to prefill buffers correctly.
+        if self.pipeline_wait > 0 {
+            if self.cpsr.get_cpu_state() == CpuState::ARM {
+                self.gpr[PC] & 0xFFFF_FFFC
+            } else {
+                self.gpr[PC] & 0xFFFF_FFFE
+            }
         } else {
-            self.gpr[PC] - (PC_OFFSET * 2) as Word
+            if self.cpsr.get_cpu_state() == CpuState::ARM {
+                self.gpr[PC].saturating_sub((PC_OFFSET * 4) as Word)
+            } else {
+                self.gpr[PC].saturating_sub((PC_OFFSET * 2) as Word)
+            }
         }
     }
 
@@ -167,6 +197,31 @@ impl ARM {
     {
         let mut cycle = 0;
         let width = self.get_prefetch_width();
+        // Capture base instruction address before PC advances in the loop
+        let base_addr = self.get_inst_addr();
+        // Fill three-stage prefetch buffer with actual instruction values
+        match self.cpsr.get_cpu_state() {
+            CpuState::ARM => {
+                let i0 = bus.read_word(base_addr & 0xFFFF_FFFC);
+                let a1 = (base_addr.wrapping_add(4)) & 0xFFFF_FFFC;
+                let a2 = (base_addr.wrapping_add(8)) & 0xFFFF_FFFC;
+                let i1 = bus.read_word(a1);
+                let i2 = bus.read_word(a2);
+                self.arm_pipe_curr = Some((base_addr & 0xFFFF_FFFC, i0));
+                self.arm_pipe_next1 = Some((a1, i1));
+                self.arm_pipe_next2 = Some((a2, i2));
+            }
+            CpuState::Thumb => {
+                let i0 = bus.read_halfword(base_addr & 0xFFFF_FFFE);
+                let a1 = (base_addr.wrapping_add(2)) & 0xFFFF_FFFE;
+                let a2 = (base_addr.wrapping_add(4)) & 0xFFFF_FFFE;
+                let i1 = bus.read_halfword(a1);
+                let i2 = bus.read_halfword(a2);
+                self.thumb_pipe_curr = Some((base_addr & 0xFFFF_FFFE, i0));
+                self.thumb_pipe_next1 = Some((a1, i1));
+                self.thumb_pipe_next2 = Some((a2, i2));
+            }
+        }
         while self.pipeline_wait > 0 {
             cycle += if self.pipeline_wait == INITIAL_PIPELINE_WAIT {
                 // consume 1N cycle
@@ -277,14 +332,46 @@ impl ARM {
     where
         T: BusAccessor,
     {
-        bus.read_word(self.get_inst_addr())
+        let addr = self.get_inst_addr() & 0xFFFF_FFFC;
+        if let Some((a, v)) = self.arm_pipe_curr {
+            if a == addr {
+                return v;
+            }
+        }
+        // Fallback if buffer is not initialized/mismatched
+        let v = bus.read_word(addr);
+        self.arm_pipe_curr = Some((addr, v));
+        // Preload next1/next2 slots for robustness
+        let next_addr1 = addr.wrapping_add(4) & 0xFFFF_FFFC;
+        let next_addr2 = addr.wrapping_add(8) & 0xFFFF_FFFC;
+        let nv1 = bus.read_word(next_addr1);
+        let nv2 = bus.read_word(next_addr2);
+        self.arm_pipe_next1 = Some((next_addr1, nv1));
+        self.arm_pipe_next2 = Some((next_addr2, nv2));
+        v
     }
 
     fn get_thumb_executable<T>(&mut self, bus: &mut T) -> HalfWord
     where
         T: BusAccessor,
     {
-        bus.read_halfword(self.get_inst_addr())
+        let addr = self.get_inst_addr() & 0xFFFF_FFFE;
+        if let Some((a, v)) = self.thumb_pipe_curr {
+            if a == addr {
+                return v;
+            }
+        }
+        // Fallback if buffer is not initialized/mismatched
+        let v = bus.read_halfword(addr);
+        self.thumb_pipe_curr = Some((addr, v));
+        // Preload next1/next2 slots for robustness
+        let next_addr1 = addr.wrapping_add(2) & 0xFFFF_FFFE;
+        let next_addr2 = addr.wrapping_add(4) & 0xFFFF_FFFE;
+        let nv1 = bus.read_halfword(next_addr1);
+        let nv2 = bus.read_halfword(next_addr2);
+        self.thumb_pipe_next1 = Some((next_addr1, nv1));
+        self.thumb_pipe_next2 = Some((next_addr2, nv2));
+        v
     }
 
     fn execute_arm<T>(&mut self, instruction: arm::Instruction, bus: &mut T) -> Result<Cycle, ()>
@@ -437,6 +524,26 @@ impl ARM {
         match pipeline_status {
             PipelineStatus::Continue => {
                 self.increment_pc();
+                // Advance prefetch buffer and fetch next2
+                match self.cpsr.get_cpu_state() {
+                    CpuState::ARM => {
+                        let curr_addr = self.get_inst_addr() & 0xFFFF_FFFC; // now points to former next1
+                        let next2_addr = curr_addr.wrapping_add(8) & 0xFFFF_FFFC;
+                        // Shift: curr <- next1, next1 <- next2, fetch next2
+                        self.arm_pipe_curr = self.arm_pipe_next1.take();
+                        self.arm_pipe_next1 = self.arm_pipe_next2.take();
+                        let nv2 = bus.read_word(next2_addr);
+                        self.arm_pipe_next2 = Some((next2_addr, nv2));
+                    }
+                    CpuState::Thumb => {
+                        let curr_addr = self.get_inst_addr() & 0xFFFF_FFFE; // former next1
+                        let next2_addr = curr_addr.wrapping_add(4) & 0xFFFF_FFFE;
+                        self.thumb_pipe_curr = self.thumb_pipe_next1.take();
+                        self.thumb_pipe_next1 = self.thumb_pipe_next2.take();
+                        let nv2 = bus.read_halfword(next2_addr);
+                        self.thumb_pipe_next2 = Some((next2_addr, nv2));
+                    }
+                }
                 Ok(cycle)
             }
             PipelineStatus::Flush => {
@@ -529,6 +636,25 @@ impl ARM {
         match pipeline_status {
             PipelineStatus::Continue => {
                 self.increment_pc();
+                // Advance prefetch buffer and fetch next2
+                match self.cpsr.get_cpu_state() {
+                    CpuState::ARM => {
+                        let curr_addr = self.get_inst_addr() & 0xFFFF_FFFC;
+                        let next2_addr = curr_addr.wrapping_add(8) & 0xFFFF_FFFC;
+                        self.arm_pipe_curr = self.arm_pipe_next1.take();
+                        self.arm_pipe_next1 = self.arm_pipe_next2.take();
+                        let nv2 = bus.read_word(next2_addr);
+                        self.arm_pipe_next2 = Some((next2_addr, nv2));
+                    }
+                    CpuState::Thumb => {
+                        let curr_addr = self.get_inst_addr() & 0xFFFF_FFFE;
+                        let next2_addr = curr_addr.wrapping_add(4) & 0xFFFF_FFFE;
+                        self.thumb_pipe_curr = self.thumb_pipe_next1.take();
+                        self.thumb_pipe_next1 = self.thumb_pipe_next2.take();
+                        let nv2 = bus.read_halfword(next2_addr);
+                        self.thumb_pipe_next2 = Some((next2_addr, nv2));
+                    }
+                }
                 cycle
             }
             PipelineStatus::Flush => {
