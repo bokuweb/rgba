@@ -76,13 +76,17 @@ where
     if register_list == 0 {
         let rn_val = gpr[dec.get_Rn() as usize];
         let (pc_addr, wb): (Word, i64) = match (dec.get_U(), dec.get_P()) {
-            (true, false) => (rn_val, 0x40),                   // IA
-            (true, true) => (rn_val.wrapping_add(4), 0x40),    // IB
+            (true, false) => (rn_val, 0x40),                      // IA
+            (true, true) => (rn_val.wrapping_add(4), 0x40),       // IB
             (false, false) => (rn_val.wrapping_sub(0x3C), -0x40), // DA
             (false, true) => (rn_val.wrapping_sub(0x40), -0x40),  // DB
         };
 
-        let access_type = if is_n_cycle { AccessType::NonSeq(AccessWidth::Word) } else { AccessType::Seq(AccessWidth::Word) };
+        let access_type = if is_n_cycle {
+            AccessType::NonSeq(AccessWidth::Word)
+        } else {
+            AccessType::Seq(AccessWidth::Word)
+        };
         cycle += bus.compute_cycle(pc_addr, access_type);
         let data = bus.read_word(pc_addr & 0xFFFF_FFFC);
         gpr[PC] = data;
@@ -177,7 +181,7 @@ where
     // t511, t512 など: Sビット処理（ユーザレジスタアクセス）
     //  - 特権モードで S=1 の STM/ LDM は、転送対象レジスタはユーザモードのバンクを参照する。
     //  - 本実装ではストア前のベース計算/書き戻しは現モードで行い、ストア直前に一時的に System(=User) に切替えて値を取得し、
-    
+
     //    終了後に元のモードへ戻す。
 
     let mut register_list = dec.get_register_list();
@@ -232,13 +236,17 @@ where
     if register_list == 0 {
         let rn_val = gpr[dec.get_Rn() as usize];
         let (store_addr, wb): (Word, i64) = match (dec.get_U(), dec.get_P()) {
-            (true, false) => (rn_val, 0x40),                    // IA
-            (true, true) => (rn_val.wrapping_add(4), 0x40),     // IB
+            (true, false) => (rn_val, 0x40),                      // IA
+            (true, true) => (rn_val.wrapping_add(4), 0x40),       // IB
             (false, false) => (rn_val.wrapping_sub(0x3C), -0x40), // DA
             (false, true) => (rn_val.wrapping_sub(0x40), -0x40),  // DB
         };
 
-        let access_type = if is_n_cycle { AccessType::NonSeq(AccessWidth::Word) } else { AccessType::Seq(AccessWidth::Word) };
+        let access_type = if is_n_cycle {
+            AccessType::NonSeq(AccessWidth::Word)
+        } else {
+            AccessType::Seq(AccessWidth::Word)
+        };
         cycle += bus.compute_cycle(store_addr, access_type);
         let value = gpr[PC].wrapping_add(4);
         bus.write_word(store_addr & 0xFFFF_FFFC, value as Word);
@@ -252,10 +260,7 @@ where
     if dec.get_W() {
         let v = gpr[dec.get_Rn() as usize] as i64 + offset as i64;
         if overwrap {
-            bus.write_word(
-                (gpr[dec.get_Rn() as usize] as i64 + immediate - 4) as Word,
-                gpr[dec.get_Rn() as usize] as Word,
-            );
+            bus.write_word((gpr[dec.get_Rn() as usize] as i64 + immediate - 4) as Word, gpr[dec.get_Rn() as usize] as Word);
         }
         gpr[dec.get_Rn() as usize] = v as u32;
     }
@@ -291,7 +296,8 @@ where
 
     if dec.get_S() {
         // 元のモードに復帰
-        cpsr.switch_mode(current_mode, gpr, spsr, bank_gpr, bank_spsr)    }
+        cpsr.switch_mode(current_mode, gpr, spsr, bank_gpr, bank_spsr)
+    }
 
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));
     Ok((cycle, PipelineStatus::Continue))
