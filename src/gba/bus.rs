@@ -272,10 +272,25 @@ impl BusAccessor for CpuBus {
                     println!("🔧 DMA register byte write: 0x{:08x} = 0x{:02x} (not implemented)", addr, data);
                 }
             }
-            0x0500_0000..=0x05FF_FFFF => self.palette.write_byte((addr - 0x0500_0000) & 0x3FF, data),
-            // 修正(004): VRAM書き込みもミラー
-            0x0600_0000..=0x06FF_FFFF => self.vram.write_byte(Self::map_vram_offset(addr), data),
-            0x0700_0000..=0x07FF_FFFF => self.oam.write_byte((addr - 0x0700_0000) & 0x3FF, data),
+            // Palette: byte store behaves as halfword store replicated (0xVV -> 0xVVVV)
+            0x0500_0000..=0x05FF_FFFF => {
+                let off = ((addr - 0x0500_0000) & 0x3FF) & !1; // align to halfword
+                let hw = (data as HalfWord as u16) | (((data as HalfWord) as u16) << 8);
+                self.palette.write_halfword(off, hw as HalfWord);
+            }
+            // VRAM: byte store behaves as halfword store replicated (0xVV -> 0xVVVV) with VRAM mirroring
+            0x0600_0000..=0x06FF_FFFF => {
+                let vram_addr = Self::map_vram_offset(addr) & !1; // align to halfword
+                let hw = (data as HalfWord as u16) | (((data as HalfWord) as u16) << 8);
+                if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
+                    println!("📝 VRAM byte-as-halfword write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:04x}", addr, vram_addr, hw);
+                }
+                self.vram.write_halfword(vram_addr, hw as HalfWord);
+            }
+            // OAM: byte stores are ignored
+            0x0700_0000..=0x07FF_FFFF => {
+                // ignore
+            }
             0x0E00_0000..=0x0E00_FFFF => {
                 // SRAM/FRAM/Flash save memory (byte access only)
                 self.sram.write_byte(addr - 0x0E00_0000, data);

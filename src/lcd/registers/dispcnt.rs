@@ -40,14 +40,15 @@ impl DISPCNT {
     }
 
     pub fn mode(&self) -> BgMode {
-        match self.bg_mode() {
+        // Hardware only defines modes 0..5. Values 6..7 are invalid/unused; treat as Mode0 for robustness.
+        match self.bg_mode() & 0x7 {
             0x00 => BgMode::Mode0,
             0x01 => BgMode::Mode1,
             0x02 => BgMode::Mode2,
             0x03 => BgMode::Mode3,
             0x04 => BgMode::Mode4,
             0x05 => BgMode::Mode5,
-            _ => unreachable!("bg mode should be 0~5."),
+            _ => BgMode::Mode0,
         }
     }
 
