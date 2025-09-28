@@ -17,3 +17,6 @@ export LIBRARY_PATH="$LIBRARY_PATH:$(brew --prefix)/lib"
 ```
 cargo run ./fixtures/hello/hello.gba
 ```
+
+
+https://emulation.gametechwiki.com/index.php?title=GBA_Tests&mobileaction=toggle_view_desktop#Other_tests

@@ -376,20 +376,49 @@ impl BusAccessor for CpuBus {
                     // DMA0 registers
                     0x0400_00B0 => self.dma.write_source(0, data),
                     0x0400_00B4 => self.dma.write_destination(0, data),
-                    0x0400_00B8 => self.dma.write_count(0, data as HalfWord),
-                    0x0400_00BA => self.dma.write_control(0, data as HalfWord),
+                    0x0400_00B8 => {
+                        // DMA0CNT_L (count) and DMA0CNT_H (control) are written together as 32-bit
+                        let count = (data & 0xFFFF) as HalfWord;
+                        let control = ((data >> 16) & 0xFFFF) as HalfWord;
+                        self.dma.write_count(0, count);
+                        self.dma.write_control(0, control);
+                        // Immediate start: execute DMA right away
+                        self.execute_dma_transfers();
+                    }
+                    0x0400_00BA => {
+                        self.dma.write_control(0, data as HalfWord);
+                        self.execute_dma_transfers();
+                    }
                     
                     // DMA1 registers
                     0x0400_00BC => self.dma.write_source(1, data),
                     0x0400_00C0 => self.dma.write_destination(1, data),
-                    0x0400_00C4 => self.dma.write_count(1, data as HalfWord),
-                    0x0400_00C6 => self.dma.write_control(1, data as HalfWord),
+                    0x0400_00C4 => {
+                        let count = (data & 0xFFFF) as HalfWord;
+                        let control = ((data >> 16) & 0xFFFF) as HalfWord;
+                        self.dma.write_count(1, count);
+                        self.dma.write_control(1, control);
+                        self.execute_dma_transfers();
+                    }
+                    0x0400_00C6 => {
+                        self.dma.write_control(1, data as HalfWord);
+                        self.execute_dma_transfers();
+                    }
                     
                     // DMA2 registers
                     0x0400_00C8 => self.dma.write_source(2, data),
                     0x0400_00CC => self.dma.write_destination(2, data),
-                    0x0400_00D0 => self.dma.write_count(2, data as HalfWord),
-                    0x0400_00D2 => self.dma.write_control(2, data as HalfWord),
+                    0x0400_00D0 => {
+                        let count = (data & 0xFFFF) as HalfWord;
+                        let control = ((data >> 16) & 0xFFFF) as HalfWord;
+                        self.dma.write_count(2, count);
+                        self.dma.write_control(2, control);
+                        self.execute_dma_transfers();
+                    }
+                    0x0400_00D2 => {
+                        self.dma.write_control(2, data as HalfWord);
+                        self.execute_dma_transfers();
+                    }
                     
                     // DMA3 registers (most commonly used)
                     0x0400_00D4 => self.dma.write_source(3, data),
@@ -400,6 +429,11 @@ impl BusAccessor for CpuBus {
                         let control = ((data >> 16) & 0xFFFF) as HalfWord;
                         self.dma.write_count(3, count);
                         self.dma.write_control(3, control);
+                        self.execute_dma_transfers();
+                    }
+                    0x0400_00DE => {
+                        self.dma.write_control(3, data as HalfWord);
+                        self.execute_dma_transfers();
                     }
                     
                     _ => {
