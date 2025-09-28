@@ -771,6 +771,19 @@ impl LCDController {
 
     // Helper function to determine which layers should be rendered for a pixel
     fn get_window_control(&self, x: Word, y: Word) -> (bool, bool, bool, bool, bool, bool) {
+        // If no windows are enabled, fall back to DISPCNT's layer enable bits
+        let any_window_enabled = self.dispcnt.window0_display_flag() || self.dispcnt.window1_display_flag();
+        if !any_window_enabled {
+            let bg0_enable = self.dispcnt.screen_display_bg0();
+            let bg1_enable = self.dispcnt.screen_display_bg1();
+            let bg2_enable = self.dispcnt.screen_display_bg2();
+            let bg3_enable = self.dispcnt.screen_display_bg3();
+            let obj_enable = self.dispcnt.screen_display_obj();
+            // Enable color effect flag only if some effect is selected in BLDCNT
+            let effect_enable = ((self.bldcnt >> 6) & 0x0003) != 0;
+            return (bg0_enable, bg1_enable, bg2_enable, bg3_enable, obj_enable, effect_enable);
+        }
+
         // Check which window the pixel is in (Window 0 has highest priority)
         let in_win0 = self.is_pixel_in_window(x, y, self.win0h, self.win0v);
         let in_win1 = self.is_pixel_in_window(x, y, self.win1h, self.win1v);
@@ -949,48 +962,72 @@ impl LCDController {
                     // Convert pixel coordinates to tile coordinates
                     let tile_x = bg_x / 8;
                     let tile_y = bg_y / 8;
-                    let pixel_x = bg_x % 8;
-                    let pixel_y = bg_y % 8;
+                    let mut pixel_x = bg_x % 8;
+                    let mut pixel_y = bg_y % 8;
 
                     // Calculate tile map address (32x32 tile map)
                     let tile_map_addr = (tile_y * VIRTUAL_DISPLAY_TILE_WIDTH + tile_x) * 2 + map_offset;
-                    let tile_index = vram.read_halfword(tile_map_addr) as Word;
+                    let tile_attr = vram.read_halfword(tile_map_addr) as Word;
 
-                    // Calculate pixel address within the tile
-                    let pixel_addr = tile_offset + tile_index * 64 + pixel_y * 8 + pixel_x;
-                    let palette_index = vram.read_byte(pixel_addr);
+                    // Tile attributes
+                    let tile_number = tile_attr & 0x03FF; // bits 0-9
+                    let hflip = (tile_attr & 0x0400) != 0; // bit 10
+                    let vflip = (tile_attr & 0x0800) != 0; // bit 11
+                    let palette_bank = ((tile_attr >> 12) & 0x000F) as Word; // bits 12-15 (4bpp only)
 
-                    // Skip transparent pixels (palette index 0)
-                    if palette_index != 0 {
-                        // Get color from palette
-                        let mut color = BGR::new(palette.read_halfword(palette_index as Word * 2));
+                    // Apply flips
+                    if hflip { pixel_x = 7 - pixel_x; }
+                    if vflip { pixel_y = 7 - pixel_y; }
 
+                    // Determine 4bpp or 8bpp
+                    let is_8bpp = self.bg0cnt.colors_palettes();
+
+                    // Fetch raw pixel value from tile
+                    let (raw_pixel_value, palette_index_word): (u8, Word) = if is_8bpp {
+                        // 8bpp: 64 bytes per tile
+                        let pixel_addr = tile_offset + tile_number * 64 + pixel_y * 8 + pixel_x;
+                        let value = vram.read_byte(pixel_addr);
+                        (value, value as Word)
+                    } else {
+                        // 4bpp: 32 bytes per tile, 2 pixels per byte
+                        let row_offset = pixel_y * 4;
+                        let byte_addr = tile_offset + tile_number * 32 + row_offset + (pixel_x / 2);
+                        let byte = vram.read_byte(byte_addr);
+                        let nibble = if (pixel_x & 1) == 0 { byte & 0x0F } else { (byte >> 4) & 0x0F };
+                        let pal_index = (palette_bank * 16) + (nibble as Word);
+                        (nibble, pal_index)
+                    };
+
+                    // Transparent if raw pixel value == 0 (regardless of palette bank)
+                    if raw_pixel_value == 0 {
+                        // Transparent pixel - render backdrop color (palette index 0)
+                        let mut backdrop_color = BGR::new(palette.read_halfword(0));
+                        // Apply color special effects to backdrop (BD = layer_id 5)
+                        let backdrop_color = self.apply_color_effect(backdrop_color, 5, _effect_enable);
+                        buf[buf_index] = backdrop_color.red();
+                        buf[buf_index + 1] = backdrop_color.green();
+                        buf[buf_index + 2] = backdrop_color.blue();
+                        buf[buf_index + 3] = 0xFF;
+                    } else {
+                        // Non-transparent pixel
+                        let palette_addr = (palette_index_word * 2) as Word;
+                        let mut color = BGR::new(palette.read_halfword(palette_addr));
                         // Apply color special effects (BG0 = layer_id 0)
                         color = self.apply_color_effect(color, 0, _effect_enable);
-
                         // Set pixel in output buffer
                         buf[buf_index] = color.red();
                         buf[buf_index + 1] = color.green();
                         buf[buf_index + 2] = color.blue();
                         buf[buf_index + 3] = 0xFF;
-                    } else {
-                        // Transparent pixel - render backdrop color (palette index 0)
-                        let mut backdrop_color = BGR::new(palette.read_halfword(0));
-
-                        // Apply color special effects to backdrop (BD = layer_id 5)
-                        backdrop_color = self.apply_color_effect(backdrop_color, 5, _effect_enable);
-
-                        buf[buf_index] = backdrop_color.red();
-                        buf[buf_index + 1] = backdrop_color.green();
-                        buf[buf_index + 2] = backdrop_color.blue();
-                        buf[buf_index + 3] = 0xFF;
                     }
                 } else {
                     // BG0 is disabled for this pixel - render backdrop color or black
-                    // In a full implementation, other layers (BG1-3, OBJ) would be checked here
-                    buf[buf_index] = 0x00; // Black
-                    buf[buf_index + 1] = 0x00;
-                    buf[buf_index + 2] = 0x00;
+                    // Here we render backdrop color (palette index 0) for better fidelity
+                    let mut backdrop_color = BGR::new(palette.read_halfword(0));
+                    let backdrop_color = self.apply_color_effect(backdrop_color, 5, _effect_enable);
+                    buf[buf_index] = backdrop_color.red();
+                    buf[buf_index + 1] = backdrop_color.green();
+                    buf[buf_index + 2] = backdrop_color.blue();
                     buf[buf_index + 3] = 0xFF;
                 }
             }
