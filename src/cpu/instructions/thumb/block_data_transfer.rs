@@ -10,11 +10,22 @@ pub fn exec_thumb_stmia<T>(bus: &mut T, dec: BlockDataTransfer, gpr: &mut [Word;
 where
     T: BusAccessor,
 {
-    let mut base = gpr[dec.get_Rn() as usize];
+    let rn = dec.get_Rn() as usize;
+    let mut base = gpr[rn];
     let register_list = dec.get_register_list();
 
     let mut cycle: Cycle = 0;
     let mut is_n_cycle = true;
+
+    // 特殊ケース: 空のrlistはPCをストアし、ベースを+0x40進める（gba-tests準拠）
+    if register_list == 0 {
+        cycle += bus.compute_cycle(base, AccessType::NonSeq(AccessWidth::Word));
+        bus.write_word(base & 0xFFFF_FFFC, gpr[PC]);
+        gpr[rn] = base.wrapping_add(0x40);
+        // 次命令プリフェッチ相当
+        let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
+        return (cycle, PipelineStatus::Continue);
+    }
 
     for i in 0..0x8 {
         if register_list & (1 << i) != 0 {
@@ -30,7 +41,7 @@ where
             base = base.wrapping_add(4);
         }
     }
-    gpr[dec.get_Rn() as usize] = base;
+    gpr[rn] = base;
     // consume 1N cycle to prefetch next cycle
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     (cycle, PipelineStatus::Continue)
@@ -44,11 +55,24 @@ where
         dbg!("before ldmia", &gpr);
     }
     let rn = dec.get_Rn();
-    let mut base = gpr[rn as usize];
+    let rn_idx = rn as usize;
+    let mut base = gpr[rn_idx];
     let register_list = dec.get_register_list();
 
     let mut cycle: Cycle = 0;
     let mut is_n_cycle = true;
+
+    // 特殊ケース: 空のrlistは [base] からPCをロードし、ベースを+0x40進める（gba-tests準拠）
+    if register_list == 0 {
+        let data = bus.read_word(base & 0xFFFF_FFFC);
+        cycle += bus.compute_cycle(base, AccessType::NonSeq(AccessWidth::Word));
+        gpr[PC] = data & 0xFFFF_FFFE;
+        base = base.wrapping_add(0x40);
+        gpr[rn_idx] = base;
+        // Iサイクル + 次プリフェッチ相当
+        let cycle = cycle + 1 + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+        return (cycle, PipelineStatus::Flush);
+    }
 
     for i in 0..0x8 {
         if register_list & (1 << i) != 0 {
@@ -67,7 +91,7 @@ where
         }
     }
     if (1 << rn) & register_list == 0 {
-        gpr[rn as usize] = base;
+        gpr[rn_idx] = base;
     }
 
     if started {
