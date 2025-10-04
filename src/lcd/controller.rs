@@ -127,6 +127,8 @@ impl LCDController {
         }
     }
 
+    pub fn get_bg_mode(&self) -> BgMode { self.dispcnt.mode() }
+
     pub fn run(&mut self, cycles: usize) -> (bool, bool) {
         println!("🎮 LCD run: incoming cycles={}, total_cycles={}, lines={}", cycles, self.cycles + cycles, self.lines);
         self.cycles += cycles;
