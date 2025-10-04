@@ -1,5 +1,6 @@
 mod bus;
 mod dma;
+mod timer;
 
 use crate::io;
 use crate::lcd;
@@ -86,6 +87,14 @@ impl GBA {
         loop {
             let cycles = self.arm.step(&mut self.bus, started).unwrap();
             total_cycles += cycles;
+            // 累積サイクル（絶対値）を更新し、タイマーを進める
+            self.cycles += cycles;
+            self.bus.tick_timers(self.cycles as u64);
+
+            // IE/IF/IMEの組み合わせでサービス可能ならCPUにIRQ要求
+            if self.bus.should_service_interrupt() {
+                self.arm.request_irq();
+            }
 
             // Execute any pending DMA transfers
             self.bus.execute_dma_transfers();
