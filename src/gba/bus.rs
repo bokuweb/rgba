@@ -19,6 +19,7 @@ use std::path::Path;
 
 use types::*;
 use super::dma::DMAController;
+use std::sync::{OnceLock, atomic::{AtomicUsize, Ordering}};
 
 pub const BIOS_ADDR: u32 = 0x0000_0000;
 pub const EWRAM_ADDR: u32 = 0x0200_0000;
@@ -93,41 +94,32 @@ impl CycleLUT {
         Self::default()
     }
 
-    pub fn update(&mut self, waitcnt: ()) {
-        static S_GAMEPAK_NSEQ_CYCLES: [usize; 4] = [4, 3, 2, 8];
-        static S_GAMEPAK_WS0_SEQ_CYCLES: [usize; 2] = [2, 1];
-        static S_GAMEPAK_WS1_SEQ_CYCLES: [usize; 2] = [4, 1];
-        static S_GAMEPAK_WS2_SEQ_CYCLES: [usize; 2] = [8, 1];
+    pub fn update_waitcnt(&mut self, waitcnt: HalfWord) {
+        // GBATEK: WAITCNT fields
+        const S_GAMEPAK_NSEQ_CYCLES: [usize; 4] = [4, 3, 2, 8];
+        const S_GAMEPAK_WS0_SEQ_CYCLES: [usize; 2] = [2, 1];
+        const S_GAMEPAK_WS1_SEQ_CYCLES: [usize; 2] = [4, 1];
+        const S_GAMEPAK_WS2_SEQ_CYCLES: [usize; 2] = [8, 1];
 
-        // let ws0_first_access = waitcnt.ws0_first_access() as usize;
-        // let ws1_first_access = waitcnt.ws1_first_access() as usize;
-        // let ws2_first_access = waitcnt.ws2_first_access() as usize;
-        // let ws0_second_access = waitcnt.ws0_second_access() as usize;
-        // let ws1_second_access = waitcnt.ws1_second_access() as usize;
-        // let ws2_second_access = waitcnt.ws2_second_access() as usize;
-
-        // update SRAM
-        // let sram_wait_cycles = 1 + S_GAMEPAK_NSEQ_CYCLES[waitcnt.sram_wait_control() as usize];
-        // self.n32[PAGE_SRAM_LO] = sram_wait_cycles;
-        // self.n32[PAGE_SRAM_LO] = sram_wait_cycles;
-        // self.n16[PAGE_SRAM_HI] = sram_wait_cycles;
-        // self.n16[PAGE_SRAM_HI] = sram_wait_cycles;
-        // self.s32[PAGE_SRAM_LO] = sram_wait_cycles;
-        // self.s32[PAGE_SRAM_LO] = sram_wait_cycles;
-        // self.s16[PAGE_SRAM_HI] = sram_wait_cycles;
-        // self.s16[PAGE_SRAM_HI] = sram_wait_cycles;
+        let ws0_first = ((waitcnt >> 2) & 0x3) as usize;
+        let ws0_second = ((waitcnt >> 4) & 0x1) as usize;
+        let ws1_first = ((waitcnt >> 5) & 0x3) as usize;
+        let ws1_second = ((waitcnt >> 7) & 0x1) as usize;
+        let ws2_first = ((waitcnt >> 8) & 0x3) as usize;
+        let ws2_second = ((waitcnt >> 10) & 0x1) as usize;
+        let prefetch = ((waitcnt >> 14) & 1) != 0;
 
         for i in 0..2 {
-            //self.n16[PAGE_GAMEPAK_WS0 + i] = 1 + S_GAMEPAK_NSEQ_CYCLES[ws0_first_access];
-            //self.s16[PAGE_GAMEPAK_WS0 + i] = 1 + S_GAMEPAK_WS0_SEQ_CYCLES[ws0_second_access];
-            //
-            //self.n16[PAGE_GAMEPAK_WS1 + i] = 1 + S_GAMEPAK_NSEQ_CYCLES[ws1_first_access];
-            //self.s16[PAGE_GAMEPAK_WS1 + i] = 1 + S_GAMEPAK_WS1_SEQ_CYCLES[ws1_second_access];
-            //
-            //self.n16[PAGE_GAMEPAK_WS2 + i] = 1 + S_GAMEPAK_NSEQ_CYCLES[ws2_first_access];
-            //self.s16[PAGE_GAMEPAK_WS2 + i] = 1 + S_GAMEPAK_WS2_SEQ_CYCLES[ws2_second_access];
+            self.n16[PAGE_GAMEPAK_WS0 + i] = 1 + S_GAMEPAK_NSEQ_CYCLES[ws0_first];
+            self.s16[PAGE_GAMEPAK_WS0 + i] = 1 + if prefetch { 1 } else { S_GAMEPAK_WS0_SEQ_CYCLES[ws0_second] };
 
-            // ROM 32bit accesses are split into two 16bit accesses 1N+1S
+            self.n16[PAGE_GAMEPAK_WS1 + i] = 1 + S_GAMEPAK_NSEQ_CYCLES[ws1_first];
+            self.s16[PAGE_GAMEPAK_WS1 + i] = 1 + if prefetch { 1 } else { S_GAMEPAK_WS1_SEQ_CYCLES[ws1_second] };
+
+            self.n16[PAGE_GAMEPAK_WS2 + i] = 1 + S_GAMEPAK_NSEQ_CYCLES[ws2_first];
+            self.s16[PAGE_GAMEPAK_WS2 + i] = 1 + if prefetch { 1 } else { S_GAMEPAK_WS2_SEQ_CYCLES[ws2_second] };
+
+            // 32bit ROM access = 1N + 1S
             self.n32[PAGE_GAMEPAK_WS0 + i] = self.n16[PAGE_GAMEPAK_WS0 + i] + self.s16[PAGE_GAMEPAK_WS0 + i];
             self.n32[PAGE_GAMEPAK_WS1 + i] = self.n16[PAGE_GAMEPAK_WS1 + i] + self.s16[PAGE_GAMEPAK_WS1 + i];
             self.n32[PAGE_GAMEPAK_WS2 + i] = self.n16[PAGE_GAMEPAK_WS2 + i] + self.s16[PAGE_GAMEPAK_WS2 + i];
@@ -153,6 +145,8 @@ pub struct CpuBus {
     sram: Ram, // SRAM/FRAM/Flash save memory (0x0E000000-0x0E00FFFF, 64KB max)
     key: io::Key,
     interrupt_controller: std::cell::RefCell<crate::interrupt::InterruptController>,
+    timers: crate::gba::timer::Timers,
+    waitcnt: HalfWord,
 }
 
 impl BusAccessor for CpuBus {
@@ -164,6 +158,18 @@ impl BusAccessor for CpuBus {
             // IWRAM 32KB mirrors across 0x0300_0000-0x03FF_FFFF
             0x0300_0000..=0x03FF_FFFF => self.wram.read_byte((addr - 0x0300_0000) & 0x7FFF),
             0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
+            0x0400_0100..=0x0400_010F => {
+                let ofs = (addr - 0x0400_0100) as u32;
+                let v = self.timers.read(ofs);
+                // Debug: 最初の数十回だけタイマー読み出しをログ
+                static TIMER_RD_CNT: OnceLock<AtomicUsize> = OnceLock::new();
+                let c = TIMER_RD_CNT.get_or_init(|| AtomicUsize::new(0)).fetch_add(1, Ordering::Relaxed);
+                if c < 64 {
+                    let ch = (ofs / 4) as usize;
+                    println!("⏱ TM{} READ ofs=0x{:02X} -> 0x{:02X}", ch, ofs & 0xFF, v);
+                }
+                v
+            }
             0x0400_0060..=0x0400_03FF => 0,
             // Palette 1KB mirrors
             0x0500_0000..=0x05FF_FFFF => self.palette.read_byte((addr - 0x0500_0000) & 0x3FF),
@@ -196,7 +202,13 @@ impl BusAccessor for CpuBus {
             0x0400_0130 => self.key.read(),
             0x0400_0200 => self.interrupt_controller.borrow().read_ie(), // IE register
             0x0400_0202 => self.interrupt_controller.borrow().read_if(), // IF register
+            0x0400_0204 => self.waitcnt,
             0x0400_0208 => self.interrupt_controller.borrow().read_ime(), // IME register
+            0x0400_0100..=0x0400_010F => {
+                let lo = self.read_byte(addr) as u16;
+                let hi = self.read_byte(addr + 1) as u16;
+                (hi << 8) | lo
+            }
             0x0400_0060..=0x0400_03FF => 0,
             0x0500_0000..=0x05FF_FFFF => self.palette.read_halfword((addr - 0x0500_0000) & 0x3FF),
             // 修正(004): VRAMミラー対応
@@ -219,6 +231,15 @@ impl BusAccessor for CpuBus {
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_word(addr),
             0x0200_0000..=0x02FF_FFFF => self.eram.read_word((addr - 0x0200_0000) & 0x3FFFF),
+            0x0400_0100..=0x0400_010F => {
+                // 組み合わせて32bit値を返す（TMxCNT_L/CNT_H）
+                let base = (addr - 0x0400_0100) as u32;
+                let b0 = self.timers.read(base + 0) as u32;
+                let b1 = self.timers.read(base + 1) as u32;
+                let b2 = self.timers.read(base + 2) as u32;
+                let b3 = self.timers.read(base + 3) as u32;
+                b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+            }
             0x0300_0000..=0x03FF_FFFF => {
                 let off = (addr - 0x0300_0000) & 0x7FFF;
                 let v = self.wram.read_word(off);
@@ -266,10 +287,21 @@ impl BusAccessor for CpuBus {
                 self.wram.write_byte((addr - 0x0300_0000) & 0x7FFF, data);
             }
             0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
+            0x0400_0100..=0x0400_010F => {
+                let ofs = (addr - 0x0400_0100) as u32;
+                self.timers.write(ofs, data);
+            }
             0x0400_0060..=0x0400_03FF => {
                 // TODO: Implement DMA, Timer, and other I/O registers
-                if addr >= 0x0400_00B0 && addr <= 0x0400_00DE {
-                    println!("🔧 DMA register byte write: 0x{:08x} = 0x{:02x} (not implemented)", addr, data);
+                match addr {
+                    // Sound FIFO A/B (accept data; no-op sink for now)
+                    0x0400_00A0 | 0x0400_00A4 => {
+                        println!("🎵 Sound FIFO write (byte): 0x{:08x} = 0x{:02x}", addr, data);
+                    }
+                    _ if (addr >= 0x0400_00B0 && addr <= 0x0400_00DE) => {
+                        println!("🔧 DMA register byte write: 0x{:08x} = 0x{:02x} (not implemented)", addr, data);
+                    }
+                    _ => {}
                 }
             }
             // Palette: byte store behaves as halfword store replicated (0xVV -> 0xVVVV)
@@ -278,14 +310,24 @@ impl BusAccessor for CpuBus {
                 let hw = (data as HalfWord as u16) | (((data as HalfWord) as u16) << 8);
                 self.palette.write_halfword(off, hw as HalfWord);
             }
-            // VRAM: byte store behaves as halfword store replicated (0xVV -> 0xVVVV) with VRAM mirroring
+            // VRAM: in bitmap modes (3/4/5), byte store behaves as halfword replicate; in tiled modes (0/1/2), ignore
             0x0600_0000..=0x06FF_FFFF => {
-                let vram_addr = Self::map_vram_offset(addr) & !1; // align to halfword
-                let hw = (data as HalfWord as u16) | (((data as HalfWord) as u16) << 8);
-                if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
-                    println!("📝 VRAM byte-as-halfword write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:04x}", addr, vram_addr, hw);
+                let mode = self.lcdc.get_bg_mode();
+                match mode {
+                    crate::lcd::BgMode::Mode3 |
+                    crate::lcd::BgMode::Mode4 |
+                    crate::lcd::BgMode::Mode5 => {
+                        let vram_addr = Self::map_vram_offset(addr) & !1; // align to halfword
+                        let hw = (data as HalfWord as u16) | (((data as HalfWord) as u16) << 8);
+                        if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
+                            println!("📝 VRAM byte-as-halfword write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:04x}", addr, vram_addr, hw);
+                        }
+                        self.vram.write_halfword(vram_addr, hw as HalfWord);
+                    }
+                    _ => {
+                        // Tiled modes: ignore byte writes to VRAM
+                    }
                 }
-                self.vram.write_halfword(vram_addr, hw as HalfWord);
             }
             // OAM: byte stores are ignored
             0x0700_0000..=0x07FF_FFFF => {
@@ -319,11 +361,28 @@ impl BusAccessor for CpuBus {
             0x0400_0200 => self.interrupt_controller.borrow_mut().write_ie(data), // IE register
             0x0400_0202 => self.interrupt_controller.borrow_mut().write_if(data), // IF register  
             0x0400_0208 => self.interrupt_controller.borrow_mut().write_ime(data), // IME register
+            0x0400_0204 => { // WAITCNT
+                self.waitcnt = data;
+                self.cycleLUT.update_waitcnt(data);
+            }
+            0x0400_0100..=0x0400_010F => {
+                let lo = (data & 0x00FF) as u8;
+                let hi = ((data >> 8) & 0x00FF) as u8;
+                let base = (addr - 0x0400_0100) as u32;
+                self.timers.write(base, lo);
+                self.timers.write(base + 1, hi);
+            }
             0x0400_0060..=0x0400_03FF => {
                 // TODO: Implement DMA, Timer, and other I/O registers
-                // For now, just log DMA register writes to help debug
-                if addr >= 0x0400_00B0 && addr <= 0x0400_00DE {
-                    println!("🔧 DMA register write: 0x{:08x} = 0x{:04x} (not implemented)", addr, data);
+                match addr {
+                    // Sound FIFO A/B (accept data; no-op sink for now)
+                    0x0400_00A0 | 0x0400_00A4 => {
+                        println!("🎵 Sound FIFO write (halfword): 0x{:08x} = 0x{:04x}", addr, data);
+                    }
+                    _ if (addr >= 0x0400_00B0 && addr <= 0x0400_00DE) => {
+                        println!("🔧 DMA register write: 0x{:08x} = 0x{:04x} (not implemented)", addr, data);
+                    }
+                    _ => {}
                 }
             }
             0x0500_0000..=0x05FF_FFFF => self.palette.write_halfword((addr - 0x0500_0000) & 0x3FF, data),
@@ -370,6 +429,20 @@ impl BusAccessor for CpuBus {
                 println!("⚠️  WARNING: Write to unused area 0x{:08x} = 0x{:08x} (ignored)", addr, data);
             }
             0x0400_0000..=0x0400_005F => self.lcdc.write_word(addr - 0x0400_0000, data),
+            0x0400_0100..=0x0400_010F => {
+                // Split into 4 byte writes
+                let base = (addr - 0x0400_0100) as u32;
+                self.timers.write(base + 0, (data & 0x000000FF) as u8);
+                self.timers.write(base + 1, ((data >> 8) & 0x000000FF) as u8);
+                self.timers.write(base + 2, ((data >> 16) & 0x000000FF) as u8);
+                self.timers.write(base + 3, ((data >> 24) & 0x000000FF) as u8);
+            }
+            0x0400_0204 => {
+                // WAITCNT is 16-bit at 0x04000204; word writes may target it
+                let hw = (data & 0xFFFF) as HalfWord;
+                self.waitcnt = hw;
+                self.cycleLUT.update_waitcnt(hw);
+            }
             0x0400_0060..=0x0400_03FF => {
                 // DMA and other I/O registers
                 match addr {
@@ -444,7 +517,7 @@ impl BusAccessor for CpuBus {
                     }
                 }
             }
-            0x0500_0000..=0x0500_03FF => self.palette.write_word(addr - 0x0500_0000, data),
+            0x0500_0000..=0x05FF_FFFF => self.palette.write_word((addr - 0x0500_0000) & 0x3FF, data),
             0x0600_0000..=0x06FF_FFFF => {
                 // 修正(004): 書き込み側もミラー
                 let vram_addr = Self::map_vram_offset(addr);
@@ -505,6 +578,8 @@ impl CpuBus {
             sram,
             key,
             interrupt_controller: std::cell::RefCell::new(crate::interrupt::InterruptController::new()),
+            timers: crate::gba::timer::Timers::default(),
+            waitcnt: 0,
         }
     }
 
@@ -528,6 +603,11 @@ impl CpuBus {
                 self.dma.complete_transfer(channel);
             }
         }
+    }
+
+    pub(crate) fn tick_timers(&mut self, now_cycles: u64) {
+        let irq = &mut *self.interrupt_controller.borrow_mut();
+        self.timers.tick(now_cycles, irq);
     }
 
     // VRAM mirror mapping helper
@@ -626,6 +706,9 @@ impl CpuBus {
 
     fn write_word_internal(&mut self, addr: Word, data: Word) {
         match addr {
+            0x0400_00A0 | 0x0400_00A4 => {
+                println!("🎵 DMA Sound FIFO write (word): 0x{:08x} = 0x{:08x}", addr, data);
+            }
             0x0600_0000..=0x06FF_FFFF => {
                 let vram_addr = Self::map_vram_offset(addr);
                 if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
@@ -647,6 +730,11 @@ impl CpuBus {
 
     fn write_halfword_internal(&mut self, addr: Word, data: HalfWord) {
         match addr {
+            0x0400_00A0 | 0x0400_00A4 => {
+                println!("🎵 DMA Sound FIFO write (halfword): 0x{:08x} = 0x{:04x}", addr, data);
+            }
+
+
             0x0600_0000..=0x06FF_FFFF => {
                 let vram_addr = Self::map_vram_offset(addr);
                 if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
