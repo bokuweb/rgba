@@ -82,7 +82,11 @@ impl Timers {
                     self.timer[i].just_enabled = true;
                     // 次のインクリメント境界を現在サイクル+分周で設定
                     let prescaler = match self.timer[i].prescaler { 0=>1,1=>64,2=>256,3=>1024,_=>1 } as u64;
-                    self.timer[i].next_edge = self.prev_cycle.saturating_add(prescaler);
+                    // 実測に合わせ、有効化直後の最初のインクリメント境界をわずかに遅延させる
+                    let enable_phase_adjust: u64 = 2; // 2 cycles delay
+                    self.timer[i].next_edge = self.prev_cycle
+                        .saturating_add(prescaler)
+                        .saturating_add(enable_phase_adjust);
                 } else if prev_enable && !self.timer[i].enable {
                     // Disable時はカウンタ維持
                 }
@@ -148,14 +152,9 @@ impl Timers {
             produced
         };
 
-        // 有効化直後の1回目のtickでは、多重インクリメントを抑制。
-        // 実機では書き込み完了以降の経過サイクルのみがカウント対象となるため、
-        // 本エミュの "命令完了後にまとめてtick" という性質による過剰加算を防ぐ。
-        if t.just_enabled {
-            // 有効化直後は次のサイクル境界までカウントしない
-            inc = 0;
-            t.just_enabled = false;
-        }
+        // 有効化直後も分周境界を正確に追従して加算する。
+        // 実機では有効化直後から/1なら直ちにカウントし始めるため、抑制は行わない。
+        if t.just_enabled { t.just_enabled = false; }
 
         let mut overflow: u64 = 0;
         while inc > 0 {
