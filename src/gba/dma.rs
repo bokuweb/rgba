@@ -7,6 +7,7 @@ pub struct DMAChannel {
     pub count: HalfWord,   // Word Count
     pub control: HalfWord, // Control Register
     pub enabled: bool,     // Enable flag
+    pub pending: bool,     // Pending immediate transfer request
 }
 
 impl DMAChannel {
@@ -17,6 +18,7 @@ impl DMAChannel {
             count: 0,
             control: 0,
             enabled: false,
+            pending: false,
         }
     }
 
@@ -92,19 +94,32 @@ impl DMAController {
 
     pub fn write_control(&mut self, channel: usize, control: HalfWord) {
         if channel < 4 {
-            let was_enabled = self.channels[channel].enabled;
-            self.channels[channel].set_control(control);
+            let ch = &mut self.channels[channel];
+            let was_enabled = ch.enabled;
+            let prev_timing = ch.get_timing();
+            ch.set_control(control);
+            let now_timing = ch.get_timing();
             
             println!("🔧 DMA{} Control: 0x{:04x} (Enable: {}, Size: {}bit, Timing: {})", 
                 channel, control, 
-                self.channels[channel].enabled,
-                if self.channels[channel].get_transfer_size() == 4 { 32 } else { 16 },
-                self.channels[channel].get_timing()
+                ch.enabled,
+                if ch.get_transfer_size() == 4 { 32 } else { 16 },
+                ch.get_timing()
             );
 
-            // If DMA was just enabled, trigger transfer
-            if !was_enabled && self.channels[channel].enabled {
-                self.trigger_transfer(channel);
+            // Pending scheduling policy:
+            // - When enabling (edge 0->1): schedule immediately only if timing==Immediate
+            // - When already enabled and timing changed to Immediate: do NOT start immediately (HW behavior)
+            // - Otherwise: clear pending
+            if !was_enabled && ch.enabled {
+                ch.pending = now_timing == 0; // Immediate only
+            } else if was_enabled && ch.enabled {
+                // Mode change while enabled shouldn't start transfer immediately
+                if prev_timing != now_timing {
+                    ch.pending = false;
+                }
+            } else {
+                ch.pending = false;
             }
         }
     }
@@ -125,7 +140,7 @@ impl DMAController {
     }
 
     pub fn get_pending_transfer(&mut self, channel: usize) -> Option<(Word, Word, usize, usize)> {
-        if channel < 4 && self.channels[channel].enabled {
+        if channel < 4 && self.channels[channel].enabled && self.channels[channel].pending {
             let dma = &self.channels[channel];
             let count = if dma.count == 0 {
                 match channel {
@@ -144,6 +159,8 @@ impl DMAController {
 
     pub fn complete_transfer(&mut self, channel: usize) {
         if channel < 4 {
+            // Clear pending regardless
+            self.channels[channel].pending = false;
             if !self.channels[channel].is_repeat() {
                 self.channels[channel].enabled = false;
                 self.channels[channel].control &= !0x8000; // Clear enable bit
