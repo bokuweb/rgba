@@ -209,7 +209,21 @@ impl BusAccessor for CpuBus {
                 let hi = self.read_byte(addr + 1) as u16;
                 (hi << 8) | lo
             }
-            0x0400_0060..=0x0400_03FF => 0,
+            0x0400_0060..=0x0400_03FF => {
+                match addr {
+                    // DMAxCNT_H reads
+                    0x0400_00BA => self.dma.channels[0].control,
+                    0x0400_00C6 => self.dma.channels[1].control,
+                    0x0400_00D2 => self.dma.channels[2].control,
+                    0x0400_00DE => self.dma.channels[3].control,
+                    // DMAxCNT_L reads
+                    0x0400_00B8 => self.dma.channels[0].count,
+                    0x0400_00C4 => self.dma.channels[1].count,
+                    0x0400_00D0 => self.dma.channels[2].count,
+                    0x0400_00DC => self.dma.channels[3].count,
+                    _ => 0,
+                }
+            },
             0x0500_0000..=0x05FF_FFFF => self.palette.read_halfword((addr - 0x0500_0000) & 0x3FF),
             // 修正(004): VRAMミラー対応
             0x0600_0000..=0x06FF_FFFF => self.vram.read_halfword(Self::map_vram_offset(addr)),
@@ -256,7 +270,26 @@ impl BusAccessor for CpuBus {
             // 修正(006): OAM 1KB ミラー（32bit 読み）
             0x0700_0000..=0x07FF_FFFF => self.oam.read_word((addr - 0x0700_0000) & 0x3FF),
             0x0400_0000..=0x0400_005F => self.lcdc.read_word(addr - 0x0400_0000),
-            0x0400_0060..=0x0400_03FF => 0,
+            0x0400_0060..=0x0400_03FF => {
+                match addr {
+                    // DMAxSAD (source)
+                    0x0400_00B0 => self.dma.channels[0].source,
+                    0x0400_00BC => self.dma.channels[1].source,
+                    0x0400_00C8 => self.dma.channels[2].source,
+                    0x0400_00D4 => self.dma.channels[3].source,
+                    // DMAxDAD (destination)
+                    0x0400_00B4 => self.dma.channels[0].destination,
+                    0x0400_00C0 => self.dma.channels[1].destination,
+                    0x0400_00CC => self.dma.channels[2].destination,
+                    0x0400_00D8 => self.dma.channels[3].destination,
+                    // DMAxCNT (count | control<<16)
+                    0x0400_00B8 => (self.dma.channels[0].count as u32) | ((self.dma.channels[0].control as u32) << 16),
+                    0x0400_00C4 => (self.dma.channels[1].count as u32) | ((self.dma.channels[1].control as u32) << 16),
+                    0x0400_00D0 => (self.dma.channels[2].count as u32) | ((self.dma.channels[2].control as u32) << 16),
+                    0x0400_00DC => (self.dma.channels[3].count as u32) | ((self.dma.channels[3].control as u32) << 16),
+                    _ => 0,
+                }
+            },
             0x0500_0000..=0x05FF_FFFF => self.palette.read_word((addr - 0x0500_0000) & 0x3FF),
             0x0800_0000..=0x0DFF_FFFF => self.rom.read_word(Self::map_gamepak_offset(addr)),
             0x0E00_0000..=0x0E00_FFFF => {
