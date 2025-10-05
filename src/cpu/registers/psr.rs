@@ -149,72 +149,63 @@ impl PSR {
     }
 
     pub fn switch_mode(&mut self, new_mode: Mode, gpr: &mut [Word; 16], spsr: &mut PSR, bank_gpr: &mut BankGpr, bank_spsr: &mut BankSpsr) {
-        if new_mode == self.get_mode() {
+        let current_mode = self.get_mode();
+        if new_mode == current_mode {
             return;
         }
 
-        // TODO: move to PSR?
-        //       switch mode
-        // let current_value = cpsr.get();
-        // NOTE: new_mode が User/System 以外の特権モードのときのみ
-        // バンキングの入れ替え処理を行うべきだが、以前は `||` だったため
-        // 常に true となり不要なバンク切替が走っていた。
-        // その結果、FIQ<->System 切替時に r8-r12 の入れ替えが誤って起こりうる。
-        // ここを `&&` に修正し、User/System の場合はこの分岐を素通りする。
-        if new_mode != Mode::User && new_mode != Mode::System {
-            let current_mode = self.get_mode();
-            // let new_mode = self.get_mode();
-            if current_mode != new_mode {
-                // TODO: support FIQ
-                if current_mode == Mode::FIQ {
-                    bank_gpr.write(current_mode, 8, gpr[8]);
-                    bank_gpr.write(current_mode, 9, gpr[9]);
-                    bank_gpr.write(current_mode, 10, gpr[10]);
-                    bank_gpr.write(current_mode, 11, gpr[11]);
-                    bank_gpr.write(current_mode, 12, gpr[12]);
+        // 1) 離脱側のバンク処理
+        // FIQ から離れる場合は、FIQ バンク r8-r12 を保存し、共有レジスタに戻す
+        if current_mode == Mode::FIQ {
+            bank_gpr.write(current_mode, 8, gpr[8]);
+            bank_gpr.write(current_mode, 9, gpr[9]);
+            bank_gpr.write(current_mode, 10, gpr[10]);
+            bank_gpr.write(current_mode, 11, gpr[11]);
+            bank_gpr.write(current_mode, 12, gpr[12]);
 
-                    gpr[8] = bank_gpr.pop(8);
-                    gpr[9] = bank_gpr.pop(9);
-                    gpr[10] = bank_gpr.pop(10);
-                    gpr[11] = bank_gpr.pop(11);
-                    gpr[12] = bank_gpr.pop(12);
-                }
-
-                if new_mode == Mode::FIQ {
-                    bank_gpr.push(8, gpr[8]);
-                    bank_gpr.push(9, gpr[9]);
-                    bank_gpr.push(10, gpr[10]);
-                    bank_gpr.push(11, gpr[11]);
-                    bank_gpr.push(12, gpr[12]);
-
-                    gpr[8] = bank_gpr.read(new_mode, 8);
-                    gpr[9] = bank_gpr.read(new_mode, 9);
-                    gpr[10] = bank_gpr.read(new_mode, 10);
-                    gpr[11] = bank_gpr.read(new_mode, 11);
-                    gpr[12] = bank_gpr.read(new_mode, 12);
-                }
-
-                if current_mode != Mode::System && current_mode != Mode::User {
-                    bank_gpr.write(current_mode, SP, gpr[SP]);
-                    bank_gpr.write(current_mode, LR, gpr[LR]);
-                    bank_spsr.write(current_mode, *spsr);
-
-                    gpr[SP] = bank_gpr.pop(SP);
-                    gpr[LR] = bank_gpr.pop(LR);
-                    *spsr = bank_spsr.pop()
-                }
-
-                if new_mode != Mode::System && new_mode != Mode::User {
-                    bank_gpr.push(SP, gpr[SP]);
-                    bank_gpr.push(LR, gpr[LR]);
-                    bank_spsr.push(*spsr);
-
-                    gpr[SP] = bank_gpr.read(new_mode, SP);
-                    gpr[LR] = bank_gpr.read(new_mode, LR);
-                    *spsr = bank_spsr.read(new_mode);
-                }
-            }
+            gpr[8] = bank_gpr.pop(8);
+            gpr[9] = bank_gpr.pop(9);
+            gpr[10] = bank_gpr.pop(10);
+            gpr[11] = bank_gpr.pop(11);
+            gpr[12] = bank_gpr.pop(12);
         }
+        // 離脱側が特権モード（User/System 以外）の場合、SP/LR/SPSR を保存し共有に戻す
+        if current_mode != Mode::System && current_mode != Mode::User {
+            bank_gpr.write(current_mode, SP, gpr[SP]);
+            bank_gpr.write(current_mode, LR, gpr[LR]);
+            bank_spsr.write(current_mode, *spsr);
+
+            gpr[SP] = bank_gpr.pop(SP);
+            gpr[LR] = bank_gpr.pop(LR);
+            *spsr = bank_spsr.pop();
+        }
+
+        // 2) 進入側のバンク処理
+        // FIQ に入る場合は、共有 r8-r12 を退避し、FIQ バンク値を見せる
+        if new_mode == Mode::FIQ {
+            bank_gpr.push(8, gpr[8]);
+            bank_gpr.push(9, gpr[9]);
+            bank_gpr.push(10, gpr[10]);
+            bank_gpr.push(11, gpr[11]);
+            bank_gpr.push(12, gpr[12]);
+
+            gpr[8] = bank_gpr.read(new_mode, 8);
+            gpr[9] = bank_gpr.read(new_mode, 9);
+            gpr[10] = bank_gpr.read(new_mode, 10);
+            gpr[11] = bank_gpr.read(new_mode, 11);
+            gpr[12] = bank_gpr.read(new_mode, 12);
+        }
+        // 進入側が特権モード（User/System 以外）なら SP/LR/SPSR を切替える
+        if new_mode != Mode::System && new_mode != Mode::User {
+            bank_gpr.push(SP, gpr[SP]);
+            bank_gpr.push(LR, gpr[LR]);
+            bank_spsr.push(*spsr);
+
+            gpr[SP] = bank_gpr.read(new_mode, SP);
+            gpr[LR] = bank_gpr.read(new_mode, LR);
+            *spsr = bank_spsr.read(new_mode);
+        }
+
         self.set_mode(new_mode);
     }
 

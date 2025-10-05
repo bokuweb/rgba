@@ -185,8 +185,12 @@ impl BankGpr {
                 // Active -> restore and clear
                 for i in 0..16 {
                     if (self.glitch_mask & (1 << i)) != 0 {
-                        gpr[i] = self.glitch_backup[i];
-                        // Clear stored values to avoid stale data (not strictly necessary)
+                        // もし対象レジスタが次命令で書き換えられている場合は復元しない
+                        // （overlay 値と現在値が異なれば write と判断）
+                        if gpr[i] == self.glitch_values[i] {
+                            gpr[i] = self.glitch_backup[i];
+                        }
+                        // Clear stored values
                         self.glitch_values[i] = 0;
                         self.glitch_backup[i] = 0;
                     }
