@@ -152,13 +152,10 @@ where
     }
 
     if do_user_load {
-        // While still in User mode, capture user view for all banked registers.
-        let user_is_fiq = false; // User/System share same bank (non-FIQ)
+        // While still in User mode, capture user view for ALL banked registers.
         for i in 0..16 {
             let is_banked_in_fiq = (8..=14).contains(&i);
             let is_banked_nonfiq = i == SP || i == LR;
-            // In User mode, the visible r8-r12 are the non-FIQ bank (shared with System),
-            // which is exactly what we need for OR-glitch source.
             if is_banked_in_fiq || is_banked_nonfiq {
                 user_snapshot[i] = Some(gpr[i]);
             }
@@ -168,7 +165,7 @@ where
         cpsr.switch_mode(current_mode, gpr, spsr, bank_gpr, bank_spsr);
 
         // Program the one-shot glitch for next instruction.
-        // Only registers that are banked in the current mode are affected.
+        // Only registers that are banked in the current mode are affected (rlistに含まれなくても適用)。
         // FIQ: r8-r14 are banked; IRQ/SVC/ABT/UND: r13-r14.
         let mut mask: u16 = 0;
         let mut overlays: [(usize, u32); 16] = [(0, 0); 16];
