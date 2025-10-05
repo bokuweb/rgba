@@ -500,25 +500,53 @@ impl ARM {
                     if self.bank_gpr.is_glitch_active_or_armed() {
                         self.bank_gpr.refine_remove_indices_from_overlay(&[dec.get_Rm() as usize, dec.get_Rs() as usize], &mut self.gpr);
                     }
-                    exec_arm_umull(bus, dec, &mut self.gpr, &mut self.cpsr)?
+                    let rd_idx = dec.get_Rd() as usize;
+                    let rn_idx = dec.get_Rn() as usize;
+                    let r = exec_arm_umull(bus, dec, &mut self.gpr, &mut self.cpsr)?;
+                    // 実行直後に書き込み先(RdHi, RdLo)がオーバレイ対象なら取り除く。
+                    if self.bank_gpr.is_glitch_active_or_armed() {
+                        self.bank_gpr.refine_remove_indices_from_overlay(&[rd_idx, rn_idx], &mut self.gpr);
+                    }
+                    r
                 }
                 arm::Instruction::UMLAL(dec) => {
                     if self.bank_gpr.is_glitch_active_or_armed() {
                         self.bank_gpr.refine_remove_indices_from_overlay(&[dec.get_Rm() as usize, dec.get_Rs() as usize], &mut self.gpr);
                     }
-                    exec_arm_umlal(bus, dec, &mut self.gpr, &mut self.cpsr)?
+                    let rd_idx = dec.get_Rd() as usize;
+                    let rn_idx = dec.get_Rn() as usize;
+                    let r = exec_arm_umlal(bus, dec, &mut self.gpr, &mut self.cpsr)?;
+                    // 実行直後に書き込み先(RdHi, RdLo)がオーバレイ対象なら取り除く。
+                    if self.bank_gpr.is_glitch_active_or_armed() {
+                        self.bank_gpr.refine_remove_indices_from_overlay(&[rd_idx, rn_idx], &mut self.gpr);
+                    }
+                    r
                 }
                 arm::Instruction::SMULL(dec) => {
                     if self.bank_gpr.is_glitch_active_or_armed() {
                         self.bank_gpr.refine_remove_indices_from_overlay(&[dec.get_Rm() as usize, dec.get_Rs() as usize], &mut self.gpr);
                     }
-                    exec_arm_smull(bus, dec, &mut self.gpr, &mut self.cpsr)?
+                    let rd_idx = dec.get_Rd() as usize;
+                    let rn_idx = dec.get_Rn() as usize;
+                    let r = exec_arm_smull(bus, dec, &mut self.gpr, &mut self.cpsr)?;
+                    // 実行直後に書き込み先(RdHi, RdLo)がオーバレイ対象なら取り除く。
+                    if self.bank_gpr.is_glitch_active_or_armed() {
+                        self.bank_gpr.refine_remove_indices_from_overlay(&[rd_idx, rn_idx], &mut self.gpr);
+                    }
+                    r
                 }
                 arm::Instruction::SMLAL(dec) => {
                     if self.bank_gpr.is_glitch_active_or_armed() {
                         self.bank_gpr.refine_remove_indices_from_overlay(&[dec.get_Rm() as usize, dec.get_Rs() as usize], &mut self.gpr);
                     }
-                    exec_arm_smlal(bus, dec, &mut self.gpr, &mut self.cpsr)?
+                    let rd_idx = dec.get_Rd() as usize;
+                    let rn_idx = dec.get_Rn() as usize;
+                    let r = exec_arm_smlal(bus, dec, &mut self.gpr, &mut self.cpsr)?;
+                    // 実行直後に書き込み先(RdHi, RdLo)がオーバレイ対象なら取り除く。
+                    if self.bank_gpr.is_glitch_active_or_armed() {
+                        self.bank_gpr.refine_remove_indices_from_overlay(&[rd_idx, rn_idx], &mut self.gpr);
+                    }
+                    r
                 }
                 arm::Instruction::LDR(dec) => exec_arm_ldr(bus, dec, &mut self.gpr, &self.cpsr)?,
                 arm::Instruction::STR(dec) => exec_arm_str(bus, dec, &mut self.gpr, &self.cpsr)?,
