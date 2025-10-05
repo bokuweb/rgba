@@ -495,10 +495,31 @@ impl ARM {
                 arm::Instruction::MVN(dec) => exec_arm_mvn(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::MUL(dec) => exec_arm_mul(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::MLA(dec) => exec_arm_mla(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                arm::Instruction::UMULL(dec) => exec_arm_umull(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                arm::Instruction::UMLAL(dec) => exec_arm_umlal(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                arm::Instruction::SMULL(dec) => exec_arm_smull(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                arm::Instruction::SMLAL(dec) => exec_arm_smlal(bus, dec, &mut self.gpr, &mut self.cpsr)?,
+                arm::Instruction::UMULL(dec) => {
+                    // LDM^グリッチが有効化されている場合、乗算の被乗数(Rm, Rs)はオーバレイ対象から除外する
+                    if self.bank_gpr.is_glitch_active_or_armed() {
+                        self.bank_gpr.refine_remove_indices_from_overlay(&[dec.get_Rm() as usize, dec.get_Rs() as usize], &mut self.gpr);
+                    }
+                    exec_arm_umull(bus, dec, &mut self.gpr, &mut self.cpsr)?
+                }
+                arm::Instruction::UMLAL(dec) => {
+                    if self.bank_gpr.is_glitch_active_or_armed() {
+                        self.bank_gpr.refine_remove_indices_from_overlay(&[dec.get_Rm() as usize, dec.get_Rs() as usize], &mut self.gpr);
+                    }
+                    exec_arm_umlal(bus, dec, &mut self.gpr, &mut self.cpsr)?
+                }
+                arm::Instruction::SMULL(dec) => {
+                    if self.bank_gpr.is_glitch_active_or_armed() {
+                        self.bank_gpr.refine_remove_indices_from_overlay(&[dec.get_Rm() as usize, dec.get_Rs() as usize], &mut self.gpr);
+                    }
+                    exec_arm_smull(bus, dec, &mut self.gpr, &mut self.cpsr)?
+                }
+                arm::Instruction::SMLAL(dec) => {
+                    if self.bank_gpr.is_glitch_active_or_armed() {
+                        self.bank_gpr.refine_remove_indices_from_overlay(&[dec.get_Rm() as usize, dec.get_Rs() as usize], &mut self.gpr);
+                    }
+                    exec_arm_smlal(bus, dec, &mut self.gpr, &mut self.cpsr)?
+                }
                 arm::Instruction::LDR(dec) => exec_arm_ldr(bus, dec, &mut self.gpr, &self.cpsr)?,
                 arm::Instruction::STR(dec) => exec_arm_str(bus, dec, &mut self.gpr, &self.cpsr)?,
                 arm::Instruction::LDRB(dec) => exec_arm_ldrb(bus, dec, &mut self.gpr, &self.cpsr)?,

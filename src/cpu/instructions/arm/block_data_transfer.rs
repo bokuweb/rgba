@@ -109,15 +109,10 @@ where
     // (ie. for DECREASING addressing modes, the CPU does first calculate the lowest address,
     // and does then process rlist with increasing addresses; this detail can be important when accessing memory mapped I/O ports).
 
-    // For LDM^ (S=1 in privileged modes), we need two things:
-    //  1) Load into the User/System banked registers
-    //  2) Program the one-shot OR-glitch for the next instruction, where reads of
-    //     banked registers return (user_value | current_mode_value).
-    // Snapshot of User-mode view for banked registers (used for OR-glitch)
-    let mut user_snapshot: [Option<u32>; 16] = [None; 16];
+    // LDM^: 特権モードで S=1 かつ L=1 かつ R15 非含有の場合、転送先は User/System バンク。
+    // ここでは一時的に User モードに切替えて読み込み、完了後に元のモードへ戻す（tgba実装に準拠）。
     let do_user_load = dec.get_S() && current_mode != Mode::User;
     if do_user_load {
-        // Temporarily view User bank to write loaded values there
         cpsr.switch_mode(Mode::User, gpr, spsr, bank_gpr, bank_spsr);
     }
 
@@ -152,7 +147,8 @@ where
     }
 
     if do_user_load {
-        // While still in User mode, capture user view for ALL banked registers.
+        // User バンクに読み込まれた直後のスナップショットを取得（FIQ: r8-r14, 他特権: r13-r14）
+        let mut user_snapshot: [Option<u32>; 16] = [None; 16];
         for i in 0..16 {
             let is_banked_in_fiq = (8..=14).contains(&i);
             let is_banked_nonfiq = i == SP || i == LR;
@@ -161,23 +157,26 @@ where
             }
         }
 
-        // Switch back to original mode; the values just read remain in the User bank.
+        // 現在のモードへ戻す（以降、見えているのは現モードのバンク値）
         cpsr.switch_mode(current_mode, gpr, spsr, bank_gpr, bank_spsr);
 
-        // Program the one-shot glitch for next instruction.
-        // Only registers that are banked in the current mode are affected (rlistに含まれなくても適用)。
-        // FIQ: r8-r14 are banked; IRQ/SVC/ABT/UND: r13-r14.
+        // 1命令だけ、対象レジスタに user|curr を重ねて見せる
         let mut mask: u16 = 0;
         let mut overlays: [(usize, u32); 16] = [(0, 0); 16];
         let mut overlay_count: usize = 0;
         let is_fiq = matches!(current_mode, Mode::FIQ);
         for i in 0..16 {
+            // バンク対象か？
             let is_banked_here = if is_fiq { (8..=14).contains(&i) } else { i == SP || i == LR };
             if !is_banked_here {
                 continue;
             }
+            // 今回の LDM^ のレジスタリストに含まれているか？
+            if (register_list & (1 << i)) == 0 {
+                continue;
+            }
             if let Some(user_val) = user_snapshot[i] {
-                let cur_val = gpr[i]; // current mode bank value
+                let cur_val = gpr[i];
                 let overlay = user_val | cur_val;
                 mask |= 1 << i;
                 overlays[overlay_count] = (i, overlay);

@@ -216,4 +216,34 @@ impl BankGpr {
             _ => {}
         }
     }
+
+    // Returns Some(backup) only if the index is covered by current glitch mask
+    pub(crate) fn glitch_backup_if_masked(&self, index: usize) -> Option<u32> {
+        if (self.glitch_mask & (1 << index)) != 0 {
+            Some(self.glitch_backup[index])
+        } else {
+            None
+        }
+    }
+
+    // Remove specified indices from active overlay (if active), restoring original values.
+    // Use when next instruction must see the pre-overlay values for certain registers (e.g., multiplicands).
+    pub(crate) fn refine_remove_indices_from_overlay(&mut self, indices: &[usize], gpr: &mut [u32; 16]) {
+        if self.glitch_state != 2 {
+            // Not active yet; nothing to refine
+            return;
+        }
+        for &i in indices {
+            if (self.glitch_mask & (1 << i)) != 0 {
+                // If the overlay value is still present, restore the backup
+                if gpr[i] == self.glitch_values[i] {
+                    gpr[i] = self.glitch_backup[i];
+                }
+                // Clear this bit from the overlay and backups
+                self.glitch_mask &= !(1 << i);
+                self.glitch_values[i] = 0;
+                self.glitch_backup[i] = 0;
+            }
+        }
+    }
 }
