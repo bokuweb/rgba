@@ -32,6 +32,12 @@ pub struct BankGpr {
     r12_escaped: u32,
     r13_escaped: u32,
     r14_escaped: u32,
+    // LDM^ glitch support: one-shot overlay for next instruction
+    glitch_mask: u16,
+    glitch_values: [u32; 16],
+    glitch_backup: [u32; 16],
+    // 0: Inactive, 1: Armed (apply after current inst), 2: Active (restore after current inst)
+    glitch_state: u8,
 }
 
 impl BankGpr {
@@ -133,6 +139,62 @@ impl BankGpr {
                 _ => panic!("unexpected gpr index detected."),
             },
             Mode::System => panic!("system has no bank register"),
+        }
+    }
+
+    // ========== LDM^ glitch helpers ==========
+    // Arm glitch for specified registers. This does NOT modify gpr immediately;
+    // actual application happens on advance_glitch_window() call.
+    pub(crate) fn glitch_arm(&mut self, mask: u16, overlays: &[(usize, u32)], gpr: &mut [u32; 16]) {
+        if mask == 0 {
+            return;
+        }
+        self.glitch_mask = mask;
+        // Backup current visible registers for restoration later
+        for i in 0..16 {
+            if (mask & (1 << i)) != 0 {
+                self.glitch_backup[i] = gpr[i];
+            }
+        }
+        // Store overlay values
+        for (idx, val) in overlays.iter() {
+            self.glitch_values[*idx] = *val;
+        }
+        // Mark as Armed so it will be applied after current instruction retires
+        self.glitch_state = 1;
+    }
+
+    // Advance glitch window across instruction boundary.
+    // - Armed -> Active: apply overlay into gpr (to affect next instruction)
+    // - Active -> Inactive: restore original values and clear mask
+    pub(crate) fn advance_glitch_window(&mut self, gpr: &mut [u32; 16]) {
+        match self.glitch_state {
+            0 => {
+                // Inactive: nothing to do
+            }
+            1 => {
+                // Armed -> apply overlay now
+                for i in 0..16 {
+                    if (self.glitch_mask & (1 << i)) != 0 {
+                        gpr[i] = self.glitch_values[i];
+                    }
+                }
+                self.glitch_state = 2; // Active
+            }
+            2 => {
+                // Active -> restore and clear
+                for i in 0..16 {
+                    if (self.glitch_mask & (1 << i)) != 0 {
+                        gpr[i] = self.glitch_backup[i];
+                        // Clear stored values to avoid stale data (not strictly necessary)
+                        self.glitch_values[i] = 0;
+                        self.glitch_backup[i] = 0;
+                    }
+                }
+                self.glitch_mask = 0;
+                self.glitch_state = 0; // Inactive
+            }
+            _ => {}
         }
     }
 }

@@ -524,6 +524,9 @@ impl ARM {
         match pipeline_status {
             PipelineStatus::Continue => {
                 self.increment_pc();
+                // After retiring this instruction, if there is an Armed glitch (from LDM^ just executed),
+                // apply it now so that it affects the next instruction (Armed -> Active).
+                self.bank_gpr.advance_glitch_window(&mut self.gpr);
                 // Advance prefetch buffer and fetch next2
                 match self.cpsr.get_cpu_state() {
                     CpuState::ARM => {
@@ -548,6 +551,8 @@ impl ARM {
             }
             PipelineStatus::Flush => {
                 self.flush_pipeline();
+                // On pipeline flush, also advance glitch window so timing remains one-instruction long.
+                self.bank_gpr.advance_glitch_window(&mut self.gpr);
                 Ok(cycle + self.wait_pipeline_filled(bus))
             }
         }

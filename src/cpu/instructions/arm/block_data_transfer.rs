@@ -109,11 +109,15 @@ where
     // (ie. for DECREASING addressing modes, the CPU does first calculate the lowest address,
     // and does then process rlist with increasing addresses; this detail can be important when accessing memory mapped I/O ports).
 
-    if dec.get_S() {
-        // ARM ARM: 特権モードで S=1 の LDM は、転送対象レジスタを
-        // User モードのバンクから読み出す（ベース計算と書き戻しは現モード）。
-        // 以前は誤って System に切り替えていたため、FIQ などで r8-r12 が
-        // 正しい User バンクを参照できず、LDM^ 後の ALU 即値テストが失敗していた。
+    // For LDM^ (S=1 in privileged modes), we need two things:
+    //  1) Load into the User/System banked registers
+    //  2) Program the one-shot OR-glitch for the next instruction, where reads of
+    //     banked registers return (user_value | current_mode_value).
+    // Snapshot of User-mode view for banked registers (used for OR-glitch)
+    let mut user_snapshot: [Option<u32>; 16] = [None; 16];
+    let do_user_load = dec.get_S() && current_mode != Mode::User;
+    if do_user_load {
+        // Temporarily view User bank to write loaded values there
         cpsr.switch_mode(Mode::User, gpr, spsr, bank_gpr, bank_spsr);
     }
 
@@ -147,9 +151,45 @@ where
         }
     }
 
-    if dec.get_S() {
-        // 元のモードへ戻す
+    if do_user_load {
+        // While still in User mode, capture user view for all banked registers.
+        let user_is_fiq = false; // User/System share same bank (non-FIQ)
+        for i in 0..16 {
+            let is_banked_in_fiq = (8..=14).contains(&i);
+            let is_banked_nonfiq = i == SP || i == LR;
+            // In User mode, the visible r8-r12 are the non-FIQ bank (shared with System),
+            // which is exactly what we need for OR-glitch source.
+            if is_banked_in_fiq || is_banked_nonfiq {
+                user_snapshot[i] = Some(gpr[i]);
+            }
+        }
+
+        // Switch back to original mode; the values just read remain in the User bank.
         cpsr.switch_mode(current_mode, gpr, spsr, bank_gpr, bank_spsr);
+
+        // Program the one-shot glitch for next instruction.
+        // Only registers that are banked in the current mode are affected.
+        // FIQ: r8-r14 are banked; IRQ/SVC/ABT/UND: r13-r14.
+        let mut mask: u16 = 0;
+        let mut overlays: [(usize, u32); 16] = [(0, 0); 16];
+        let mut overlay_count: usize = 0;
+        let is_fiq = matches!(current_mode, Mode::FIQ);
+        for i in 0..16 {
+            let is_banked_here = if is_fiq { (8..=14).contains(&i) } else { i == SP || i == LR };
+            if !is_banked_here {
+                continue;
+            }
+            if let Some(user_val) = user_snapshot[i] {
+                let cur_val = gpr[i]; // current mode bank value
+                let overlay = user_val | cur_val;
+                mask |= 1 << i;
+                overlays[overlay_count] = (i, overlay);
+                overlay_count += 1;
+            }
+        }
+        if mask != 0 {
+            bank_gpr.glitch_arm(mask, &overlays[..overlay_count], gpr);
+        }
     }
 
     // Consume 1I cycle.
