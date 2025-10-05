@@ -41,6 +41,14 @@ pub struct BankGpr {
 }
 
 impl BankGpr {
+    pub(crate) fn is_glitch_active_or_armed(&self) -> bool {
+        self.glitch_state == 1 || self.glitch_state == 2
+    }
+
+    pub(crate) fn get_glitch_backup(&self, index: usize) -> u32 {
+        self.glitch_backup[index]
+    }
+
     pub(crate) fn write(&mut self, mode: Mode, index: usize, value: u32) {
         match mode {
             Mode::User => panic!("user has no bank register"),
