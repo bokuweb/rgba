@@ -110,7 +110,11 @@ where
     // and does then process rlist with increasing addresses; this detail can be important when accessing memory mapped I/O ports).
 
     if dec.get_S() {
-        cpsr.switch_mode(Mode::System, gpr, spsr, bank_gpr, bank_spsr);
+        // ARM ARM: 特権モードで S=1 の LDM は、転送対象レジスタを
+        // User モードのバンクから読み出す（ベース計算と書き戻しは現モード）。
+        // 以前は誤って System に切り替えていたため、FIQ などで r8-r12 が
+        // 正しい User バンクを参照できず、LDM^ 後の ALU 即値テストが失敗していた。
+        cpsr.switch_mode(Mode::User, gpr, spsr, bank_gpr, bank_spsr);
     }
 
     // let offset: i64 = if dec.get_U() { 4 } else { -4 };
@@ -144,6 +148,7 @@ where
     }
 
     if dec.get_S() {
+        // 元のモードへ戻す
         cpsr.switch_mode(current_mode, gpr, spsr, bank_gpr, bank_spsr);
     }
 

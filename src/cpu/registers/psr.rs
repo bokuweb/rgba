@@ -156,7 +156,12 @@ impl PSR {
         // TODO: move to PSR?
         //       switch mode
         // let current_value = cpsr.get();
-        if new_mode != Mode::User || new_mode != Mode::System {
+        // NOTE: new_mode が User/System 以外の特権モードのときのみ
+        // バンキングの入れ替え処理を行うべきだが、以前は `||` だったため
+        // 常に true となり不要なバンク切替が走っていた。
+        // その結果、FIQ<->System 切替時に r8-r12 の入れ替えが誤って起こりうる。
+        // ここを `&&` に修正し、User/System の場合はこの分岐を素通りする。
+        if new_mode != Mode::User && new_mode != Mode::System {
             let current_mode = self.get_mode();
             // let new_mode = self.get_mode();
             if current_mode != new_mode {
