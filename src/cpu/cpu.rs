@@ -495,10 +495,59 @@ impl ARM {
                 arm::Instruction::MVN(dec) => exec_arm_mvn(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::MUL(dec) => exec_arm_mul(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::MLA(dec) => exec_arm_mla(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                arm::Instruction::UMULL(dec) => exec_arm_umull(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                arm::Instruction::UMLAL(dec) => exec_arm_umlal(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                arm::Instruction::SMULL(dec) => exec_arm_smull(bus, dec, &mut self.gpr, &mut self.cpsr)?,
-                arm::Instruction::SMLAL(dec) => exec_arm_smlal(bus, dec, &mut self.gpr, &mut self.cpsr)?,
+                arm::Instruction::UMULL(dec) => {
+                    // LDM^グリッチが有効化されている場合、乗算の被乗数(Rm, Rs)はオーバレイ対象から除外する
+                    if self.bank_gpr.is_glitch_active_or_armed() {
+                        self.bank_gpr.refine_remove_indices_from_overlay(&[dec.get_Rm() as usize, dec.get_Rs() as usize], &mut self.gpr);
+                    }
+                    let rd_idx = dec.get_Rd() as usize;
+                    let rn_idx = dec.get_Rn() as usize;
+                    let r = exec_arm_umull(bus, dec, &mut self.gpr, &mut self.cpsr)?;
+                    // 実行直後に書き込み先(RdHi, RdLo)がオーバレイ対象なら取り除く。
+                    if self.bank_gpr.is_glitch_active_or_armed() {
+                        self.bank_gpr.refine_remove_indices_from_overlay(&[rd_idx, rn_idx], &mut self.gpr);
+                    }
+                    r
+                }
+                arm::Instruction::UMLAL(dec) => {
+                    if self.bank_gpr.is_glitch_active_or_armed() {
+                        self.bank_gpr.refine_remove_indices_from_overlay(&[dec.get_Rm() as usize, dec.get_Rs() as usize], &mut self.gpr);
+                    }
+                    let rd_idx = dec.get_Rd() as usize;
+                    let rn_idx = dec.get_Rn() as usize;
+                    let r = exec_arm_umlal(bus, dec, &mut self.gpr, &mut self.cpsr)?;
+                    // 実行直後に書き込み先(RdHi, RdLo)がオーバレイ対象なら取り除く。
+                    if self.bank_gpr.is_glitch_active_or_armed() {
+                        self.bank_gpr.refine_remove_indices_from_overlay(&[rd_idx, rn_idx], &mut self.gpr);
+                    }
+                    r
+                }
+                arm::Instruction::SMULL(dec) => {
+                    if self.bank_gpr.is_glitch_active_or_armed() {
+                        self.bank_gpr.refine_remove_indices_from_overlay(&[dec.get_Rm() as usize, dec.get_Rs() as usize], &mut self.gpr);
+                    }
+                    let rd_idx = dec.get_Rd() as usize;
+                    let rn_idx = dec.get_Rn() as usize;
+                    let r = exec_arm_smull(bus, dec, &mut self.gpr, &mut self.cpsr)?;
+                    // 実行直後に書き込み先(RdHi, RdLo)がオーバレイ対象なら取り除く。
+                    if self.bank_gpr.is_glitch_active_or_armed() {
+                        self.bank_gpr.refine_remove_indices_from_overlay(&[rd_idx, rn_idx], &mut self.gpr);
+                    }
+                    r
+                }
+                arm::Instruction::SMLAL(dec) => {
+                    if self.bank_gpr.is_glitch_active_or_armed() {
+                        self.bank_gpr.refine_remove_indices_from_overlay(&[dec.get_Rm() as usize, dec.get_Rs() as usize], &mut self.gpr);
+                    }
+                    let rd_idx = dec.get_Rd() as usize;
+                    let rn_idx = dec.get_Rn() as usize;
+                    let r = exec_arm_smlal(bus, dec, &mut self.gpr, &mut self.cpsr)?;
+                    // 実行直後に書き込み先(RdHi, RdLo)がオーバレイ対象なら取り除く。
+                    if self.bank_gpr.is_glitch_active_or_armed() {
+                        self.bank_gpr.refine_remove_indices_from_overlay(&[rd_idx, rn_idx], &mut self.gpr);
+                    }
+                    r
+                }
                 arm::Instruction::LDR(dec) => exec_arm_ldr(bus, dec, &mut self.gpr, &self.cpsr)?,
                 arm::Instruction::STR(dec) => exec_arm_str(bus, dec, &mut self.gpr, &self.cpsr)?,
                 arm::Instruction::LDRB(dec) => exec_arm_ldrb(bus, dec, &mut self.gpr, &self.cpsr)?,
@@ -524,6 +573,9 @@ impl ARM {
         match pipeline_status {
             PipelineStatus::Continue => {
                 self.increment_pc();
+                // After retiring this instruction, if there is an Armed glitch (from LDM^ just executed),
+                // apply it now so that it affects the next instruction (Armed -> Active).
+                self.bank_gpr.advance_glitch_window(&mut self.gpr);
                 // Advance prefetch buffer and fetch next2
                 match self.cpsr.get_cpu_state() {
                     CpuState::ARM => {
@@ -548,6 +600,8 @@ impl ARM {
             }
             PipelineStatus::Flush => {
                 self.flush_pipeline();
+                // On pipeline flush, also advance glitch window so timing remains one-instruction long.
+                self.bank_gpr.advance_glitch_window(&mut self.gpr);
                 Ok(cycle + self.wait_pipeline_filled(bus))
             }
         }

@@ -109,8 +109,11 @@ where
     // (ie. for DECREASING addressing modes, the CPU does first calculate the lowest address,
     // and does then process rlist with increasing addresses; this detail can be important when accessing memory mapped I/O ports).
 
-    if dec.get_S() {
-        cpsr.switch_mode(Mode::System, gpr, spsr, bank_gpr, bank_spsr);
+    // LDM^: 特権モードで S=1 かつ L=1 かつ R15 非含有の場合、転送先は User/System バンク。
+    // ここでは一時的に User モードに切替えて読み込み、完了後に元のモードへ戻す（tgba実装に準拠）。
+    let do_user_load = dec.get_S() && current_mode != Mode::User;
+    if do_user_load {
+        cpsr.switch_mode(Mode::User, gpr, spsr, bank_gpr, bank_spsr);
     }
 
     // let offset: i64 = if dec.get_U() { 4 } else { -4 };
@@ -143,8 +146,46 @@ where
         }
     }
 
-    if dec.get_S() {
+    if do_user_load {
+        // User バンクに読み込まれた直後のスナップショットを取得（FIQ: r8-r14, 他特権: r13-r14）
+        let mut user_snapshot: [Option<u32>; 16] = [None; 16];
+        for i in 0..16 {
+            let is_banked_in_fiq = (8..=14).contains(&i);
+            let is_banked_nonfiq = i == SP || i == LR;
+            if is_banked_in_fiq || is_banked_nonfiq {
+                user_snapshot[i] = Some(gpr[i]);
+            }
+        }
+
+        // 現在のモードへ戻す（以降、見えているのは現モードのバンク値）
         cpsr.switch_mode(current_mode, gpr, spsr, bank_gpr, bank_spsr);
+
+        // 1命令だけ、対象レジスタに user|curr を重ねて見せる
+        let mut mask: u16 = 0;
+        let mut overlays: [(usize, u32); 16] = [(0, 0); 16];
+        let mut overlay_count: usize = 0;
+        let is_fiq = matches!(current_mode, Mode::FIQ);
+        for i in 0..16 {
+            // バンク対象か？
+            let is_banked_here = if is_fiq { (8..=14).contains(&i) } else { i == SP || i == LR };
+            if !is_banked_here {
+                continue;
+            }
+            // 今回の LDM^ のレジスタリストに含まれているか？
+            if (register_list & (1 << i)) == 0 {
+                continue;
+            }
+            if let Some(user_val) = user_snapshot[i] {
+                let cur_val = gpr[i];
+                let overlay = user_val | cur_val;
+                mask |= 1 << i;
+                overlays[overlay_count] = (i, overlay);
+                overlay_count += 1;
+            }
+        }
+        if mask != 0 {
+            bank_gpr.glitch_arm(mask, &overlays[..overlay_count], gpr);
+        }
     }
 
     // Consume 1I cycle.
