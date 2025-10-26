@@ -149,67 +149,71 @@ impl PSR {
     }
 
     pub fn switch_mode(&mut self, new_mode: Mode, gpr: &mut [Word; 16], spsr: &mut PSR, bank_gpr: &mut BankGpr, bank_spsr: &mut BankSpsr) {
-        if new_mode == self.get_mode() {
+        let current_mode = self.get_mode();
+        if new_mode == current_mode {
             return;
         }
 
-        // TODO: move to PSR?
-        //       switch mode
-        // let current_value = cpsr.get();
-        if new_mode != Mode::User || new_mode != Mode::System {
-            let current_mode = self.get_mode();
-            // let new_mode = self.get_mode();
-            if current_mode != new_mode {
-                // TODO: support FIQ
-                if current_mode == Mode::FIQ {
-                    bank_gpr.write(current_mode, 8, gpr[8]);
-                    bank_gpr.write(current_mode, 9, gpr[9]);
-                    bank_gpr.write(current_mode, 10, gpr[10]);
-                    bank_gpr.write(current_mode, 11, gpr[11]);
-                    bank_gpr.write(current_mode, 12, gpr[12]);
+        // 1) 離脱側のバンク処理
+        // FIQ から離れる場合は、FIQ バンク r8-r12 を保存し、共有レジスタに戻す
+        if current_mode == Mode::FIQ {
+            // グリッチ中は見えている値(gpr)は覆い焼きで一時的。保存はバックアップへ退避した実値を使う。
+            let r8  = if bank_gpr.is_glitch_active_or_armed() { bank_gpr.get_glitch_backup(8) } else { gpr[8] };
+            let r9  = if bank_gpr.is_glitch_active_or_armed() { bank_gpr.get_glitch_backup(9) } else { gpr[9] };
+            let r10 = if bank_gpr.is_glitch_active_or_armed() { bank_gpr.get_glitch_backup(10) } else { gpr[10] };
+            let r11 = if bank_gpr.is_glitch_active_or_armed() { bank_gpr.get_glitch_backup(11) } else { gpr[11] };
+            let r12 = if bank_gpr.is_glitch_active_or_armed() { bank_gpr.get_glitch_backup(12) } else { gpr[12] };
+            bank_gpr.write(current_mode, 8, r8);
+            bank_gpr.write(current_mode, 9, r9);
+            bank_gpr.write(current_mode, 10, r10);
+            bank_gpr.write(current_mode, 11, r11);
+            bank_gpr.write(current_mode, 12, r12);
 
-                    gpr[8] = bank_gpr.pop(8);
-                    gpr[9] = bank_gpr.pop(9);
-                    gpr[10] = bank_gpr.pop(10);
-                    gpr[11] = bank_gpr.pop(11);
-                    gpr[12] = bank_gpr.pop(12);
-                }
-
-                if new_mode == Mode::FIQ {
-                    bank_gpr.push(8, gpr[8]);
-                    bank_gpr.push(9, gpr[9]);
-                    bank_gpr.push(10, gpr[10]);
-                    bank_gpr.push(11, gpr[11]);
-                    bank_gpr.push(12, gpr[12]);
-
-                    gpr[8] = bank_gpr.read(new_mode, 8);
-                    gpr[9] = bank_gpr.read(new_mode, 9);
-                    gpr[10] = bank_gpr.read(new_mode, 10);
-                    gpr[11] = bank_gpr.read(new_mode, 11);
-                    gpr[12] = bank_gpr.read(new_mode, 12);
-                }
-
-                if current_mode != Mode::System && current_mode != Mode::User {
-                    bank_gpr.write(current_mode, SP, gpr[SP]);
-                    bank_gpr.write(current_mode, LR, gpr[LR]);
-                    bank_spsr.write(current_mode, *spsr);
-
-                    gpr[SP] = bank_gpr.pop(SP);
-                    gpr[LR] = bank_gpr.pop(LR);
-                    *spsr = bank_spsr.pop()
-                }
-
-                if new_mode != Mode::System && new_mode != Mode::User {
-                    bank_gpr.push(SP, gpr[SP]);
-                    bank_gpr.push(LR, gpr[LR]);
-                    bank_spsr.push(*spsr);
-
-                    gpr[SP] = bank_gpr.read(new_mode, SP);
-                    gpr[LR] = bank_gpr.read(new_mode, LR);
-                    *spsr = bank_spsr.read(new_mode);
-                }
-            }
+            gpr[8] = bank_gpr.pop(8);
+            gpr[9] = bank_gpr.pop(9);
+            gpr[10] = bank_gpr.pop(10);
+            gpr[11] = bank_gpr.pop(11);
+            gpr[12] = bank_gpr.pop(12);
         }
+        // 離脱側が特権モード（User/System 以外）の場合、SP/LR/SPSR を保存し共有に戻す
+        if current_mode != Mode::System && current_mode != Mode::User {
+            let sp = if bank_gpr.is_glitch_active_or_armed() { bank_gpr.get_glitch_backup(SP) } else { gpr[SP] };
+            let lr = if bank_gpr.is_glitch_active_or_armed() { bank_gpr.get_glitch_backup(LR) } else { gpr[LR] };
+            bank_gpr.write(current_mode, SP, sp);
+            bank_gpr.write(current_mode, LR, lr);
+            bank_spsr.write(current_mode, *spsr);
+
+            gpr[SP] = bank_gpr.pop(SP);
+            gpr[LR] = bank_gpr.pop(LR);
+            *spsr = bank_spsr.pop();
+        }
+
+        // 2) 進入側のバンク処理
+        // FIQ に入る場合は、共有 r8-r12 を退避し、FIQ バンク値を見せる
+        if new_mode == Mode::FIQ {
+            bank_gpr.push(8, gpr[8]);
+            bank_gpr.push(9, gpr[9]);
+            bank_gpr.push(10, gpr[10]);
+            bank_gpr.push(11, gpr[11]);
+            bank_gpr.push(12, gpr[12]);
+
+            gpr[8] = bank_gpr.read(new_mode, 8);
+            gpr[9] = bank_gpr.read(new_mode, 9);
+            gpr[10] = bank_gpr.read(new_mode, 10);
+            gpr[11] = bank_gpr.read(new_mode, 11);
+            gpr[12] = bank_gpr.read(new_mode, 12);
+        }
+        // 進入側が特権モード（User/System 以外）なら SP/LR/SPSR を切替える
+        if new_mode != Mode::System && new_mode != Mode::User {
+            bank_gpr.push(SP, gpr[SP]);
+            bank_gpr.push(LR, gpr[LR]);
+            bank_spsr.push(*spsr);
+
+            gpr[SP] = bank_gpr.read(new_mode, SP);
+            gpr[LR] = bank_gpr.read(new_mode, LR);
+            *spsr = bank_spsr.read(new_mode);
+        }
+
         self.set_mode(new_mode);
     }
 
