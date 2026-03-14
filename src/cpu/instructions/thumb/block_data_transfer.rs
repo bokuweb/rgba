@@ -65,7 +65,6 @@ where
     T: BusAccessor,
 {
     if started {
-        dbg!("before ldmia", &gpr);
     }
     let rn = dec.get_Rn();
     let rn_idx = rn as usize;
@@ -109,7 +108,6 @@ where
     gpr[rn_idx] = base;
 
     if started {
-        dbg!("after ldmia", &gpr);
     }
 
     // Consume 1I cycle.

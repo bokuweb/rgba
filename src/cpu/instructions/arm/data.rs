@@ -88,13 +88,11 @@ where
             }
         }
         if gpr[15] >= 134224832 && gpr[15] <= 134224892 {
-            dbg!("🔥value", value);
         }
         gpr[rd] = value;
 
         // Critical debug: detect m_exit 5 execution
         if rd == 12 && value == 5 {
-            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
         }
     })
 }
@@ -121,7 +119,6 @@ where
 
         // Critical debug: detect m_exit 5 execution
         if rd == 12 && d == 5 {
-            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
         }
     })
 }
@@ -149,7 +146,6 @@ where
 
         // Critical debug: detect m_exit 5 execution
         if rd == 12 && d == 5 {
-            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
         }
     })
 }
@@ -186,7 +182,6 @@ where
 
         // Critical debug: detect m_exit 5 execution
         if rd == 12 && d == 5 {
-            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
         }
     })
 }
@@ -215,7 +210,6 @@ where
 
         // Critical debug: detect m_exit 5 execution
         if rd == 12 && d == 5 {
-            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
         }
     })
 }
@@ -353,7 +347,6 @@ where
 
         // Critical debug: detect m_exit 5 execution
         if rd == 12 && d == 5 {
-            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
         }
     })
 }
@@ -493,7 +486,6 @@ where
 
         // Critical debug: detect m_exit 5 execution
         if rd == 12 && d == 5 {
-            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
         }
     })
 }
@@ -518,7 +510,6 @@ where
 
         // Critical debug: detect m_exit 5 execution
         if rd == 12 && value == 5 {
-            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
         }
     })
 }
@@ -545,7 +536,6 @@ where
 
         // Critical debug: detect m_exit 5 execution
         if rd == 12 && d == 5 {
-            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
         }
     })
 }
@@ -571,7 +561,6 @@ where
 
         // Critical debug: detect m_exit 5 execution
         if rd == 12 && d == 5 {
-            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
         }
     })
 }
@@ -592,7 +581,6 @@ where
 
         // Critical debug: detect m_exit 5 execution
         if rd == 12 && value == 5 {
-            println!("🚨 CRITICAL: m_exit 5 executed! R12=5 set at PC=0x{:08X}", gpr[PC]);
         }
     })
 }
