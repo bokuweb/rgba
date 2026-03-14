@@ -241,8 +241,18 @@ impl ARM {
     where
         T: BusAccessor,
     {
+        if bus.is_cpu_halted() {
+            if self.irq_pending && !self.cpsr.get_I() {
+                bus.set_cpu_halted(false);
+                let irq_cycle = self.handle_irq(bus);
+                return Ok(irq_cycle);
+            }
+            return Ok(1);
+        }
+
         // Check for pending IRQ before executing instruction
         if self.irq_pending && !self.cpsr.get_I() {
+            bus.set_cpu_halted(false);
             let irq_cycle = self.handle_irq(bus);
             return Ok(irq_cycle);
         }
@@ -251,9 +261,13 @@ impl ARM {
 
         // Check for pending IRQ before executing normal instructions
         if self.irq_pending && !self.cpsr.get_I() {
+            bus.set_cpu_halted(false);
             let irq_cycle = self.handle_irq(bus);
             return Ok(cycle + irq_cycle);
         }
+
+        let instruction_width = if self.cpsr.get_cpu_state() == CpuState::ARM { 4 } else { 2 };
+        bus.set_open_bus_context(self.gpr[PC], instruction_width);
 
         // let log = format!("{:?}", self.gpr);
         // dbg!(&self.gpr);

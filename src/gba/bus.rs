@@ -16,6 +16,7 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use std::cell::Cell;
 
 use types::*;
 use super::dma::DMAController;
@@ -147,9 +148,23 @@ pub struct CpuBus {
     interrupt_controller: std::cell::RefCell<crate::interrupt::InterruptController>,
     timers: crate::gba::timer::Timers,
     waitcnt: HalfWord,
+    open_bus_pc: Cell<Word>,
+    open_bus_instruction_width: Cell<Word>,
+    cpu_halted: Cell<bool>,
 }
 
 impl BusAccessor for CpuBus {
+    fn set_open_bus_context(&mut self, pc: Word, instruction_width: Word) {
+        self.open_bus_pc.set(pc);
+        self.open_bus_instruction_width.set(instruction_width);
+    }
+    fn set_cpu_halted(&mut self, halted: bool) {
+        self.cpu_halted.set(halted);
+    }
+    fn is_cpu_halted(&self) -> bool {
+        self.cpu_halted.get()
+    }
+
     fn read_byte(&self, addr: u32) -> Byte {
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_byte(addr),
@@ -186,8 +201,7 @@ impl BusAccessor for CpuBus {
                 self.sram.read_byte(addr - 0x0E00_0000)
             }
             _ => {
-                println!("⚠️  WARNING: Invalid read_byte access to 0x{:08x} (not in GBA memory map) - returning 0xFF", addr);
-                0xFF // Return invalid/unconnected bus value
+                self.read_open_bus_byte(addr)
             }
         }
     }
@@ -240,8 +254,7 @@ impl BusAccessor for CpuBus {
                 0xFFFF
             }
             _ => {
-                println!("⚠️  WARNING: Invalid read_halfword access to 0x{:08x} (not in GBA memory map) - returning 0xFFFF", addr);
-                0xFFFF
+                self.read_open_bus_halfword(addr)
             }
         }
     }
@@ -314,8 +327,7 @@ impl BusAccessor for CpuBus {
                 0xFFFFFFFF
             }
             _ => {
-                println!("⚠️  WARNING: Invalid read_word access to 0x{:08x} (not in GBA memory map) - returning 0xFFFFFFFF", addr);
-                0xFFFFFFFF
+                self.read_open_bus_word()
             }
         }
     }
@@ -705,6 +717,9 @@ impl CpuBus {
             interrupt_controller: std::cell::RefCell::new(crate::interrupt::InterruptController::new()),
             timers: crate::gba::timer::Timers::default(),
             waitcnt: 0,
+            open_bus_pc: Cell::new(0),
+            open_bus_instruction_width: Cell::new(4),
+            cpu_halted: Cell::new(false),
         }
     }
 
@@ -754,6 +769,57 @@ impl CpuBus {
             0x0A00_0000..=0x0BFF_FFFF => addr - 0x0A00_0000,
             0x0C00_0000..=0x0DFF_FFFF => addr - 0x0C00_0000,
             _ => unreachable!("address out of gamepak range"),
+        }
+    }
+
+    fn read_open_bus_byte(&self, addr: Word) -> Byte {
+        let pc = self.open_bus_pc.get();
+        let width = self.open_bus_instruction_width.get();
+        let base = pc.wrapping_sub(width);
+        let src = base.wrapping_add(addr & 0x3);
+        self.read_mapped_byte_or_ff(src)
+    }
+
+    fn read_open_bus_halfword(&self, addr: Word) -> HalfWord {
+        let pc = self.open_bus_pc.get();
+        let width = self.open_bus_instruction_width.get();
+        let base = pc.wrapping_sub(width);
+        let src = base.wrapping_add(addr & 0x2);
+        let lo = self.read_mapped_byte_or_ff(src) as u16;
+        let hi = self.read_mapped_byte_or_ff(src.wrapping_add(1)) as u16;
+        lo | (hi << 8)
+    }
+
+    fn read_open_bus_word(&self) -> Word {
+        let pc = self.open_bus_pc.get();
+        let width = self.open_bus_instruction_width.get();
+        let base = pc.wrapping_sub(width);
+
+        if width == 4 {
+            let b0 = self.read_mapped_byte_or_ff(base) as u32;
+            let b1 = self.read_mapped_byte_or_ff(base.wrapping_add(1)) as u32;
+            let b2 = self.read_mapped_byte_or_ff(base.wrapping_add(2)) as u32;
+            let b3 = self.read_mapped_byte_or_ff(base.wrapping_add(3)) as u32;
+            b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+        } else {
+            let lo = self.read_mapped_byte_or_ff(base) as u16;
+            let hi = self.read_mapped_byte_or_ff(base.wrapping_add(1)) as u16;
+            let hw = lo | (hi << 8);
+            (hw as u32) | ((hw as u32) << 16)
+        }
+    }
+
+    fn read_mapped_byte_or_ff(&self, addr: Word) -> Byte {
+        match addr {
+            0x0000_0000..=0x0000_3FFF => self.bios.read_byte(addr),
+            0x0200_0000..=0x02FF_FFFF => self.eram.read_byte((addr - 0x0200_0000) & 0x3FFFF),
+            0x0300_0000..=0x03FF_FFFF => self.wram.read_byte((addr - 0x0300_0000) & 0x7FFF),
+            0x0500_0000..=0x05FF_FFFF => self.palette.read_byte((addr - 0x0500_0000) & 0x3FF),
+            0x0600_0000..=0x06FF_FFFF => self.vram.read_byte(Self::map_vram_offset(addr)),
+            0x0700_0000..=0x07FF_FFFF => self.oam.read_byte((addr - 0x0700_0000) & 0x3FF),
+            0x0800_0000..=0x0DFF_FFFF => self.rom.read_byte(Self::map_gamepak_offset(addr)),
+            0x0E00_0000..=0x0E00_FFFF => self.sram.read_byte(addr - 0x0E00_0000),
+            _ => 0xFF,
         }
     }
 

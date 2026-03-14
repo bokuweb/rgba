@@ -22,8 +22,7 @@ impl Bios {
     /// SWI 0x02 - Halt
     /// Halts the CPU until an interrupt occurs
     pub fn halt<T: BusAccessor>(_bus: &mut T, _gpr: &mut [Word; 16]) {
-        // In a real implementation, this would halt the CPU
-        // For now, we just log the call
+        _bus.set_cpu_halted(true);
     }
 
     /// SWI 0x04 - IntrWait
@@ -48,6 +47,7 @@ impl Bios {
 
         // Clear latched interrupt flags before waiting.
         bus.write_halfword(0x0400_0202, 0xFFFF);
+        bus.set_cpu_halted(true);
     }
 
     /// SWI 0x05 - VBlankIntrWait
