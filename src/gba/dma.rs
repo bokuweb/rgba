@@ -106,6 +106,18 @@ impl DMAController {
             let prev_timing = ch.get_timing();
             ch.set_control(control);
             let now_timing = ch.get_timing();
+            if std::env::var("AGB_TRACE_DMA").ok().as_deref() == Some("1") {
+                println!(
+                    "DMA ctrl ch={} was_en={} en={} ctrl={:04x} timing={} repeat={} irq={}",
+                    channel,
+                    was_enabled,
+                    ch.enabled,
+                    control,
+                    now_timing,
+                    ch.is_repeat(),
+                    ch.handle_irq()
+                );
+            }
             
             // Pending scheduling policy:
             // - When enabling (edge 0->1): schedule immediately only if timing==Immediate

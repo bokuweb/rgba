@@ -33,6 +33,16 @@ impl Bios {
     ) {
         let discard_old = gpr[0] != 0;
         let interrupt_flags = (gpr[1] & 0xFFFF) as u16;
+        let trace_dma = std::env::var("AGB_TRACE_DMA").ok().as_deref() == Some("1");
+        if trace_dma {
+            println!(
+                "BIOS IntrWait enter discard_old={} mask=0x{:04x} IF=0x{:04x} IME=0x{:04x}",
+                discard_old,
+                interrupt_flags,
+                bus.read_halfword(0x0400_0202),
+                bus.read_halfword(0x0400_0208)
+            );
+        }
 
         // Match JS behavior: ensure IME is enabled while waiting.
         if (bus.read_halfword(0x0400_0208) & 0x0001) == 0 {
@@ -42,11 +52,20 @@ impl Bios {
         // If caller does not request discarding old flags and target IF is already set, return immediately.
         let current_if = bus.read_halfword(0x0400_0202);
         if !discard_old && (current_if & interrupt_flags) != 0 {
+            if trace_dma {
+                println!("BIOS IntrWait immediate return IF=0x{:04x}", current_if);
+            }
             return;
         }
 
         // Clear latched interrupt flags before waiting.
         bus.write_halfword(0x0400_0202, 0xFFFF);
+        if trace_dma {
+            println!(
+                "BIOS IntrWait halt IF(after clear)=0x{:04x}",
+                bus.read_halfword(0x0400_0202)
+            );
+        }
         bus.set_cpu_halted(true);
     }
 

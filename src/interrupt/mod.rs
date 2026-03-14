@@ -76,6 +76,17 @@ impl InterruptController {
         self.if_flags |= bit;
         // Also update BIOS IF work area for IntrWait/VBlankIntrWait
         self.bios_if_work |= bit;
+        if std::env::var("AGB_TRACE_DMA").ok().as_deref() == Some("1") {
+            if matches!(
+                interrupt_type,
+                InterruptType::DMA0 | InterruptType::DMA1 | InterruptType::DMA2 | InterruptType::DMA3
+            ) {
+                println!(
+                    "IRQ request {:?} IF=0x{:04x} IE=0x{:04x} IME=0x{:04x}",
+                    interrupt_type, self.if_flags, self.ie, self.ime
+                );
+            }
+        }
     }
 
     /// Check if any interrupts should be serviced

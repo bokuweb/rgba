@@ -153,6 +153,8 @@ pub struct CpuBus {
     cpu_halted: Cell<bool>,
     prev_vblank: bool,
     prev_hblank: bool,
+    dma_irq_latch: [bool; 4],
+    trace_dma: bool,
 }
 
 impl BusAccessor for CpuBus {
@@ -477,6 +479,12 @@ impl BusAccessor for CpuBus {
                         if channel < 4 {
                             let reg = (addr - (0x0400_00B0 + (channel as u32) * 0x0C)) as u16;
                             let ch = self.dma.channels[channel];
+                            if self.trace_dma {
+                                println!(
+                                    "DMA reg16 write ch={} reg=0x{:02x} addr=0x{:08x} data=0x{:04x}",
+                                    channel, reg, addr, data
+                                );
+                            }
                             match reg {
                                 // DMAxSAD_L
                                 0x00 => {
@@ -506,6 +514,7 @@ impl BusAccessor for CpuBus {
                                 // DMAxCNT_H
                                 0x0A => {
                                     self.dma.write_control(channel, data);
+                                    self.maybe_trigger_timed_dma_immediately(channel);
                                     self.execute_dma_transfers();
                                 }
                                 _ => {}
@@ -604,6 +613,7 @@ impl BusAccessor for CpuBus {
                     }
                     0x0400_00BA => {
                         self.dma.write_control(0, data as HalfWord);
+                        self.maybe_trigger_timed_dma_immediately(0);
                         self.execute_dma_transfers();
                     }
                     
@@ -619,6 +629,7 @@ impl BusAccessor for CpuBus {
                     }
                     0x0400_00C6 => {
                         self.dma.write_control(1, data as HalfWord);
+                        self.maybe_trigger_timed_dma_immediately(1);
                         self.execute_dma_transfers();
                     }
                     
@@ -634,6 +645,7 @@ impl BusAccessor for CpuBus {
                     }
                     0x0400_00D2 => {
                         self.dma.write_control(2, data as HalfWord);
+                        self.maybe_trigger_timed_dma_immediately(2);
                         self.execute_dma_transfers();
                     }
                     
@@ -650,6 +662,7 @@ impl BusAccessor for CpuBus {
                     }
                     0x0400_00DE => {
                         self.dma.write_control(3, data as HalfWord);
+                        self.maybe_trigger_timed_dma_immediately(3);
                         self.execute_dma_transfers();
                     }
                     
@@ -727,6 +740,8 @@ impl CpuBus {
             cpu_halted: Cell::new(false),
             prev_vblank: false,
             prev_hblank: false,
+            dma_irq_latch: [false; 4],
+            trace_dma: std::env::var("AGB_TRACE_DMA").ok().as_deref() == Some("1"),
         }
     }
 
@@ -742,7 +757,42 @@ impl CpuBus {
         self.interrupt_controller.borrow().should_service_interrupt()
     }
 
+    fn maybe_trigger_timed_dma_immediately(&mut self, channel: usize) {
+        if channel >= 4 || !self.dma.channels[channel].enabled {
+            return;
+        }
+        let timing = self.dma.channels[channel].get_timing();
+        if timing == 0 {
+            return;
+        }
+        let dispstat = self.lcdc.read_halfword(0x0004);
+        let vcount = self.lcdc.read_halfword(0x0006) as usize;
+        let in_vblank = (dispstat & 0x0001) != 0;
+        let in_hblank = (dispstat & 0x0002) != 0;
+        match timing {
+            1 if in_vblank => self.dma.trigger_timing_event(channel),
+            2 if in_hblank && vcount < 160 => self.dma.trigger_timing_event(channel),
+            _ => {}
+        }
+    }
+
     pub(crate) fn execute_dma_transfers(&mut self) {
+        // Raise DMA IRQs with a small delay (next servicing point), not in the same
+        // transfer completion moment. This better matches software expectations around IntrWait.
+        for channel in 0..4 {
+            if self.dma_irq_latch[channel] {
+                self.dma_irq_latch[channel] = false;
+                let irq = match channel {
+                    0 => crate::interrupt::InterruptType::DMA0,
+                    1 => crate::interrupt::InterruptType::DMA1,
+                    2 => crate::interrupt::InterruptType::DMA2,
+                    3 => crate::interrupt::InterruptType::DMA3,
+                    _ => continue,
+                };
+                self.interrupt_controller.borrow_mut().request_interrupt(irq);
+            }
+        }
+
         // Trigger timed DMAs on blanking edge transitions.
         let dispstat = self.lcdc.read_halfword(0x0004);
         let vblank = (dispstat & 0x0001) != 0;
@@ -751,9 +801,34 @@ impl CpuBus {
         let hblank_rising = !self.prev_hblank && hblank;
 
         if vblank_rising || hblank_rising {
+            let mut has_timed_enabled = false;
+            for channel in 0..4 {
+                if self.dma.channels[channel].enabled {
+                    let t = self.dma.channels[channel].get_timing();
+                    if t == 1 || t == 2 || t == 3 {
+                        has_timed_enabled = true;
+                        break;
+                    }
+                }
+            }
+            if self.trace_dma && has_timed_enabled {
+                let vcount = self.lcdc.read_halfword(0x0006);
+                println!(
+                    "DMA timing edge vblank_rising={} hblank_rising={} vcount={}",
+                    vblank_rising, hblank_rising, vcount
+                );
+            }
             for channel in 0..4 {
                 if !self.dma.channels[channel].enabled {
                     continue;
+                }
+                if self.trace_dma && has_timed_enabled {
+                    println!(
+                        "DMA ch{} enabled timing={} pending={}",
+                        channel,
+                        self.dma.channels[channel].get_timing(),
+                        self.dma.channels[channel].pending
+                    );
                 }
                 match self.dma.channels[channel].get_timing() {
                     1 if vblank_rising => self.dma.trigger_timing_event(channel), // VBlank
@@ -769,17 +844,25 @@ impl CpuBus {
         for channel in 0..4 {
             let request_irq = self.dma.channels[channel].handle_irq();
             if let Some((source, dest, count, transfer_size)) = self.dma.get_pending_transfer(channel) {
+                if self.trace_dma {
+                    println!(
+                        "DMA start ch={} timing={} src={:08x} dst={:08x} count={} size={} ctrl={:04x}",
+                        channel,
+                        self.dma.channels[channel].get_timing(),
+                        source,
+                        dest,
+                        count,
+                        transfer_size,
+                        self.dma.channels[channel].control
+                    );
+                }
                 self.perform_dma_transfer(channel, source, dest, count, transfer_size);
                 self.dma.complete_transfer(channel);
                 if request_irq {
-                    let irq = match channel {
-                        0 => crate::interrupt::InterruptType::DMA0,
-                        1 => crate::interrupt::InterruptType::DMA1,
-                        2 => crate::interrupt::InterruptType::DMA2,
-                        3 => crate::interrupt::InterruptType::DMA3,
-                        _ => continue,
-                    };
-                    self.interrupt_controller.borrow_mut().request_interrupt(irq);
+                    self.dma_irq_latch[channel] = true;
+                    if self.trace_dma {
+                        println!("DMA irq latched ch={}", channel);
+                    }
                 }
             }
         }
