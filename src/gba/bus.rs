@@ -957,48 +957,74 @@ impl CpuBus {
 
         let src_region = source & 0xFF00_0000;
         let dst_region = dest & 0xFF00_0000;
-        let mut src_off = source & 0x00FF_FFFF;
-        let mut dst_off = dest & 0x00FF_FFFF;
+        let mut src_off = (source & 0x00FF_FFFF) as i32;
+        let mut dst_off = (dest & 0x00FF_FFFF) as i32;
+        let mut first_value: Option<u32> = None;
+        let mut last_value: Option<u32> = None;
 
         for _ in 0..count {
-            let source_addr = src_region | src_off;
-            let dest_addr = dst_region | dst_off;
+            let source_addr = src_region | ((src_off as u32) & 0x00FF_FFFF);
+            let dest_addr = dst_region | ((dst_off as u32) & 0x00FF_FFFF);
             if transfer_size == 4 {
                 // 32-bit transfer
                 let data = self.read_word_internal(source_addr);
                 self.write_word_internal(dest_addr, data);
+                if first_value.is_none() {
+                    first_value = Some(data);
+                }
+                last_value = Some(data);
             } else {
                 // 16-bit transfer
                 let data = self.read_halfword_internal(source_addr);
                 self.write_halfword_internal(dest_addr, data);
+                let data32 = data as u32;
+                if first_value.is_none() {
+                    first_value = Some(data32);
+                }
+                last_value = Some(data32);
             }
 
             // Update addresses based on control settings
             let src_control = self.dma.channels[channel].get_source_control();
             let dest_control = self.dma.channels[channel].get_dest_control();
+            let step = transfer_size as i32;
 
             match src_control {
-                0 => src_off = (src_off.wrapping_add(transfer_size as u32)) & 0x00FF_FFFF, // Increment
-                1 => src_off = (src_off.wrapping_sub(transfer_size as u32)) & 0x00FF_FFFF, // Decrement
+                0 => src_off = src_off.wrapping_add(step), // Increment
+                1 => src_off = src_off.wrapping_sub(step), // Decrement
                 2 => {} // Fixed
                 // Prohibited in docs, but many implementations treat it as increment.
-                3 => src_off = (src_off.wrapping_add(transfer_size as u32)) & 0x00FF_FFFF,
+                3 => src_off = src_off.wrapping_add(step),
                 _ => {}
             }
 
             match dest_control {
-                0 => dst_off = (dst_off.wrapping_add(transfer_size as u32)) & 0x00FF_FFFF, // Increment
-                1 => dst_off = (dst_off.wrapping_sub(transfer_size as u32)) & 0x00FF_FFFF, // Decrement
+                0 => dst_off = dst_off.wrapping_add(step), // Increment
+                1 => dst_off = dst_off.wrapping_sub(step), // Decrement
                 2 => {} // Fixed
-                3 => dst_off = (dst_off.wrapping_add(transfer_size as u32)) & 0x00FF_FFFF, // Increment/Reload
+                3 => dst_off = dst_off.wrapping_add(step), // Increment/Reload
                 _ => {}
             }
         }
 
         // Update internal DMA progress state; public DMA registers retain the programmed values.
-        self.dma.channels[channel].next_source = src_region | src_off;
-        self.dma.channels[channel].next_destination = dst_region | dst_off;
+        self.dma.channels[channel].next_source = src_region | (src_off as u32);
+        self.dma.channels[channel].next_destination = dst_region | (dst_off as u32);
         self.dma.channels[channel].next_count = 0;
+
+        if self.trace_dma && channel == 0 {
+            println!(
+                "DMA done ch=0 first=0x{:08x} last=0x{:08x} next_src=0x{:08x} next_dst=0x{:08x} pub_src=0x{:08x} pub_dst=0x{:08x} pub_count={} en={}",
+                first_value.unwrap_or(0),
+                last_value.unwrap_or(0),
+                self.dma.channels[channel].next_source,
+                self.dma.channels[channel].next_destination,
+                self.dma.channels[channel].source,
+                self.dma.channels[channel].destination,
+                self.dma.channels[channel].count,
+                self.dma.channels[channel].enabled
+            );
+        }
     }
 
     // Internal memory access methods that bypass DMA triggering
