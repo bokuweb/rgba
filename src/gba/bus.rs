@@ -164,6 +164,9 @@ impl BusAccessor for CpuBus {
     fn is_cpu_halted(&self) -> bool {
         self.cpu_halted.get()
     }
+    fn has_pending_interrupt_flags(&self) -> bool {
+        self.interrupt_controller.borrow().read_if() != 0
+    }
 
     fn read_byte(&self, addr: u32) -> Byte {
         match addr {

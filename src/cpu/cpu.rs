@@ -157,7 +157,7 @@ impl ARM {
         // Save current PC (return address) to LR
         // For IRQ, return address should be current PC (instruction being interrupted)
         let return_addr = if current_cpsr.get_cpu_state() == crate::cpu::registers::psr::CpuState::Thumb {
-            self.gpr[PC].wrapping_sub(2) // Thumb mode: adjust for 2-byte instruction pipeline
+            self.gpr[PC] // Thumb IRQ return is handled by BIOS as LR-4; use visible PC here.
         } else {
             self.gpr[PC].wrapping_sub(4) // ARM mode: adjust for 4-byte instruction pipeline
         };
@@ -246,6 +246,9 @@ impl ARM {
                 bus.set_cpu_halted(false);
                 let irq_cycle = self.handle_irq(bus);
                 return Ok(irq_cycle);
+            }
+            if bus.has_pending_interrupt_flags() {
+                bus.set_cpu_halted(false);
             }
             return Ok(1);
         }

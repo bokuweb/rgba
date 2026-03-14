@@ -30,7 +30,6 @@ pub struct InterruptController {
 
 impl InterruptController {
     pub fn new() -> Self {
-        println!("🔧 InterruptController::new() - GBATek仕様準拠で初期化");
         Self {
             ie: 0,
             if_flags: 0,
@@ -47,7 +46,6 @@ impl InterruptController {
     /// Write IE register
     pub fn write_ie(&mut self, value: HalfWord) {
         self.ie = value;
-        println!("IE write: 0x{:04x} (VBlank enabled: {})", value, (value & 1) != 0);
     }
 
     /// Read IF register - agb_checker動作保証（最終版）
@@ -57,22 +55,8 @@ impl InterruptController {
 
     /// Write IF register (acknowledge interrupts) - GBATek仕様準拠
     pub fn write_if(&mut self, value: HalfWord) {
-        // GBATek: IF register書き込みで対応するビットをクリア（ACK）
-        println!("🟡 IF write (ACK): 0x{:04x}, IF before: 0x{:04x}", value, self.if_flags);
-
         // 対応するビットをクリア
         self.if_flags &= !value;
-        // Keep BIOS IF work (0x03007FF8) in sync with IF clears as per BIOS IntrWait behavior
-        self.bios_if_work &= !value;
-
-        if (value & 0x0001) != 0 {
-            println!("🟢 VBlank ACK received - bit 0 cleared");
-        }
-
-        println!(
-            "🟡 IF write (ACK) result: IF now: 0x{:04x}, BIOS IF work: 0x{:04x}",
-            self.if_flags, self.bios_if_work
-        );
     }
 
     /// Read IME register
@@ -83,31 +67,15 @@ impl InterruptController {
     /// Write IME register
     pub fn write_ime(&mut self, value: HalfWord) {
         self.ime = value;
-        println!("IME write: 0x{:04x} (enabled: {})", value, (value & 1) != 0);
     }
 
     /// Request an interrupt
     pub fn request_interrupt(&mut self, interrupt_type: InterruptType) {
         let bit = 1 << (interrupt_type as u16);
-        let old_if = self.if_flags;
         // JavaScript実装に従い: this.interruptFlags |= 1 << irqType;
         self.if_flags |= bit;
         // Also update BIOS IF work area for IntrWait/VBlankIntrWait
         self.bios_if_work |= bit;
-
-        if interrupt_type == InterruptType::VBlank {
-            // GBATek仕様: VBlank割り込み発生時にIFレジスタのbit 0をセット
-            // フラグはROMがACKするまで保持される
-            println!(
-                "🔴 VBlank interrupt requested: IF: 0x{:04x} -> 0x{:04x} (instance: {:p})",
-                old_if, self.if_flags, self as *const _
-            );
-        } else {
-            println!(
-                "🔴 Interrupt requested: {:?} (bit {}), IF: 0x{:04x} -> 0x{:04x}, BIOS IF work: 0x{:04x}",
-                interrupt_type, interrupt_type as u16, old_if, self.if_flags, self.bios_if_work
-            );
-        }
     }
 
     /// Check if any interrupts should be serviced
@@ -168,12 +136,10 @@ impl InterruptController {
     /// Write BIOS IF work area (0x03007FF8) - used by BIOS to clear acknowledged interrupts
     pub fn write_bios_if_work(&mut self, value: HalfWord) {
         self.bios_if_work = value;
-        println!("BIOS IF work write: 0x{:04x}", value);
     }
 
     /// Clear BIOS IF work area bits (used by IntrWait)
     pub fn clear_bios_if_work(&mut self, mask: HalfWord) {
         self.bios_if_work &= !mask;
-        println!("BIOS IF work cleared with mask: 0x{:04x}, now: 0x{:04x}", mask, self.bios_if_work);
     }
 }

@@ -5,6 +5,7 @@ pub trait BusAccessor {
     fn set_open_bus_context(&mut self, _pc: Word, _instruction_width: Word) {}
     fn set_cpu_halted(&mut self, _halted: bool) {}
     fn is_cpu_halted(&self) -> bool { false }
+    fn has_pending_interrupt_flags(&self) -> bool { false }
     fn read_byte(&self, addr: Word) -> Byte;
     fn read_halfword(&self, addr: Word) -> HalfWord;
     fn read_word(&self, addr: Word) -> Word;
