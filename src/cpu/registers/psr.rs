@@ -143,8 +143,10 @@ impl PSR {
     // }
 
     pub fn restore(&mut self, spsr: &mut PSR, gpr: &mut [Word; 16], bank_gpr: &mut BankGpr, bank_spsr: &mut BankSpsr) {
-        self.switch_mode(spsr.get_mode(), gpr, spsr, bank_gpr, bank_spsr);
-        self.set(spsr.get())
+        // Preserve the current mode's SPSR value before switch_mode mutates visible SPSR.
+        let restored = *spsr;
+        self.switch_mode(restored.get_mode(), gpr, spsr, bank_gpr, bank_spsr);
+        self.set(restored.get())
         // TODO: check irq??
     }
 

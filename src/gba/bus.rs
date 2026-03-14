@@ -155,6 +155,11 @@ impl BusAccessor for CpuBus {
             0x0000_0000..=0x0000_3FFF => self.bios.read_byte(addr),
             // EWRAM 256KB mirrors across 0x0200_0000-0x02FF_FFFF
             0x0200_0000..=0x02FF_FFFF => self.eram.read_byte((addr - 0x0200_0000) & 0x3FFFF),
+            // BIOS IF work area mirror (0x03007FF8, mirrored in all IWRAM aliases)
+            0x0300_0000..=0x03FF_FFFF if ((addr - 0x0300_0000) & 0x7FFF) == 0x7FF8 || ((addr - 0x0300_0000) & 0x7FFF) == 0x7FF9 => {
+                let v = self.interrupt_controller.borrow().read_bios_if_work();
+                if (addr & 1) == 0 { (v & 0x00FF) as u8 } else { (v >> 8) as u8 }
+            }
             // IWRAM 32KB mirrors across 0x0300_0000-0x03FF_FFFF
             0x0300_0000..=0x03FF_FFFF => self.wram.read_byte((addr - 0x0300_0000) & 0x7FFF),
             0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
@@ -196,6 +201,8 @@ impl BusAccessor for CpuBus {
             0x0000_0000..=0x0000_3FFF => self.bios.read_halfword(addr),
             // EWRAM mirrors
             0x0200_0000..=0x02FF_FFFF => self.eram.read_halfword((addr - 0x0200_0000) & 0x3FFFF),
+            // BIOS IF work area mirror (0x03007FF8, mirrored in all IWRAM aliases)
+            0x0300_0000..=0x03FF_FFFF if ((addr - 0x0300_0000) & 0x7FFF) == 0x7FF8 => self.interrupt_controller.borrow().read_bios_if_work(),
             // IWRAM mirrors
             0x0300_0000..=0x03FF_FFFF => self.wram.read_halfword((addr - 0x0300_0000) & 0x7FFF),
             0x0400_0000..=0x0400_005F => self.lcdc.read_halfword(addr - 0x0400_0000),
@@ -245,6 +252,13 @@ impl BusAccessor for CpuBus {
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_word(addr),
             0x0200_0000..=0x02FF_FFFF => self.eram.read_word((addr - 0x0200_0000) & 0x3FFFF),
+            // BIOS IF work area mirror (0x03007FF8, mirrored in all IWRAM aliases).
+            // Lower halfword is BIOS IF work, upper halfword remains regular IWRAM.
+            0x0300_0000..=0x03FF_FFFF if ((addr - 0x0300_0000) & 0x7FFF) == 0x7FF8 => {
+                let lo = self.interrupt_controller.borrow().read_bios_if_work() as u32;
+                let hi = self.wram.read_halfword(0x7FFA) as u32;
+                lo | (hi << 16)
+            }
             0x0400_0100..=0x0400_010F => {
                 // 組み合わせて32bit値を返す（TMxCNT_L/CNT_H）
                 let base = (addr - 0x0400_0100) as u32;
@@ -254,6 +268,13 @@ impl BusAccessor for CpuBus {
                 let b3 = self.timers.read(base + 3) as u32;
                 b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
             }
+            // IE/IF as a 32-bit pair (low=IE, high=IF)
+            0x0400_0200 => {
+                let irq = self.interrupt_controller.borrow();
+                (irq.read_ie() as u32) | ((irq.read_if() as u32) << 16)
+            }
+            0x0400_0204 => self.waitcnt as u32,
+            0x0400_0208 => self.interrupt_controller.borrow().read_ime() as u32,
             0x0300_0000..=0x03FF_FFFF => {
                 let off = (addr - 0x0300_0000) & 0x7FFF;
                 let v = self.wram.read_word(off);
@@ -313,6 +334,18 @@ impl BusAccessor for CpuBus {
         match addr {
             // 0x0000_0000...0x0007_FFFF => self.rom.borrow().read_word(addr),
             0x0200_0000..=0x02FF_FFFF => self.eram.write_byte((addr - 0x0200_0000) & 0x3FFFF, data),
+            // BIOS IF work area mirror (0x03007FF8, mirrored in all IWRAM aliases)
+            0x0300_0000..=0x03FF_FFFF if ((addr - 0x0300_0000) & 0x7FFF) == 0x7FF8 || ((addr - 0x0300_0000) & 0x7FFF) == 0x7FF9 => {
+                let mut irq = self.interrupt_controller.borrow_mut();
+                let current = irq.read_bios_if_work();
+                let next = if (addr & 1) == 0 {
+                    (current & 0xFF00) | (data as u16)
+                } else {
+                    (current & 0x00FF) | ((data as u16) << 8)
+                };
+                irq.write_bios_if_work(next);
+                self.wram.write_byte((addr - 0x0300_0000) & 0x7FFF, data);
+            }
             0x0300_0000..=0x03FF_FFFF => {
                 if addr == 0x03007dd9 {
                     // dbg!("write to 0x03007dd9", data);
@@ -385,6 +418,11 @@ impl BusAccessor for CpuBus {
         match addr {
             // I/O Register
             0x0200_0000..=0x02FF_FFFF => self.eram.write_halfword((addr - 0x0200_0000) & 0x3F_FFFF, data),
+            // BIOS IF work area mirror (0x03007FF8, mirrored in all IWRAM aliases)
+            0x0300_0000..=0x03FF_FFFF if ((addr - 0x0300_0000) & 0x7FFF) == 0x7FF8 => {
+                self.interrupt_controller.borrow_mut().write_bios_if_work(data);
+                self.wram.write_halfword(0x7FF8, data);
+            }
             // WRAM
             0x0300_0000..=0x03FF_FFFF => {
                 // info!("wram addr = {:x} {:x}", addr, data);
@@ -448,6 +486,11 @@ impl BusAccessor for CpuBus {
         match addr {
             0x0000_0000..=0x0007_FFFF => panic!("illegal write access."),
             0x0200_0000..=0x02FF_FFFF => self.eram.write_word((addr - 0x0200_0000) & 0x3FFFF, data),
+            // BIOS IF work area mirror (0x03007FF8, mirrored in all IWRAM aliases)
+            0x0300_0000..=0x03FF_FFFF if ((addr - 0x0300_0000) & 0x7FFF) == 0x7FF8 => {
+                self.interrupt_controller.borrow_mut().write_bios_if_work((data & 0xFFFF) as HalfWord);
+                self.wram.write_word(0x7FF8, data);
+            }
             // WRAM
             0x0300_0000..=0x0300_7FFF => {
                 // info!("wram addr = {:x} {:x}", addr, data);
@@ -470,11 +513,19 @@ impl BusAccessor for CpuBus {
                 self.timers.write(base + 2, ((data >> 16) & 0x000000FF) as u8);
                 self.timers.write(base + 3, ((data >> 24) & 0x000000FF) as u8);
             }
+            0x0400_0200 => {
+                // IE/IF as a 32-bit pair (low=IE write, high=IF ACK write)
+                self.interrupt_controller.borrow_mut().write_ie((data & 0xFFFF) as HalfWord);
+                self.interrupt_controller.borrow_mut().write_if((data >> 16) as HalfWord);
+            }
             0x0400_0204 => {
                 // WAITCNT is 16-bit at 0x04000204; word writes may target it
                 let hw = (data & 0xFFFF) as HalfWord;
                 self.waitcnt = hw;
                 self.cycleLUT.update_waitcnt(hw);
+            }
+            0x0400_0208 => {
+                self.interrupt_controller.borrow_mut().write_ime((data & 0xFFFF) as HalfWord);
             }
             0x0400_0060..=0x0400_03FF => {
                 // DMA and other I/O registers
