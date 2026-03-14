@@ -699,7 +699,7 @@ mod test {
         }
 
         fn write_byte(&mut self, addr: Word, data: Byte) {
-            self.mem[(addr as usize)] = data;
+            self.mem[addr as usize] = data;
         }
 
         fn write_halfword(&mut self, addr: Word, data: HalfWord) {
@@ -711,6 +711,7 @@ mod test {
         }
 
         fn compute_cycle(&self, addr: Word, access_type: AccessType) -> Cycle {
+            let _ = (addr, access_type);
             1
         }
     }
@@ -727,8 +728,9 @@ mod test {
     }
 
     fn setup() {
-        use std::sync::{Once, ONCE_INIT};
-        static INIT: Once = ONCE_INIT;
+        use std::sync::Once;
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {});
         // INIT.call_once(|| env_logger::init());
     }
 

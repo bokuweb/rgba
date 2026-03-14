@@ -385,14 +385,14 @@ mod tests {
 
     #[test]
     fn test_div_basic() {
-        let bus = MockBus::new();
+        let mut bus = MockBus::new();
         let mut gpr = [0u32; 16];
 
         // Test: 100 / 10 = 10 remainder 0
         gpr[0] = 100;
         gpr[1] = 10;
 
-        Bios::div(&bus, &mut gpr);
+        Bios::div(&mut bus, &mut gpr);
 
         assert_eq!(gpr[0], 10);  // quotient
         assert_eq!(gpr[1], 0);   // remainder
@@ -401,14 +401,14 @@ mod tests {
 
     #[test]
     fn test_div_negative() {
-        let bus = MockBus::new();
+        let mut bus = MockBus::new();
         let mut gpr = [0u32; 16];
 
         // Test: -123 / 10 = -12 remainder -3
         gpr[0] = (-123i32) as u32;
         gpr[1] = 10;
 
-        Bios::div(&bus, &mut gpr);
+        Bios::div(&mut bus, &mut gpr);
 
         assert_eq!(gpr[0] as i32, -12); // quotient
         assert_eq!(gpr[1] as i32, -3);  // remainder
@@ -417,17 +417,17 @@ mod tests {
 
     #[test]
     fn test_sqrt() {
-        let bus = MockBus::new();
+        let mut bus = MockBus::new();
         let mut gpr = [0u32; 16];
 
         // Test sqrt(16) = 4
         gpr[0] = 16;
-        Bios::sqrt(&bus, &mut gpr);
+        Bios::sqrt(&mut bus, &mut gpr);
         assert_eq!(gpr[0], 4);
 
         // Test sqrt(0) = 0
         gpr[0] = 0;
-        Bios::sqrt(&bus, &mut gpr);
+        Bios::sqrt(&mut bus, &mut gpr);
         assert_eq!(gpr[0], 0);
     }
 }
