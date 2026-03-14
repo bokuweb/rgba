@@ -130,7 +130,6 @@ impl LCDController {
     pub fn get_bg_mode(&self) -> BgMode { self.dispcnt.mode() }
 
     pub fn run(&mut self, cycles: usize) -> (bool, bool) {
-        println!("🎮 LCD run: incoming cycles={}, total_cycles={}, lines={}", cycles, self.cycles + cycles, self.lines);
         self.cycles += cycles;
         let mut vblank_irq_requested = false;
 
@@ -161,10 +160,7 @@ impl LCDController {
         match addr {
             0x0000 => self.dispcnt.read(),
             0x0004 => {
-                let result = self.dispstat.read(self.cycles, self.lines);
-                println!("🔍 DISPSTAT read: 0x{:04X} (lines: {}, cycles: {}, vblank: {})",
-                    result, self.lines, self.cycles, result & 0x0001);
-                result
+                self.dispstat.read(self.cycles, self.lines)
             },
             0x0006 => self.lines as HalfWord,
             0x0008 => self.bg0cnt.read(),
@@ -196,10 +192,7 @@ impl LCDController {
         match addr {
             0x0000 => self.dispcnt.read() as Word,
             0x0004 => {
-                let result = self.dispstat.read(self.cycles, self.lines) as Word;
-                println!("🔍 DISPSTAT word read: 0x{:08X} (lines: {}, cycles: {}, vblank: {})",
-                    result, self.lines, self.cycles, result & 0x0001);
-                result
+                self.dispstat.read(self.cycles, self.lines) as Word
             },
             0x0006 => self.lines as Word,
 
@@ -492,18 +485,6 @@ impl LCDController {
             0x004C => {
                 // MOSAIC - Mosaic Size (Write Only)
                 self.mosaic = data;
-                let bg_h_size = data & 0x000F; // Bit 0-3: BG Mosaic H-Size (minus 1)
-                let bg_v_size = (data & 0x00F0) >> 4; // Bit 4-7: BG Mosaic V-Size (minus 1)
-                let obj_h_size = (data & 0x0F00) >> 8; // Bit 8-11: OBJ Mosaic H-Size (minus 1)
-                let obj_v_size = (data & 0xF000) >> 12; // Bit 12-15: OBJ Mosaic V-Size (minus 1)
-                println!(
-                    "MOSAIC register write: 0x{:04x} (BG H:{} V:{}, OBJ H:{} V:{})",
-                    data,
-                    bg_h_size + 1,
-                    bg_v_size + 1,
-                    obj_h_size + 1,
-                    obj_v_size + 1
-                );
             }
             0x0050 => {
                 // BLDCNT - Color Special Effects Selection (Read/Write)
@@ -940,93 +921,48 @@ impl LCDController {
 
     fn render_with_mode0(&self, vram: &Ram, palette: &Ram) -> Vec<u8> {
         let mut buf = vec![0; 240 * 160 * 4];
-        let tile_offset = self.bg0cnt.bg_tile_offset();
-        let map_offset = self.bg0cnt.bg_map_offset();
 
-        // Apply scroll offsets (9-bit values, can be 0-511)
-        let scroll_x = self.bg0hofs as Word;
-        let scroll_y = self.bg0vofs as Word;
-
-        // Render pixel by pixel with scroll support and proper window control
+        // Render pixel by pixel with window control and BG priority composition.
         for screen_y in 0..160 {
             for screen_x in 0..240 {
                 // Get window control for this pixel
-                let (bg0_enable, _bg1_enable, _bg2_enable, _bg3_enable, _obj_enable, _effect_enable) = self.get_window_control(screen_x, screen_y);
+                let (bg0_enable, bg1_enable, bg2_enable, bg3_enable, _obj_enable, effect_enable) = self.get_window_control(screen_x, screen_y);
 
                 let buf_index = ((screen_y * 240 + screen_x) * 4) as usize;
-
-                if bg0_enable {
-                    // BG0 is enabled for this pixel - render normally
-                    // Calculate the actual position in the background map considering scroll
-                    let bg_x = (screen_x + scroll_x) & 0x1FF; // Wrap at 512 pixels (64 tiles * 8 pixels)
-                    let bg_y = (screen_y + scroll_y) & 0x1FF; // Wrap at 512 pixels (64 tiles * 8 pixels)
-
-                    // Convert pixel coordinates to tile coordinates
-                    let tile_x = bg_x / 8;
-                    let tile_y = bg_y / 8;
-                    let mut pixel_x = bg_x % 8;
-                    let mut pixel_y = bg_y % 8;
-
-                    // Calculate tile map address (32x32 tile map)
-                    let tile_map_addr = (tile_y * VIRTUAL_DISPLAY_TILE_WIDTH + tile_x) * 2 + map_offset;
-                    let tile_attr = vram.read_halfword(tile_map_addr) as Word;
-
-                    // Tile attributes
-                    let tile_number = tile_attr & 0x03FF; // bits 0-9
-                    let hflip = (tile_attr & 0x0400) != 0; // bit 10
-                    let vflip = (tile_attr & 0x0800) != 0; // bit 11
-                    let palette_bank = ((tile_attr >> 12) & 0x000F) as Word; // bits 12-15 (4bpp only)
-
-                    // Apply flips
-                    if hflip { pixel_x = 7 - pixel_x; }
-                    if vflip { pixel_y = 7 - pixel_y; }
-
-                    // Determine 4bpp or 8bpp
-                    let is_8bpp = self.bg0cnt.colors_palettes();
-
-                    // Fetch raw pixel value from tile
-                    let (raw_pixel_value, palette_index_word): (u8, Word) = if is_8bpp {
-                        // 8bpp: 64 bytes per tile
-                        let pixel_addr = tile_offset + tile_number * 64 + pixel_y * 8 + pixel_x;
-                        let value = vram.read_byte(pixel_addr);
-                        (value, value as Word)
-                    } else {
-                        // 4bpp: 32 bytes per tile, 2 pixels per byte
-                        let row_offset = pixel_y * 4;
-                        let byte_addr = tile_offset + tile_number * 32 + row_offset + (pixel_x / 2);
-                        let byte = vram.read_byte(byte_addr);
-                        let nibble = if (pixel_x & 1) == 0 { byte & 0x0F } else { (byte >> 4) & 0x0F };
-                        let pal_index = (palette_bank * 16) + (nibble as Word);
-                        (nibble, pal_index)
-                    };
-
-                    // Transparent if raw pixel value == 0 (regardless of palette bank)
-                    if raw_pixel_value == 0 {
-                        // Transparent pixel - render backdrop color (palette index 0)
-                        let mut backdrop_color = BGR::new(palette.read_halfword(0));
-                        // Apply color special effects to backdrop (BD = layer_id 5)
-                        let backdrop_color = self.apply_color_effect(backdrop_color, 5, _effect_enable);
-                        buf[buf_index] = backdrop_color.red();
-                        buf[buf_index + 1] = backdrop_color.green();
-                        buf[buf_index + 2] = backdrop_color.blue();
-                        buf[buf_index + 3] = 0xFF;
-                    } else {
-                        // Non-transparent pixel
-                        let palette_addr = (palette_index_word * 2) as Word;
-                        let mut color = BGR::new(palette.read_halfword(palette_addr));
-                        // Apply color special effects (BG0 = layer_id 0)
-                        color = self.apply_color_effect(color, 0, _effect_enable);
-                        // Set pixel in output buffer
-                        buf[buf_index] = color.red();
-                        buf[buf_index + 1] = color.green();
-                        buf[buf_index + 2] = color.blue();
-                        buf[buf_index + 3] = 0xFF;
+                let mut best: Option<(u16, usize, BGR)> = None;
+                let window_enabled = [bg0_enable, bg1_enable, bg2_enable, bg3_enable];
+                for layer in 0..4 {
+                    if !window_enabled[layer] {
+                        continue;
                     }
+                    if let Some((priority, mut color)) =
+                        self.sample_text_bg_pixel(layer, screen_x, screen_y, vram, palette)
+                    {
+                        color = self.apply_color_effect(color, layer as u8, effect_enable);
+                        match best {
+                            None => best = Some((priority, layer, color)),
+                            Some((best_priority, best_layer, _))
+                                if priority < best_priority
+                                    || (priority == best_priority && layer < best_layer) =>
+                            {
+                                best = Some((priority, layer, color));
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+
+                if let Some((_, _, color)) = best {
+                    buf[buf_index] = color.red();
+                    buf[buf_index + 1] = color.green();
+                    buf[buf_index + 2] = color.blue();
+                    buf[buf_index + 3] = 0xFF;
                 } else {
-                    // BG0 is disabled for this pixel - render backdrop color or black
-                    // Here we render backdrop color (palette index 0) for better fidelity
-                    let mut backdrop_color = BGR::new(palette.read_halfword(0));
-                    let backdrop_color = self.apply_color_effect(backdrop_color, 5, _effect_enable);
+                    let backdrop_color = self.apply_color_effect(
+                        BGR::new(palette.read_halfword(0)),
+                        5,
+                        effect_enable,
+                    );
                     buf[buf_index] = backdrop_color.red();
                     buf[buf_index + 1] = backdrop_color.green();
                     buf[buf_index + 2] = backdrop_color.blue();
@@ -1035,6 +971,114 @@ impl LCDController {
             }
         }
         buf
+    }
+
+    fn sample_text_bg_pixel(
+        &self,
+        layer: usize,
+        screen_x: Word,
+        screen_y: Word,
+        vram: &Ram,
+        palette: &Ram,
+    ) -> Option<(u16, BGR)> {
+        let (enabled, bgcnt, scroll_x, scroll_y) = match layer {
+            0 => (
+                self.dispcnt.screen_display_bg0(),
+                self.bg0cnt,
+                self.bg0hofs as Word,
+                self.bg0vofs as Word,
+            ),
+            1 => (
+                self.dispcnt.screen_display_bg1(),
+                self.bg1cnt,
+                self.bg1hofs as Word,
+                self.bg1vofs as Word,
+            ),
+            2 => (
+                self.dispcnt.screen_display_bg2(),
+                self.bg2cnt,
+                self.bg2hofs as Word,
+                self.bg2vofs as Word,
+            ),
+            3 => (
+                self.dispcnt.screen_display_bg3(),
+                self.bg3cnt,
+                self.bg3hofs as Word,
+                self.bg3vofs as Word,
+            ),
+            _ => return None,
+        };
+
+        if !enabled {
+            return None;
+        }
+
+        let (width, height) = match bgcnt.screen_size() {
+            0 => (256, 256),
+            1 => (512, 256),
+            2 => (256, 512),
+            _ => (512, 512),
+        };
+        let bg_x = (screen_x.wrapping_add(scroll_x)) % width;
+        let bg_y = (screen_y.wrapping_add(scroll_y)) % height;
+
+        let tile_x = bg_x / 8;
+        let tile_y = bg_y / 8;
+        let local_tile_x = tile_x % 32;
+        let local_tile_y = tile_y % 32;
+        let block_x = tile_x / 32;
+        let block_y = tile_y / 32;
+
+        let map_block_index = match bgcnt.screen_size() {
+            0 => 0,
+            1 => block_x,
+            2 => block_y,
+            _ => block_y * 2 + block_x,
+        };
+
+        let map_offset = bgcnt.bg_map_offset();
+        let tile_map_addr = map_offset + map_block_index * 0x800 + (local_tile_y * 32 + local_tile_x) * 2;
+        let tile_attr = vram.read_halfword(tile_map_addr) as Word;
+
+        let tile_number = tile_attr & 0x03FF;
+        let hflip = (tile_attr & 0x0400) != 0;
+        let vflip = (tile_attr & 0x0800) != 0;
+        let palette_bank = (tile_attr >> 12) & 0x000F;
+        let mut pixel_x = bg_x % 8;
+        let mut pixel_y = bg_y % 8;
+        if hflip {
+            pixel_x = 7 - pixel_x;
+        }
+        if vflip {
+            pixel_y = 7 - pixel_y;
+        }
+
+        let tile_offset = bgcnt.bg_tile_offset();
+        let is_8bpp = bgcnt.colors_palettes();
+        let (raw_pixel_value, palette_index_word): (u8, Word) = if is_8bpp {
+            let pixel_addr = tile_offset + tile_number * 64 + pixel_y * 8 + pixel_x;
+            let value = vram.read_byte(pixel_addr);
+            (value, value as Word)
+        } else {
+            let row_offset = pixel_y * 4;
+            let byte_addr = tile_offset + tile_number * 32 + row_offset + (pixel_x / 2);
+            let byte = vram.read_byte(byte_addr);
+            let nibble = if (pixel_x & 1) == 0 {
+                byte & 0x0F
+            } else {
+                (byte >> 4) & 0x0F
+            };
+            let pal_index = palette_bank * 16 + nibble as Word;
+            (nibble, pal_index)
+        };
+
+        if raw_pixel_value == 0 {
+            return None;
+        }
+
+        let palette_addr = palette_index_word * 2;
+        let color = BGR::new(palette.read_halfword(palette_addr));
+        Some((bgcnt.bg_priority(), color))
     }
 
     fn render_with_mode3(&self, vram: &Ram) -> Vec<u8> {

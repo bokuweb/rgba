@@ -74,21 +74,18 @@ impl DMAController {
     pub fn write_source(&mut self, channel: usize, addr: Word) {
         if channel < 4 {
             self.channels[channel].set_source(addr);
-            println!("🔧 DMA{} Source Address: 0x{:08x}", channel, addr);
         }
     }
 
     pub fn write_destination(&mut self, channel: usize, addr: Word) {
         if channel < 4 {
             self.channels[channel].set_destination(addr);
-            println!("🔧 DMA{} Destination Address: 0x{:08x}", channel, addr);
         }
     }
 
     pub fn write_count(&mut self, channel: usize, count: HalfWord) {
         if channel < 4 {
             self.channels[channel].set_count(count);
-            println!("🔧 DMA{} Word Count: 0x{:04x}", channel, count);
         }
     }
 
@@ -100,13 +97,6 @@ impl DMAController {
             ch.set_control(control);
             let now_timing = ch.get_timing();
             
-            println!("🔧 DMA{} Control: 0x{:04x} (Enable: {}, Size: {}bit, Timing: {})", 
-                channel, control, 
-                ch.enabled,
-                if ch.get_transfer_size() == 4 { 32 } else { 16 },
-                ch.get_timing()
-            );
-
             // Pending scheduling policy:
             // - When enabling (edge 0->1): schedule immediately only if timing==Immediate
             // - When already enabled and timing changed to Immediate: do NOT start immediately (HW behavior)
@@ -124,20 +114,7 @@ impl DMAController {
         }
     }
 
-    fn trigger_transfer(&mut self, channel: usize) {
-        let dma = &mut self.channels[channel];
-        if !dma.enabled {
-            return;
-        }
-
-        println!("🚀 DMA{} Transfer: 0x{:08x} -> 0x{:08x}, Count: {}, Size: {}bit", 
-            channel, dma.source, dma.destination, dma.count, 
-            if dma.get_transfer_size() == 4 { 32 } else { 16 }
-        );
-
-        // Note: Actual memory transfer will be handled by the bus
-        // This is just logging for now
-    }
+    fn trigger_transfer(&mut self, _channel: usize) {}
 
     pub fn get_pending_transfer(&mut self, channel: usize) -> Option<(Word, Word, usize, usize)> {
         if channel < 4 && self.channels[channel].enabled && self.channels[channel].pending {
@@ -164,7 +141,6 @@ impl DMAController {
             if !self.channels[channel].is_repeat() {
                 self.channels[channel].enabled = false;
                 self.channels[channel].control &= !0x8000; // Clear enable bit
-                println!("✅ DMA{} Transfer completed", channel);
             }
         }
     }

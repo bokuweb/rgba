@@ -113,7 +113,6 @@ impl BankGpr {
     }
 
     pub(crate) fn read(&mut self, mode: Mode, index: usize) -> u32 {
-        dbg!(index);
         match mode {
             Mode::User => panic!("user has no bank register"),
             Mode::FIQ => match index {
