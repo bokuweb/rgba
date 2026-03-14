@@ -19,7 +19,6 @@ use std::path::Path;
 
 use types::*;
 use super::dma::DMAController;
-use std::sync::{OnceLock, atomic::{AtomicUsize, Ordering}};
 
 pub const BIOS_ADDR: u32 = 0x0000_0000;
 pub const EWRAM_ADDR: u32 = 0x0200_0000;
@@ -166,13 +165,6 @@ impl BusAccessor for CpuBus {
             0x0400_0100..=0x0400_010F => {
                 let ofs = (addr - 0x0400_0100) as u32;
                 let v = self.timers.read(ofs);
-                // Debug: 最初の数十回だけタイマー読み出しをログ
-                static TIMER_RD_CNT: OnceLock<AtomicUsize> = OnceLock::new();
-                let c = TIMER_RD_CNT.get_or_init(|| AtomicUsize::new(0)).fetch_add(1, Ordering::Relaxed);
-                if c < 64 {
-                    let ch = (ofs / 4) as usize;
-                    println!("⏱ TM{} READ ofs=0x{:02X} -> 0x{:02X}", ch, ofs & 0xFF, v);
-                }
                 v
             }
             0x0400_0060..=0x0400_03FF => 0,
@@ -277,11 +269,7 @@ impl BusAccessor for CpuBus {
             0x0400_0208 => self.interrupt_controller.borrow().read_ime() as u32,
             0x0300_0000..=0x03FF_FFFF => {
                 let off = (addr - 0x0300_0000) & 0x7FFF;
-                let v = self.wram.read_word(off);
-                if off == 0 || off == 4 || off == 8 {
-                    println!("IWRAM read_word [0x{:08x}] -> 0x{:08x}", addr, v);
-                }
-                v
+                self.wram.read_word(off)
             },
             // 修正(004): VRAMミラー（0x20000で折り返し、0x18000..は0x10000..へ）
             0x0600_0000..=0x06FF_FFFF => {
@@ -362,7 +350,7 @@ impl BusAccessor for CpuBus {
                 match addr {
                     // Sound FIFO A/B (accept data; no-op sink for now)
                     0x0400_00A0 | 0x0400_00A4 => {
-                        println!("🎵 Sound FIFO write (byte): 0x{:08x} = 0x{:02x}", addr, data);
+                        let _ = data;
                     }
                     _ if (addr >= 0x0400_00B0 && addr <= 0x0400_00DE) => {
                         println!("🔧 DMA register byte write: 0x{:08x} = 0x{:02x} (not implemented)", addr, data);
@@ -444,14 +432,51 @@ impl BusAccessor for CpuBus {
                 self.timers.write(base + 1, hi);
             }
             0x0400_0060..=0x0400_03FF => {
-                // TODO: Implement DMA, Timer, and other I/O registers
                 match addr {
                     // Sound FIFO A/B (accept data; no-op sink for now)
                     0x0400_00A0 | 0x0400_00A4 => {
-                        println!("🎵 Sound FIFO write (halfword): 0x{:08x} = 0x{:04x}", addr, data);
+                        let _ = data;
                     }
-                    _ if (addr >= 0x0400_00B0 && addr <= 0x0400_00DE) => {
-                        println!("🔧 DMA register write: 0x{:08x} = 0x{:04x} (not implemented)", addr, data);
+                    // DMAx registers (16-bit writes are common on GBA)
+                    0x0400_00B0..=0x0400_00DE => {
+                        let channel = ((addr - 0x0400_00B0) / 0x0C) as usize;
+                        if channel < 4 {
+                            let reg = (addr - (0x0400_00B0 + (channel as u32) * 0x0C)) as u16;
+                            let ch = self.dma.channels[channel];
+                            match reg {
+                                // DMAxSAD_L
+                                0x00 => {
+                                    let src = (ch.source & 0xFFFF_0000) | (data as u32);
+                                    self.dma.write_source(channel, src);
+                                }
+                                // DMAxSAD_H
+                                0x02 => {
+                                    let src = ((data as u32) << 16) | (ch.source & 0x0000_FFFF);
+                                    self.dma.write_source(channel, src & 0x0FFF_FFFF);
+                                }
+                                // DMAxDAD_L
+                                0x04 => {
+                                    let dst = (ch.destination & 0xFFFF_0000) | (data as u32);
+                                    self.dma.write_destination(channel, dst);
+                                }
+                                // DMAxDAD_H
+                                0x06 => {
+                                    let dst = ((data as u32) << 16) | (ch.destination & 0x0000_FFFF);
+                                    self.dma.write_destination(channel, dst & 0x0FFF_FFFF);
+                                }
+                                // DMAxCNT_L
+                                0x08 => {
+                                    let count_mask = if channel == 3 { 0xFFFF } else { 0x3FFF };
+                                    self.dma.write_count(channel, data & count_mask);
+                                }
+                                // DMAxCNT_H
+                                0x0A => {
+                                    self.dma.write_control(channel, data);
+                                    self.execute_dma_transfers();
+                                }
+                                _ => {}
+                            }
+                        }
                     }
                     _ => {}
                 }
@@ -495,9 +520,6 @@ impl BusAccessor for CpuBus {
             0x0300_0000..=0x0300_7FFF => {
                 // info!("wram addr = {:x} {:x}", addr, data);
                 let off = addr - 0x0300_0000;
-                if off == 0 || off == 4 || off == 8 {
-                    println!("IWRAM write_word [0x{:08x}] = 0x{:08x}", addr, data);
-                }
                 self.wram.write_word(off, data);
             }
             // Unused
@@ -717,24 +739,15 @@ impl CpuBus {
     }
 
     fn perform_dma_transfer(&mut self, channel: usize, mut source: Word, mut dest: Word, count: usize, transfer_size: usize) {
-        println!("🚀 Executing DMA{} transfer: 0x{:08x} -> 0x{:08x}, {} words of {} bytes", 
-            channel, source, dest, count, transfer_size);
-
-        for i in 0..count {
+        for _ in 0..count {
             if transfer_size == 4 {
                 // 32-bit transfer
                 let data = self.read_word_internal(source);
                 self.write_word_internal(dest, data);
-                if i < 5 { // Log first few transfers
-                    println!("  DMA{} [{}]: 0x{:08x} -> 0x{:08x} = 0x{:08x}", channel, i, source, dest, data);
-                }
             } else {
                 // 16-bit transfer
                 let data = self.read_halfword_internal(source);
                 self.write_halfword_internal(dest, data);
-                if i < 5 { // Log first few transfers
-                    println!("  DMA{} [{}]: 0x{:08x} -> 0x{:08x} = 0x{:04x}", channel, i, source, dest, data);
-                }
             }
 
             // Update addresses based on control settings
@@ -758,7 +771,6 @@ impl CpuBus {
             }
         }
 
-        println!("✅ DMA{} transfer completed: {} transfers", channel, count);
     }
 
     // Internal memory access methods that bypass DMA triggering
@@ -790,18 +802,12 @@ impl CpuBus {
 
     fn write_word_internal(&mut self, addr: Word, data: Word) {
         match addr {
-            0x0400_00A0 | 0x0400_00A4 => {
-                println!("🎵 DMA Sound FIFO write (word): 0x{:08x} = 0x{:08x}", addr, data);
-            }
+            0x0400_00A0 | 0x0400_00A4 => {}
             0x0600_0000..=0x06FF_FFFF => {
                 let vram_addr = Self::map_vram_offset(addr);
-                if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
-                    println!("📝 DMA VRAM word write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:08x}", addr, vram_addr, data);
-                }
                 self.vram.write_word(vram_addr, data);
             }
             0x0500_0000..=0x0500_03FF => {
-                println!("📝 DMA Palette word write: 0x{:08x} = 0x{:08x}", addr, data);
                 self.palette.write_word(addr - 0x0500_0000, data);
             }
             0x0300_0000..=0x0300_7FFF => self.wram.write_word(addr - 0x0300_0000, data),
@@ -814,20 +820,14 @@ impl CpuBus {
 
     fn write_halfword_internal(&mut self, addr: Word, data: HalfWord) {
         match addr {
-            0x0400_00A0 | 0x0400_00A4 => {
-                println!("🎵 DMA Sound FIFO write (halfword): 0x{:08x} = 0x{:04x}", addr, data);
-            }
+            0x0400_00A0 | 0x0400_00A4 => {}
 
 
             0x0600_0000..=0x06FF_FFFF => {
                 let vram_addr = Self::map_vram_offset(addr);
-                if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
-                    println!("📝 DMA VRAM halfword write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:04x}", addr, vram_addr, data);
-                }
                 self.vram.write_halfword(vram_addr, data);
             }
             0x0500_0000..=0x0500_03FF => {
-                println!("📝 DMA Palette halfword write: 0x{:08x} = 0x{:04x}", addr, data);
                 self.palette.write_halfword(addr - 0x0500_0000, data);
             }
             0x0300_0000..=0x0300_7FFF => self.wram.write_halfword(addr - 0x0300_0000, data),
