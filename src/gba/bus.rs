@@ -995,10 +995,10 @@ impl CpuBus {
             }
         }
 
-        // Update live DMA registers to post-transfer state.
-        self.dma.channels[channel].source = src_region | src_off;
-        self.dma.channels[channel].destination = dst_region | dst_off;
-        self.dma.channels[channel].count = 0;
+        // Update internal DMA progress state; public DMA registers retain the programmed values.
+        self.dma.channels[channel].next_source = src_region | src_off;
+        self.dma.channels[channel].next_destination = dst_region | dst_off;
+        self.dma.channels[channel].next_count = 0;
     }
 
     // Internal memory access methods that bypass DMA triggering
