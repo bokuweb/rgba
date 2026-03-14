@@ -155,20 +155,29 @@ impl ARM {
     {
         println!("🔥 Handling IRQ - switching to IRQ mode");
 
-        // Save current CPSR to SPSR_irq
-        self.spsr = self.cpsr;
+        let current_cpsr = self.cpsr;
 
         // Save current PC (return address) to LR
         // For IRQ, return address should be current PC (instruction being interrupted)
-        let return_addr = if self.cpsr.get_cpu_state() == crate::cpu::registers::psr::CpuState::Thumb {
-            self.gpr[PC] - 2 // Thumb mode: adjust for 2-byte instruction pipeline
+        let return_addr = if current_cpsr.get_cpu_state() == crate::cpu::registers::psr::CpuState::Thumb {
+            self.gpr[PC].wrapping_sub(2) // Thumb mode: adjust for 2-byte instruction pipeline
         } else {
-            self.gpr[PC] - 4 // ARM mode: adjust for 4-byte instruction pipeline
+            self.gpr[PC].wrapping_sub(4) // ARM mode: adjust for 4-byte instruction pipeline
         };
+
+        // Switch to IRQ mode with full banked register/SPSR handling
+        self.cpsr.switch_mode(
+            crate::cpu::registers::psr::Mode::IRQ,
+            &mut self.gpr,
+            &mut self.spsr,
+            &mut self.bank_gpr,
+            &mut self.bank_spsr,
+        );
+        // Save current CPSR to SPSR_irq
+        self.spsr = current_cpsr;
+        // Save return address to banked LR_irq
         self.gpr[LR] = return_addr;
 
-        // Switch to IRQ mode and disable IRQ in CPSR
-        self.cpsr.set_mode(crate::cpu::registers::psr::Mode::IRQ);
         self.cpsr.set_I(true); // Disable IRQ
         self.cpsr.set_T(false); // Switch to ARM mode (IRQ handlers are always ARM)
 
@@ -796,6 +805,36 @@ mod test {
         use std::sync::{Once, ONCE_INIT};
         static INIT: Once = ONCE_INIT;
         // INIT.call_once(|| env_logger::init());
+    }
+
+    #[test]
+    fn irq_exception_uses_banked_irq_sp_lr() {
+        setup();
+        let mut bus = MockBus::new();
+        let mut arm = ARM::new();
+        arm.reset();
+        arm.set_gpr(PC, 0x0800_0008);
+        arm.set_gpr(SP, 0x0300_7F00);
+        arm.set_gpr(LR, 0xDEAD_BEEF);
+        arm.request_irq();
+
+        let _ = arm.step(&mut bus, false).unwrap();
+
+        assert_eq!(arm.cpsr.get_mode(), crate::cpu::registers::psr::Mode::IRQ);
+        assert_eq!(arm.get_gpr(PC), 0x0000_0018);
+        assert_eq!(arm.get_gpr(SP), 0x0300_7FA0);
+        assert_eq!(arm.get_gpr(LR), 0x0800_0004);
+        assert_eq!(arm.spsr.get_mode(), crate::cpu::registers::psr::Mode::System);
+
+        arm.cpsr.switch_mode(
+            crate::cpu::registers::psr::Mode::System,
+            &mut arm.gpr,
+            &mut arm.spsr,
+            &mut arm.bank_gpr,
+            &mut arm.bank_spsr,
+        );
+        assert_eq!(arm.get_gpr(SP), 0x0300_7F00);
+        assert_eq!(arm.get_gpr(LR), 0xDEAD_BEEF);
     }
 
     #[test]
