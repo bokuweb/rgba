@@ -34,60 +34,40 @@ where
     T: BusAccessor,
 {
     let value = if dec.get_I() {
-        println!("MSR immediate: rotate={}, imm=0x{:02X}", dec.get_rotate(), dec.get_imm());
         let rotated_value = ror(
             dec.get_imm(),
             dec.get_rotate().checked_shl(1).unwrap_or_default(),
             cpsr.get_C(),
             true,
         );
-        println!("MSR rotated value: 0x{:08X}", rotated_value);
         rotated_value
     } else {
-        println!("MSR register: Rm={}", dec.get_Rm());
         gpr[dec.get_Rm() as usize]
     };
 
     let mut mask = 0;
     if dec.get_F() {
         mask |= 0xff << 24;
-        println!("MSR: F flag set, mask=0x{:08X}", mask);
     }
     if dec.get_C() {
         mask |= 0xff;
-        println!("MSR: C flag set, mask=0x{:08X}", mask);
     }
-    println!("MSR: Final mask=0x{:08X}, value=0x{:08X}", mask, value);
 
     if dec.get_Pd() {
         spsr.set(spsr.get() & !mask | value & mask)
     } else {
         if mask & 0xFF00_0000 != 0 {
-            println!("MSR: Setting flags - N={}, Z={}, C={}, V={}", 
-                value & 0x8000_0000 != 0,
-                value & 0x4000_0000 != 0, 
-                value & 0x2000_0000 != 0,
-                value & 0x1000_0000 != 0);
             cpsr.set_N(value & 0x8000_0000 != 0);
             cpsr.set_Z(value & 0x4000_0000 != 0);
             cpsr.set_C(value & 0x2000_0000 != 0);
             cpsr.set_V(value & 0x1000_0000 != 0);
-            println!("MSR: After setting - CPSR=0x{:08X}", cpsr.get());
-
-            // Special debug for Test 005
-            if gpr[PC] >= 0x08000150 && gpr[PC] <= 0x08000160 {
-                println!("MSR TEST 005: PC=0x{:08X}, Set N={}, Final CPSR=0x{:08X}",
-                    gpr[PC], cpsr.get_N(), cpsr.get());
-            }
         }
 
         let current_mode = cpsr.get_mode();
         if current_mode != Mode::User && mask & 0x0000_00CF != 0 {
             cpsr.set_I(value & 0x0000_0080 != 0);
             cpsr.set_F(value & 0x0000_0040 != 0);
-            dbg!(value, current_mode);
             let new_mode = Mode::from((value & 0x0000_000F) | 0x0000_0010);
-            dbg!(new_mode);
             cpsr.switch_mode(new_mode, gpr, spsr, bank_gpr, bank_spsr);
         }
     }

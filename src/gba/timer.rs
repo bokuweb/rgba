@@ -24,16 +24,7 @@ impl Timers {
             0x00 | 0x01 | 0x04 | 0x05 | 0x08 | 0x09 | 0x0C | 0x0D => {
                 let i = (ofs / 4) as usize;
                 let b = ofs & 1;
-                let val = (self.timer[i].counter >> (b * 8)) as u8;
-                // Debug: タイマー読み取りログ（最初期だけ）
-                #[allow(unused_imports)]
-                use std::sync::{OnceLock, atomic::{AtomicUsize, Ordering}};
-                static TMR_RD_CNT: OnceLock<AtomicUsize> = OnceLock::new();
-                let c = TMR_RD_CNT.get_or_init(|| AtomicUsize::new(0)).fetch_add(1, Ordering::Relaxed);
-                if c < 64 {
-                    println!("TMR{} CNT_L[{}] = 0x{:02X}", i, b, val);
-                }
-                val
+                (self.timer[i].counter >> (b * 8)) as u8
             }
             // TMxCNT_H
             0x02 | 0x06 | 0x0A | 0x0E => {
@@ -184,5 +175,4 @@ impl Timers {
         overflow
     }
 }
-
 

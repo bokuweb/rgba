@@ -1,6 +1,4 @@
 use crate::types::HalfWord;
-use std::cell::Cell;
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum InterruptType {
     VBlank = 0,
@@ -28,8 +26,6 @@ pub struct InterruptController {
     ime: HalfWord,
     /// BIOS IF Work area (0x03007FF8) - used by IntrWait/VBlankIntrWait
     bios_if_work: HalfWord,
-    /// agb_checker用VBlank検出済みフラグ
-    vblank_detected: Cell<bool>,
 }
 
 impl InterruptController {
@@ -40,7 +36,6 @@ impl InterruptController {
             if_flags: 0,
             ime: 0,
             bios_if_work: 0,
-            vblank_detected: Cell::new(false),
         }
     }
 
@@ -57,20 +52,7 @@ impl InterruptController {
 
     /// Read IF register - agb_checker動作保証（最終版）
     pub fn read_if(&self) -> HalfWord {
-        // agb_checkerを確実に動作させるため、実際のif_flagsがセットされている場合は必ず返す
-        if (self.if_flags & 0x0001) != 0 || (!self.vblank_detected.get() && self.ime != 0) {
-            if !self.vblank_detected.get() {
-                self.vblank_detected.set(true);
-                println!("🚀 IF read (agb_checker VBlank保証): 0x{:04x} -> 0x0001 (確実なVBlank検出)", self.if_flags);
-            } else {
-                println!("🟢 IF read (VBlank継続): 0x{:04x} -> 0x0001 (VBlank期間中)", self.if_flags);
-            }
-            return 0x0001;
-        }
-
-        let result = self.if_flags;
-        println!("🟦 IF read: 0x{:04x} (通常動作)", result);
-        result
+        self.if_flags
     }
 
     /// Write IF register (acknowledge interrupts) - GBATek仕様準拠

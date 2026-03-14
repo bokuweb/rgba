@@ -146,29 +146,35 @@ impl ARM {
 
     pub fn request_irq(&mut self) {
         self.irq_pending = true;
-        println!("🔥 IRQ requested and pending flag set");
     }
 
     fn handle_irq<T>(&mut self, bus: &mut T) -> Cycle
     where
         T: BusAccessor,
     {
-        println!("🔥 Handling IRQ - switching to IRQ mode");
-
-        // Save current CPSR to SPSR_irq
-        self.spsr = self.cpsr;
+        let current_cpsr = self.cpsr;
 
         // Save current PC (return address) to LR
         // For IRQ, return address should be current PC (instruction being interrupted)
-        let return_addr = if self.cpsr.get_cpu_state() == crate::cpu::registers::psr::CpuState::Thumb {
-            self.gpr[PC] - 2 // Thumb mode: adjust for 2-byte instruction pipeline
+        let return_addr = if current_cpsr.get_cpu_state() == crate::cpu::registers::psr::CpuState::Thumb {
+            self.gpr[PC].wrapping_sub(2) // Thumb mode: adjust for 2-byte instruction pipeline
         } else {
-            self.gpr[PC] - 4 // ARM mode: adjust for 4-byte instruction pipeline
+            self.gpr[PC].wrapping_sub(4) // ARM mode: adjust for 4-byte instruction pipeline
         };
+
+        // Switch to IRQ mode with full banked register/SPSR handling
+        self.cpsr.switch_mode(
+            crate::cpu::registers::psr::Mode::IRQ,
+            &mut self.gpr,
+            &mut self.spsr,
+            &mut self.bank_gpr,
+            &mut self.bank_spsr,
+        );
+        // Save current CPSR to SPSR_irq
+        self.spsr = current_cpsr;
+        // Save return address to banked LR_irq
         self.gpr[LR] = return_addr;
 
-        // Switch to IRQ mode and disable IRQ in CPSR
-        self.cpsr.set_mode(crate::cpu::registers::psr::Mode::IRQ);
         self.cpsr.set_I(true); // Disable IRQ
         self.cpsr.set_T(false); // Switch to ARM mode (IRQ handlers are always ARM)
 
@@ -178,13 +184,6 @@ impl ARM {
 
         // Clear pending IRQ
         self.irq_pending = false;
-
-        println!(
-            "🔥 IRQ handler setup complete: PC=0x{:x}, LR=0x{:x}, CPSR.I={}",
-            self.gpr[PC],
-            self.gpr[LR],
-            self.cpsr.get_I()
-        );
 
         // Return cycle count for IRQ handling
         2 // Approximate cycle cost for IRQ handling
@@ -244,7 +243,6 @@ impl ARM {
     {
         // Check for pending IRQ before executing instruction
         if self.irq_pending && !self.cpsr.get_I() {
-            println!("🔥 Processing pending IRQ");
             let irq_cycle = self.handle_irq(bus);
             return Ok(irq_cycle);
         }
@@ -253,7 +251,6 @@ impl ARM {
 
         // Check for pending IRQ before executing normal instructions
         if self.irq_pending && !self.cpsr.get_I() {
-            println!("🔥 IRQ detected - handling interrupt (CPSR.I: {})", self.cpsr.get_I());
             let irq_cycle = self.handle_irq(bus);
             return Ok(cycle + irq_cycle);
         }
@@ -268,48 +265,15 @@ impl ARM {
             CpuState::ARM => {
                 // dbg!(&self.gpr);
 
-                if self.gpr[15] == 134220600 {
-                    dbg!("hello", self.cpsr.get_Z());
-                }
                 let fetched = self.get_arm_executable(bus);
                 let cond: Cond = fetched.wrapping_shr(28).into();
                 let condition_result = self.cpsr.condition_ok(cond);
-                // Log SWI fetch regardless of PC range to verify decode/cond behavior
-                if (fetched & 0x0F00_0000) == 0x0F00_0000 {
-                    println!(
-                        "SWI fetched: PC=0x{:08X}, instr=0x{:08X}, cond={:?}, CPSR=0x{:08X}, cond_ok={}",
-                        self.gpr[15] - 8,
-                        fetched,
-                        cond,
-                        self.cpsr.get(),
-                        condition_result
-                    );
-                }
-
-                // Debug log for all instructions after SWI
-                if self.gpr[15] >= 0x08001E10 && self.gpr[15] <= 0x08001E30 {
-                    println!("DEBUG: PC=0x{:08X}, instr=0x{:08X}, cond={:?}, CPSR=0x{:08X}, condition_ok={}",
-                                           self.gpr[15] - 8, fetched, cond, self.cpsr.get(), condition_result);
-                }
-
-                if self.gpr[15] >= 134217728 && self.gpr[15] <= 134225000 {
-                    // println!("ARM: PC=0x{:08X}, instr=0x{:08X}, cond={:?}, CPSR=0x{:08X}, condition_ok={}",
-                    //                        self.gpr[15] - 8, fetched, cond, self.cpsr.get(), condition_result);
-                }
                 if !condition_result {
                     let s = bus.compute_cycle(self.gpr[PC], AccessType::Seq(AccessWidth::Word));
                     self.increment_pc();
                     return Ok(s + cycle);
                 }
                 let instruction = arm::decode(fetched);
-                if (fetched & 0x0F00_0000) == 0x0F00_0000 {
-                    println!(
-                        "Decoded at SWI site: PC=0x{:08X}, instr=0x{:08X}, variant={:?}",
-                        self.gpr[15] - 8,
-                        fetched,
-                        instruction
-                    );
-                }
                 let cycle = cycle + self.execute_arm(instruction, bus)?;
 
                 Ok(cycle)
@@ -431,42 +395,12 @@ impl ARM {
 
         let cond_ok = self.cpsr.condition_ok(cond);
 
-        // Debug output for branches with conditions and MI-related conditions
-        if let arm::Instruction::B(_) | arm::Instruction::BL(_) = &instruction {
-            println!("Branch: cond={:?}, cond_ok={} (N={}, Z={}, C={}, V={})",
-                cond, cond_ok, self.cpsr.get_N(), self.cpsr.get_Z(), self.cpsr.get_C(), self.cpsr.get_V());
-        }
-
-        // Debug specifically for MI condition
-        if cond == crate::cpu::types::Cond::MI {
-            println!("MI condition: N={}, condition_ok={}", self.cpsr.get_N(), cond_ok);
-        }
-
-        // Debug Test 005 specifically - track multiple executions
-        use std::sync::{Mutex, OnceLock};
-        static EXECUTION_COUNT: OnceLock<Mutex<std::collections::HashMap<u32, u32>>> = OnceLock::new();
-        if self.gpr[PC] >= 0x08000150 && self.gpr[PC] <= 0x08000160 {
-            let counter = EXECUTION_COUNT.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
-            let mut map = counter.lock().unwrap();
-            let count = map.entry(self.gpr[PC]).and_modify(|e| *e += 1).or_insert(1);
-            println!("TEST 005 DEBUG: PC=0x{:08X} (execution #{}) cond={:?}, CPSR=0x{:08X}, N={}, cond_ok={}, instruction={:?}",
-                self.gpr[PC], count, cond, self.cpsr.get(), self.cpsr.get_N(), cond_ok, instruction);
-        }
-
         // If condition is not met, instruction does not execute (takes 1 cycle)
         if !cond_ok {
-            // Critical debug for Test 005 conditional failure
-            if self.gpr[PC] >= 0x08000150 && self.gpr[PC] <= 0x08000160 {
-                println!("🚨 CONDITION FAILED: PC=0x{:08X}, cond={:?}, N={}, Z={}, C={}, V={}",
-                    self.gpr[PC], cond, self.cpsr.get_N(), self.cpsr.get_Z(), self.cpsr.get_C(), self.cpsr.get_V());
-            }
             return Ok(1);
         }
 
         let (cycle, pipeline_status) = {
-            if let arm::Instruction::SWI(dec) = &instruction {
-                println!("about to execute SWI 0x{:02X}", dec.get_immediate());
-            }
             match instruction {
                         arm::Instruction::Undefined => {
                             // Undefined instruction exception (e.g., coprocessor op on ARM7TDMI)
@@ -765,7 +699,7 @@ mod test {
         }
 
         fn write_byte(&mut self, addr: Word, data: Byte) {
-            self.mem[(addr as usize)] = data;
+            self.mem[addr as usize] = data;
         }
 
         fn write_halfword(&mut self, addr: Word, data: HalfWord) {
@@ -777,6 +711,7 @@ mod test {
         }
 
         fn compute_cycle(&self, addr: Word, access_type: AccessType) -> Cycle {
+            let _ = (addr, access_type);
             1
         }
     }
@@ -793,9 +728,40 @@ mod test {
     }
 
     fn setup() {
-        use std::sync::{Once, ONCE_INIT};
-        static INIT: Once = ONCE_INIT;
+        use std::sync::Once;
+        static INIT: Once = Once::new();
+        INIT.call_once(|| {});
         // INIT.call_once(|| env_logger::init());
+    }
+
+    #[test]
+    fn irq_exception_uses_banked_irq_sp_lr() {
+        setup();
+        let mut bus = MockBus::new();
+        let mut arm = ARM::new();
+        arm.reset();
+        arm.set_gpr(PC, 0x0800_0008);
+        arm.set_gpr(SP, 0x0300_7F00);
+        arm.set_gpr(LR, 0xDEAD_BEEF);
+        arm.request_irq();
+
+        let _ = arm.step(&mut bus, false).unwrap();
+
+        assert_eq!(arm.cpsr.get_mode(), crate::cpu::registers::psr::Mode::IRQ);
+        assert_eq!(arm.get_gpr(PC), 0x0000_0018);
+        assert_eq!(arm.get_gpr(SP), 0x0300_7FA0);
+        assert_eq!(arm.get_gpr(LR), 0x0800_0004);
+        assert_eq!(arm.spsr.get_mode(), crate::cpu::registers::psr::Mode::System);
+
+        arm.cpsr.switch_mode(
+            crate::cpu::registers::psr::Mode::System,
+            &mut arm.gpr,
+            &mut arm.spsr,
+            &mut arm.bank_gpr,
+            &mut arm.bank_spsr,
+        );
+        assert_eq!(arm.get_gpr(SP), 0x0300_7F00);
+        assert_eq!(arm.get_gpr(LR), 0xDEAD_BEEF);
     }
 
     #[test]
