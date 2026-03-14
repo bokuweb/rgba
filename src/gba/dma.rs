@@ -65,7 +65,7 @@ impl DMAChannel {
         (self.control & 0x0200) != 0 // Bit 9: DMA Repeat
     }
 
-    pub fn do_irq(&self) -> bool {
+    pub fn handle_irq(&self) -> bool {
         (self.control & 0x4000) != 0 // Bit 14: IRQ upon end
     }
 }

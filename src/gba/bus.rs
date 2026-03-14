@@ -542,7 +542,7 @@ impl BusAccessor for CpuBus {
         match addr {
             0x0000_0000..=0x0007_FFFF => {
                 // BIOS area is read-only; ignore writes.
-                println!("⚠️  WARNING: Invalid write_word to BIOS 0x{:08x} = 0x{:08x} (ignored)", addr, data);
+                let _ = data;
             }
             0x0200_0000..=0x02FF_FFFF => self.eram.write_word((addr - 0x0200_0000) & 0x3FFFF, data),
             // BIOS IF work area mirror (0x03007FF8, mirrored in all IWRAM aliases)
@@ -767,7 +767,7 @@ impl CpuBus {
 
         // Check for pending DMA transfers and execute them
         for channel in 0..4 {
-            let request_irq = self.dma.channels[channel].do_irq();
+            let request_irq = self.dma.channels[channel].handle_irq();
             if let Some((source, dest, count, transfer_size)) = self.dma.get_pending_transfer(channel) {
                 self.perform_dma_transfer(channel, source, dest, count, transfer_size);
                 self.dma.complete_transfer(channel);
@@ -898,7 +898,8 @@ impl CpuBus {
                 0 => src_off = (src_off.wrapping_add(transfer_size as u32)) & 0x00FF_FFFF, // Increment
                 1 => src_off = (src_off.wrapping_sub(transfer_size as u32)) & 0x00FF_FFFF, // Decrement
                 2 => {} // Fixed
-                3 => {} // Prohibited
+                // Prohibited in docs, but many implementations treat it as increment.
+                3 => src_off = (src_off.wrapping_add(transfer_size as u32)) & 0x00FF_FFFF,
                 _ => {}
             }
 
