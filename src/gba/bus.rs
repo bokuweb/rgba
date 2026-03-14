@@ -153,6 +153,7 @@ pub struct CpuBus {
     cpu_halted: Cell<bool>,
     prev_vblank: bool,
     prev_hblank: bool,
+    prev_vcounter: bool,
     dma_irq_latch: [bool; 4],
     trace_dma: bool,
 }
@@ -740,6 +741,7 @@ impl CpuBus {
             cpu_halted: Cell::new(false),
             prev_vblank: false,
             prev_hblank: false,
+            prev_vcounter: false,
             dma_irq_latch: [false; 4],
             trace_dma: std::env::var("AGB_TRACE_DMA").ok().as_deref() == Some("1"),
         }
@@ -795,10 +797,20 @@ impl CpuBus {
 
         // Trigger timed DMAs on blanking edge transitions.
         let dispstat = self.lcdc.read_halfword(0x0004);
+        let vcount = self.lcdc.read_halfword(0x0006);
         let vblank = (dispstat & 0x0001) != 0;
         let hblank = (dispstat & 0x0002) != 0;
+        let vcounter = (dispstat & 0x0004) != 0;
         let vblank_rising = !self.prev_vblank && vblank;
         let hblank_rising = !self.prev_hblank && hblank;
+        let vcounter_rising = !self.prev_vcounter && vcounter;
+
+        if hblank_rising && (dispstat & 0x0010) != 0 {
+            self.interrupt_controller.borrow_mut().request_interrupt(crate::interrupt::InterruptType::HBlank);
+        }
+        if vcounter_rising && (dispstat & 0x0020) != 0 {
+            self.interrupt_controller.borrow_mut().request_interrupt(crate::interrupt::InterruptType::VCounter);
+        }
 
         if vblank_rising || hblank_rising {
             let mut has_timed_enabled = false;
@@ -839,6 +851,7 @@ impl CpuBus {
         }
         self.prev_vblank = vblank;
         self.prev_hblank = hblank;
+        self.prev_vcounter = vcounter;
 
         // Check for pending DMA transfers and execute them
         for channel in 0..4 {

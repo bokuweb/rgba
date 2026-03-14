@@ -271,7 +271,6 @@ impl ARM {
 
         let instruction_width = if self.cpsr.get_cpu_state() == CpuState::ARM { 4 } else { 2 };
         bus.set_open_bus_context(self.gpr[PC], instruction_width);
-
         // let log = format!("{:?}", self.gpr);
         // dbg!(&self.gpr);
         if self.gpr[15] == 134225604 {

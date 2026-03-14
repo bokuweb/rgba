@@ -29,11 +29,11 @@ impl DMAChannel {
     }
 
     pub fn set_source(&mut self, addr: Word) {
-        self.source = addr;
+        self.source = addr & 0xFFFF_FFFE;
     }
 
     pub fn set_destination(&mut self, addr: Word) {
-        self.destination = addr;
+        self.destination = addr & 0xFFFF_FFFE;
     }
 
     pub fn set_count(&mut self, count: HalfWord) {
@@ -41,8 +41,8 @@ impl DMAChannel {
     }
 
     pub fn set_control(&mut self, control: HalfWord) {
-        self.control = control;
-        self.enabled = (control & 0x8000) != 0; // Bit 15: DMA Enable
+        self.control = control & 0xFFE0;
+        self.enabled = (self.control & 0x8000) != 0; // Bit 15: DMA Enable
     }
 
     pub fn get_transfer_size(&self) -> usize {
