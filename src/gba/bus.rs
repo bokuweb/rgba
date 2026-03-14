@@ -143,6 +143,7 @@ pub struct CpuBus {
     oam: Ram,
     sram: Ram, // SRAM/FRAM/Flash save memory (0x0E000000-0x0E00FFFF, 64KB max)
     key: io::Key,
+    keycnt: HalfWord,
     interrupt_controller: std::cell::RefCell<crate::interrupt::InterruptController>,
     timers: crate::gba::timer::Timers,
     waitcnt: HalfWord,
@@ -162,6 +163,10 @@ impl BusAccessor for CpuBus {
             // IWRAM 32KB mirrors across 0x0300_0000-0x03FF_FFFF
             0x0300_0000..=0x03FF_FFFF => self.wram.read_byte((addr - 0x0300_0000) & 0x7FFF),
             0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
+            0x0400_0130 => (self.key.read() & 0x00FF) as u8,
+            0x0400_0131 => ((self.key.read() >> 8) & 0x00FF) as u8,
+            0x0400_0132 => (self.keycnt & 0x00FF) as u8,
+            0x0400_0133 => ((self.keycnt >> 8) & 0x00FF) as u8,
             0x0400_0100..=0x0400_010F => {
                 let ofs = (addr - 0x0400_0100) as u32;
                 let v = self.timers.read(ofs);
@@ -199,6 +204,7 @@ impl BusAccessor for CpuBus {
             0x0300_0000..=0x03FF_FFFF => self.wram.read_halfword((addr - 0x0300_0000) & 0x7FFF),
             0x0400_0000..=0x0400_005F => self.lcdc.read_halfword(addr - 0x0400_0000),
             0x0400_0130 => self.key.read(),
+            0x0400_0132 => self.keycnt,
             0x0400_0200 => self.interrupt_controller.borrow().read_ie(), // IE register
             0x0400_0202 => self.interrupt_controller.borrow().read_if(), // IF register
             0x0400_0204 => self.waitcnt,
@@ -265,6 +271,8 @@ impl BusAccessor for CpuBus {
                 let irq = self.interrupt_controller.borrow();
                 (irq.read_ie() as u32) | ((irq.read_if() as u32) << 16)
             }
+            // KEYINPUT/KEYCNT pair
+            0x0400_0130 => (self.key.read() as u32) | ((self.keycnt as u32) << 16),
             0x0400_0204 => self.waitcnt as u32,
             0x0400_0208 => self.interrupt_controller.borrow().read_ime() as u32,
             0x0300_0000..=0x03FF_FFFF => {
@@ -341,6 +349,14 @@ impl BusAccessor for CpuBus {
                 self.wram.write_byte((addr - 0x0300_0000) & 0x7FFF, data);
             }
             0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
+            0x0400_0132 => {
+                // KEYCNT
+                self.keycnt = (self.keycnt & 0xFF00) | (data as u16);
+            }
+            0x0400_0133 => {
+                // KEYCNT high byte
+                self.keycnt = (self.keycnt & 0x00FF) | ((data as u16) << 8);
+            }
             0x0400_0100..=0x0400_010F => {
                 let ofs = (addr - 0x0400_0100) as u32;
                 self.timers.write(ofs, data);
@@ -353,7 +369,7 @@ impl BusAccessor for CpuBus {
                         let _ = data;
                     }
                     _ if (addr >= 0x0400_00B0 && addr <= 0x0400_00DE) => {
-                        println!("🔧 DMA register byte write: 0x{:08x} = 0x{:02x} (not implemented)", addr, data);
+                        let _ = data;
                     }
                     _ => {}
                 }
@@ -373,9 +389,6 @@ impl BusAccessor for CpuBus {
                     crate::lcd::BgMode::Mode5 => {
                         let vram_addr = Self::map_vram_offset(addr) & !1; // align to halfword
                         let hw = (data as HalfWord as u16) | (((data as HalfWord) as u16) << 8);
-                        if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
-                            println!("📝 VRAM byte-as-halfword write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:04x}", addr, vram_addr, hw);
-                        }
                         self.vram.write_halfword(vram_addr, hw as HalfWord);
                     }
                     _ => {
@@ -423,6 +436,10 @@ impl BusAccessor for CpuBus {
             0x0400_0204 => { // WAITCNT
                 self.waitcnt = data;
                 self.cycleLUT.update_waitcnt(data);
+            }
+            0x0400_0132 => {
+                // KEYCNT
+                self.keycnt = data;
             }
             0x0400_0100..=0x0400_010F => {
                 let lo = (data & 0x00FF) as u8;
@@ -485,9 +502,6 @@ impl BusAccessor for CpuBus {
             0x0600_0000..=0x06FF_FFFF => {
                 // 修正(004): halfword write もミラー
                 let vram_addr = Self::map_vram_offset(addr);
-                if vram_addr < 0x10000 { // Log first 64KB of VRAM writes
-                    println!("📝 VRAM halfword write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:04x}", addr, vram_addr, data);
-                }
                 self.vram.write_halfword(vram_addr, data);
             }
             // 修正(006): OAM 1KB ミラー（16bit 書き）
@@ -509,7 +523,10 @@ impl BusAccessor for CpuBus {
             // panic!();
         }
         match addr {
-            0x0000_0000..=0x0007_FFFF => panic!("illegal write access."),
+            0x0000_0000..=0x0007_FFFF => {
+                // BIOS area is read-only; ignore writes.
+                println!("⚠️  WARNING: Invalid write_word to BIOS 0x{:08x} = 0x{:08x} (ignored)", addr, data);
+            }
             0x0200_0000..=0x02FF_FFFF => self.eram.write_word((addr - 0x0200_0000) & 0x3FFFF, data),
             // BIOS IF work area mirror (0x03007FF8, mirrored in all IWRAM aliases)
             0x0300_0000..=0x03FF_FFFF if ((addr - 0x0300_0000) & 0x7FFF) == 0x7FF8 => {
@@ -534,6 +551,10 @@ impl BusAccessor for CpuBus {
                 self.timers.write(base + 1, ((data >> 8) & 0x000000FF) as u8);
                 self.timers.write(base + 2, ((data >> 16) & 0x000000FF) as u8);
                 self.timers.write(base + 3, ((data >> 24) & 0x000000FF) as u8);
+            }
+            0x0400_0130 => {
+                // KEYINPUT (RO) low half ignored; KEYCNT is high halfword on word writes
+                self.keycnt = ((data >> 16) & 0xFFFF) as HalfWord;
             }
             0x0400_0200 => {
                 // IE/IF as a 32-bit pair (low=IE write, high=IF ACK write)
@@ -618,7 +639,7 @@ impl BusAccessor for CpuBus {
                     _ => {
                         // Other I/O registers (Timer, etc.)
                         if addr >= 0x0400_00B0 && addr <= 0x0400_00DE {
-                            println!("🔧 Unknown DMA register word write: 0x{:08x} = 0x{:08x} (ignored)", addr, data);
+                            let _ = data;
                         }
                     }
                 }
@@ -627,9 +648,6 @@ impl BusAccessor for CpuBus {
             0x0600_0000..=0x06FF_FFFF => {
                 // 修正(004): 書き込み側もミラー
                 let vram_addr = Self::map_vram_offset(addr);
-                if vram_addr < 0x10000 {
-                    println!("📝 VRAM word write: 0x{:08x} (VRAM+0x{:04x}) = 0x{:08x}", addr, vram_addr, data);
-                }
                 self.vram.write_word(vram_addr, data);
             }
             // 修正(006): OAM 1KB ミラー（32bit 書き）
@@ -683,6 +701,7 @@ impl CpuBus {
             oam,
             sram,
             key,
+            keycnt: 0,
             interrupt_controller: std::cell::RefCell::new(crate::interrupt::InterruptController::new()),
             timers: crate::gba::timer::Timers::default(),
             waitcnt: 0,
@@ -780,10 +799,8 @@ impl CpuBus {
             0x0300_0000..=0x0300_7FFF => self.wram.read_word(addr - 0x0300_0000),
             0x0200_0000..=0x0203_FFFF => self.eram.read_word(addr - 0x0200_0000),
             0x0600_0000..=0x06FF_FFFF => self.vram.read_word(Self::map_vram_offset(addr)),
-            _ => {
-                println!("⚠️  DMA read_word from unsupported address: 0x{:08x}", addr);
-                0
-            }
+            // Allow DMA reads from I/O (e.g. timers/FIFOs) and other mapped ranges.
+            _ => self.read_word(addr),
         }
     }
 
@@ -793,10 +810,8 @@ impl CpuBus {
             0x0300_0000..=0x0300_7FFF => self.wram.read_halfword(addr - 0x0300_0000),
             0x0200_0000..=0x0203_FFFF => self.eram.read_halfword(addr - 0x0200_0000),
             0x0600_0000..=0x06FF_FFFF => self.vram.read_halfword(Self::map_vram_offset(addr)),
-            _ => {
-                println!("⚠️  DMA read_halfword from unsupported address: 0x{:08x}", addr);
-                0
-            }
+            // Allow DMA reads from I/O (e.g. timers/FIFOs) and other mapped ranges.
+            _ => self.read_halfword(addr),
         }
     }
 
@@ -812,6 +827,7 @@ impl CpuBus {
             }
             0x0300_0000..=0x0300_7FFF => self.wram.write_word(addr - 0x0300_0000, data),
             0x0200_0000..=0x02FF_FFFF => self.eram.write_word((addr - 0x0200_0000) & 0x3FFFF, data),
+            0x0700_0000..=0x07FF_FFFF => self.oam.write_word((addr - 0x0700_0000) & 0x3FF, data),
             _ => {
                 println!("⚠️  DMA write_word to unsupported address: 0x{:08x} = 0x{:08x}", addr, data);
             }
@@ -832,6 +848,7 @@ impl CpuBus {
             }
             0x0300_0000..=0x0300_7FFF => self.wram.write_halfword(addr - 0x0300_0000, data),
             0x0200_0000..=0x0203_FFFF => self.eram.write_halfword(addr - 0x0200_0000, data),
+            0x0700_0000..=0x07FF_FFFF => self.oam.write_halfword((addr - 0x0700_0000) & 0x3FF, data),
             _ => {
                 println!("⚠️  DMA write_halfword to unsupported address: 0x{:08x} = 0x{:04x}", addr, data);
             }
