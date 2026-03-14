@@ -818,6 +818,11 @@ impl CpuBus {
     fn write_word_internal(&mut self, addr: Word, data: Word) {
         match addr {
             0x0400_00A0 | 0x0400_00A4 => {}
+            // GamePak ROM/EEPROM area: writes are typically ignored by ROM,
+            // and EEPROM uses serial protocol (not modeled here yet).
+            0x0800_0000..=0x0DFF_FFFF => {
+                let _ = data;
+            }
             0x0600_0000..=0x06FF_FFFF => {
                 let vram_addr = Self::map_vram_offset(addr);
                 self.vram.write_word(vram_addr, data);
@@ -837,7 +842,10 @@ impl CpuBus {
     fn write_halfword_internal(&mut self, addr: Word, data: HalfWord) {
         match addr {
             0x0400_00A0 | 0x0400_00A4 => {}
-
+            // GamePak ROM/EEPROM area: treat as no-op for now.
+            0x0800_0000..=0x0DFF_FFFF => {
+                let _ = data;
+            }
 
             0x0600_0000..=0x06FF_FFFF => {
                 let vram_addr = Self::map_vram_offset(addr);
