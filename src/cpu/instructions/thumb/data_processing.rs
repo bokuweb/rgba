@@ -55,7 +55,6 @@ pub fn exec_thumb_add3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
 pub fn exec_thumb_add_hi_register<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let rs = usize::from(dec.get_Rs6_3());
     let rd = usize::from(dec.get_Rd_7_2_0());
-    dbg!(rs, rd, gpr[rd].wrapping_add(gpr[rs]));
     gpr[rd] = gpr[rd].wrapping_add(gpr[rs]);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     if rd == PC {
@@ -296,7 +295,6 @@ pub fn exec_thumb_sbc<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
 }
 
 pub fn exec_thumb4_ror<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
-    dbg!("beforeROR", &gpr);
     if gpr[15] == 134234196 {
         // panic!()
     }
@@ -316,7 +314,6 @@ pub fn exec_thumb4_ror<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
-    dbg!("afterROR", &gpr);
     // Consume S + 1 cycle
     (s + 1, PipelineStatus::Continue)
 }
@@ -372,7 +369,6 @@ pub fn exec_thumb5_cmp<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     let rd = gpr[dec.get_Rd_7_2_0() as usize];
     let rs = gpr[dec.get_Rs6_3() as usize];
     let d = rd as i64 - rs as i64;
-    dbg!(rd, rs, d);
     cpsr.set_Z_from(d as u32);
     cpsr.set_N_from(d as u32);
     cpsr.set_C(d >= 0);
