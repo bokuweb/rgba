@@ -33,7 +33,7 @@ fn main() {
     let mut prev_time = SystemTime::now();
     let mut gba = gba::GBA::new();
     let mut key = io::Key::new();
-    let mut started = false;
+    let mut auto_start_frames = 180usize;
 
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -49,12 +49,7 @@ fn main() {
                         Keycode::X => key.set_B(io::KeyStatus::ON),
                         Keycode::Z => key.set_A(io::KeyStatus::ON),
                         Keycode::Space => key.set_SELECT(io::KeyStatus::ON),
-                        Keycode::Return => {
-                            // std::env::set_var("RUST_LOG", "debug");
-                            // pretty_env_logger::init();
-                            started = true;
-                            key.set_START(io::KeyStatus::ON)
-                        }
+                        Keycode::Return => key.set_START(io::KeyStatus::ON),
                         Keycode::Up => key.set_UP(io::KeyStatus::ON),
                         Keycode::Down => key.set_DOWN(io::KeyStatus::ON),
                         Keycode::Left => key.set_LEFT(io::KeyStatus::ON),
@@ -81,10 +76,17 @@ fn main() {
             }
         }
 
-        // dbg!(key);
+        if auto_start_frames > 0 {
+            key.set_START(io::KeyStatus::ON);
+            auto_start_frames -= 1;
+            if auto_start_frames == 0 {
+                key.set_START(io::KeyStatus::OFF);
+            }
+        }
+
         gba.update_key(key);
 
-        let buf = gba.frame(started);
+        let buf = gba.frame(false);
 
         for i in 0..HEIGHT {
             for j in 0..WIDTH {

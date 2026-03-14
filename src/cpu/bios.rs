@@ -9,11 +9,10 @@ impl Bios {
     /// SWI 0x00 - SoftReset
     /// Clears 0x7E00-0x7FFF in IWRAM and sets up registers for reset
     pub fn soft_reset<T: BusAccessor>(
-        _bus: &T,
+        _bus: &mut T,
         gpr: &mut [Word; 16],
         _iwram_flag: u8,
     ) {
-        println!("BIOS: SoftReset");
         // Clear most of IWRAM (0x7E00-0x7FFF)
         // Set LR based on flag at 0x7FFA
         // For now, just set a default return address
@@ -22,8 +21,7 @@ impl Bios {
 
     /// SWI 0x02 - Halt
     /// Halts the CPU until an interrupt occurs
-    pub fn halt<T: BusAccessor>(_bus: &T, _gpr: &mut [Word; 16]) {
-        println!("BIOS: Halt");
+    pub fn halt<T: BusAccessor>(_bus: &mut T, _gpr: &mut [Word; 16]) {
         // In a real implementation, this would halt the CPU
         // For now, we just log the call
     }
@@ -31,22 +29,33 @@ impl Bios {
     /// SWI 0x04 - IntrWait
     /// Waits for specific interrupts
     pub fn intr_wait<T: BusAccessor>(
-        _bus: &T,
+        bus: &mut T,
         gpr: &mut [Word; 16],
     ) {
         let discard_old = gpr[0] != 0;
-        let interrupt_flags = gpr[1];
-        println!("BIOS: IntrWait - discard_old={}, flags=0x{:08X}", discard_old, interrupt_flags);
-        // In a real implementation, this would configure interrupt waiting
+        let interrupt_flags = (gpr[1] & 0xFFFF) as u16;
+
+        // Match JS behavior: ensure IME is enabled while waiting.
+        if (bus.read_halfword(0x0400_0208) & 0x0001) == 0 {
+            bus.write_halfword(0x0400_0208, 0x0001);
+        }
+
+        // If caller does not request discarding old flags and target IF is already set, return immediately.
+        let current_if = bus.read_halfword(0x0400_0202);
+        if !discard_old && (current_if & interrupt_flags) != 0 {
+            return;
+        }
+
+        // Clear latched interrupt flags before waiting.
+        bus.write_halfword(0x0400_0202, 0xFFFF);
     }
 
     /// SWI 0x05 - VBlankIntrWait
     /// Waits for VBlank interrupt
     pub fn vblank_intr_wait<T: BusAccessor>(
-        bus: &T,
+        bus: &mut T,
         gpr: &mut [Word; 16],
     ) {
-        println!("BIOS: VBlankIntrWait");
         // Set up for VBlank interrupt
         gpr[0] = 1; // Discard old interrupt
         gpr[1] = 1; // VBlank interrupt flag
@@ -55,14 +64,12 @@ impl Bios {
 
     /// SWI 0x06 - Div
     /// Signed division r0/r1
-    pub fn div<T: BusAccessor>(_bus: &T, gpr: &mut [Word; 16]) {
+    pub fn div<T: BusAccessor>(_bus: &mut T, gpr: &mut [Word; 16]) {
         let numerator = gpr[0] as i32;
         let denominator = gpr[1] as i32;
 
-        println!("BIOS: Div - {} / {}", numerator, denominator);
 
         if denominator == 0 {
-            println!("BIOS: Division by zero!");
             // Division by zero typically causes endless loop in BIOS
             // For testing, we'll return max values
             gpr[0] = if numerator >= 0 { 0x7FFFFFFF } else { 0x80000000 };
@@ -79,8 +86,7 @@ impl Bios {
 
     /// SWI 0x07 - DivArm
     /// Division with swapped parameters (ARM library compatibility)
-    pub fn div_arm<T: BusAccessor>(_bus: &T, gpr: &mut [Word; 16]) {
-        println!("BIOS: DivArm");
+    pub fn div_arm<T: BusAccessor>(_bus: &mut T, gpr: &mut [Word; 16]) {
         // Swap parameters and call regular div
         let temp = gpr[0];
         gpr[0] = gpr[1];
@@ -90,9 +96,8 @@ impl Bios {
 
     /// SWI 0x08 - Sqrt
     /// Calculate integer square root
-    pub fn sqrt<T: BusAccessor>(_bus: &T, gpr: &mut [Word; 16]) {
+    pub fn sqrt<T: BusAccessor>(_bus: &mut T, gpr: &mut [Word; 16]) {
         let value = gpr[0];
-        println!("BIOS: Sqrt - sqrt({})", value);
 
         let result = if value == 0 {
             0
@@ -106,9 +111,8 @@ impl Bios {
 
     /// SWI 0x09 - ArcTan
     /// Calculate arctangent
-    pub fn arc_tan<T: BusAccessor>(_bus: &T, gpr: &mut [Word; 16]) {
+    pub fn arc_tan<T: BusAccessor>(_bus: &mut T, gpr: &mut [Word; 16]) {
         let tan_value = gpr[0] as i16; // 16-bit signed fixed point
-        println!("BIOS: ArcTan - arctan({})", tan_value);
 
         // Convert from 14-bit decimal part to floating point
         let tan_float = (tan_value as f64) / 16384.0;
@@ -121,10 +125,9 @@ impl Bios {
 
     /// SWI 0x0A - ArcTan2
     /// Calculate arctangent with quadrant correction
-    pub fn arc_tan2<T: BusAccessor>(_bus: &T, gpr: &mut [Word; 16]) {
+    pub fn arc_tan2<T: BusAccessor>(_bus: &mut T, gpr: &mut [Word; 16]) {
         let x = gpr[0] as i16;
         let y = gpr[1] as i16;
-        println!("BIOS: ArcTan2 - arctan2({}, {})", y, x);
 
         let x_float = (x as f64) / 16384.0;
         let y_float = (y as f64) / 16384.0;
@@ -143,7 +146,7 @@ impl Bios {
 
     /// SWI 0x0B - CpuSet
     /// Memory copy/fill function
-    pub fn cpu_set<T: BusAccessor>(bus: &T, gpr: &mut [Word; 16]) {
+    pub fn cpu_set<T: BusAccessor>(bus: &mut T, gpr: &mut [Word; 16]) {
         let source = gpr[0];
         let dest = gpr[1];
         let control = gpr[2];
@@ -151,9 +154,6 @@ impl Bios {
         let count = control & 0x000FFFFF;
         let fill_mode = (control & 0x01000000) != 0;
         let word_size = if (control & 0x04000000) != 0 { 4 } else { 2 };
-
-        println!("BIOS: CpuSet - src=0x{:08X}, dst=0x{:08X}, count={}, fill={}, size={}",
-                source, dest, count, fill_mode, word_size);
 
         if fill_mode {
             // Fill mode - repeat first value
@@ -166,11 +166,9 @@ impl Bios {
             for i in 0..count {
                 let dst_addr = dest + i * word_size;
                 if word_size == 4 {
-                    // TODO: Write through bus
-                    println!("  Fill word at 0x{:08X} = 0x{:08X}", dst_addr, fill_value);
+                    bus.write_word(dst_addr & !3, fill_value);
                 } else {
-                    // TODO: Write through bus
-                    println!("  Fill halfword at 0x{:08X} = 0x{:04X}", dst_addr, fill_value & 0xFFFF);
+                    bus.write_halfword(dst_addr & !1, (fill_value & 0xFFFF) as u16);
                 }
             }
         } else {
@@ -181,12 +179,10 @@ impl Bios {
 
                 if word_size == 4 {
                     let value = bus.read_word(src_addr & !3);
-                    println!("  Copy word 0x{:08X} -> 0x{:08X} = 0x{:08X}", src_addr, dst_addr, value);
-                    // TODO: Write through bus
+                    bus.write_word(dst_addr & !3, value);
                 } else {
                     let value = bus.read_halfword(src_addr & !1);
-                    println!("  Copy halfword 0x{:08X} -> 0x{:08X} = 0x{:04X}", src_addr, dst_addr, value);
-                    // TODO: Write through bus
+                    bus.write_halfword(dst_addr & !1, value);
                 }
             }
         }
@@ -194,38 +190,111 @@ impl Bios {
 
     /// SWI 0x0C - CpuFastSet
     /// Fast memory copy (32-bit aligned)
-    pub fn cpu_fast_set<T: BusAccessor>(bus: &T, gpr: &mut [Word; 16]) {
+    pub fn cpu_fast_set<T: BusAccessor>(bus: &mut T, gpr: &mut [Word; 16]) {
         let source = gpr[0] & !3; // Force word alignment
         let dest = gpr[1] & !3;   // Force word alignment
         let control = gpr[2];
 
         let count = control & 0x000FFFFF;
+        let count = ((count + 7) >> 3) << 3; // Rounded up to multiples of 8 words
         let fill_mode = (control & 0x01000000) != 0;
-
-        println!("BIOS: CpuFastSet - src=0x{:08X}, dst=0x{:08X}, count={}, fill={}",
-                source, dest, count, fill_mode);
 
         if fill_mode {
             let fill_value = bus.read_word(source);
             for i in 0..count {
                 let dst_addr = dest + i * 4;
-                println!("  FastFill word at 0x{:08X} = 0x{:08X}", dst_addr, fill_value);
-                // TODO: Write through bus
+                bus.write_word(dst_addr, fill_value);
             }
         } else {
             for i in 0..count {
                 let src_addr = source + i * 4;
                 let dst_addr = dest + i * 4;
                 let value = bus.read_word(src_addr);
-                println!("  FastCopy word 0x{:08X} -> 0x{:08X} = 0x{:08X}", src_addr, dst_addr, value);
-                // TODO: Write through bus
+                bus.write_word(dst_addr, value);
             }
+        }
+    }
+
+    /// SWI 0x0E - BgAffineSet
+    /// Generates affine transform matrices for BG rotation/scaling.
+    pub fn bg_affine_set<T: BusAccessor>(bus: &mut T, gpr: &mut [Word; 16]) {
+        let mut offset = gpr[0];
+        let mut destination = gpr[1];
+        let mut count = gpr[2];
+
+        while count > 0 {
+            let ox = (bus.read_word(offset) as i32 as f64) / 256.0;
+            let oy = (bus.read_word(offset + 4) as i32 as f64) / 256.0;
+            let cx = bus.read_halfword(offset + 8) as i16 as f64;
+            let cy = bus.read_halfword(offset + 10) as i16 as f64;
+            let sx = (bus.read_halfword(offset + 12) as i16 as f64) / 256.0;
+            let sy = (bus.read_halfword(offset + 14) as i16 as f64) / 256.0;
+            let theta_u8 = ((bus.read_halfword(offset + 16) >> 8) & 0xFF) as f64;
+            let theta = theta_u8 / 128.0 * std::f64::consts::PI;
+            offset += 20;
+
+            let mut a = theta.cos();
+            let mut b = theta.sin();
+            let mut c = theta.sin();
+            let mut d = theta.cos();
+
+            a *= sx;
+            b *= -sx;
+            c *= sy;
+            d *= sy;
+
+            let rx = ox - (a * cx + b * cy);
+            let ry = oy - (c * cx + d * cy);
+
+            bus.write_halfword(destination, ((a * 256.0) as i32) as u16);
+            bus.write_halfword(destination + 2, ((b * 256.0) as i32) as u16);
+            bus.write_halfword(destination + 4, ((c * 256.0) as i32) as u16);
+            bus.write_halfword(destination + 6, ((d * 256.0) as i32) as u16);
+            bus.write_word(destination + 8, ((rx * 256.0) as i32) as u32);
+            bus.write_word(destination + 12, ((ry * 256.0) as i32) as u32);
+
+            destination += 16;
+            count -= 1;
+        }
+    }
+
+    /// SWI 0x0F - ObjAffineSet
+    /// Generates affine matrices for OBJ entries.
+    pub fn obj_affine_set<T: BusAccessor>(bus: &mut T, gpr: &mut [Word; 16]) {
+        let mut offset = gpr[0];
+        let mut destination = gpr[1];
+        let mut count = gpr[2];
+        let diff = gpr[3];
+
+        while count > 0 {
+            let sx = (bus.read_halfword(offset) as i16 as f64) / 256.0;
+            let sy = (bus.read_halfword(offset + 2) as i16 as f64) / 256.0;
+            let theta_u8 = ((bus.read_halfword(offset + 4) >> 8) & 0xFF) as f64;
+            let theta = theta_u8 / 128.0 * std::f64::consts::PI;
+            offset += 6;
+
+            let mut a = theta.cos();
+            let mut b = theta.sin();
+            let mut c = theta.sin();
+            let mut d = theta.cos();
+
+            a *= sx;
+            b *= -sx;
+            c *= sy;
+            d *= sy;
+
+            bus.write_halfword(destination, ((a * 256.0) as i32) as u16);
+            bus.write_halfword(destination + diff, ((b * 256.0) as i32) as u16);
+            bus.write_halfword(destination + diff * 2, ((c * 256.0) as i32) as u16);
+            bus.write_halfword(destination + diff * 3, ((d * 256.0) as i32) as u16);
+            destination += diff * 4;
+            count -= 1;
         }
     }
 
     /// Execute BIOS function based on SWI number
     pub fn execute_swi<T: BusAccessor>(
-        bus: &T,
+        bus: &mut T,
         swi_number: u32,
         gpr: &mut [Word; 16],
     ) {
@@ -241,6 +310,8 @@ impl Bios {
             0x0A => Self::arc_tan2(bus, gpr),
             0x0B => Self::cpu_set(bus, gpr),
             0x0C => Self::cpu_fast_set(bus, gpr),
+            0x0E => Self::bg_affine_set(bus, gpr),
+            0x0F => Self::obj_affine_set(bus, gpr),
             _ => {
                 unimplemented!("BIOS: Unimplemented SWI 0x{:02X}", swi_number);
             }
@@ -314,14 +385,14 @@ mod tests {
 
     #[test]
     fn test_div_basic() {
-        let bus = MockBus::new();
+        let mut bus = MockBus::new();
         let mut gpr = [0u32; 16];
 
         // Test: 100 / 10 = 10 remainder 0
         gpr[0] = 100;
         gpr[1] = 10;
 
-        Bios::div(&bus, &mut gpr);
+        Bios::div(&mut bus, &mut gpr);
 
         assert_eq!(gpr[0], 10);  // quotient
         assert_eq!(gpr[1], 0);   // remainder
@@ -330,14 +401,14 @@ mod tests {
 
     #[test]
     fn test_div_negative() {
-        let bus = MockBus::new();
+        let mut bus = MockBus::new();
         let mut gpr = [0u32; 16];
 
         // Test: -123 / 10 = -12 remainder -3
         gpr[0] = (-123i32) as u32;
         gpr[1] = 10;
 
-        Bios::div(&bus, &mut gpr);
+        Bios::div(&mut bus, &mut gpr);
 
         assert_eq!(gpr[0] as i32, -12); // quotient
         assert_eq!(gpr[1] as i32, -3);  // remainder
@@ -346,17 +417,17 @@ mod tests {
 
     #[test]
     fn test_sqrt() {
-        let bus = MockBus::new();
+        let mut bus = MockBus::new();
         let mut gpr = [0u32; 16];
 
         // Test sqrt(16) = 4
         gpr[0] = 16;
-        Bios::sqrt(&bus, &mut gpr);
+        Bios::sqrt(&mut bus, &mut gpr);
         assert_eq!(gpr[0], 4);
 
         // Test sqrt(0) = 0
         gpr[0] = 0;
-        Bios::sqrt(&bus, &mut gpr);
+        Bios::sqrt(&mut bus, &mut gpr);
         assert_eq!(gpr[0], 0);
     }
 }
