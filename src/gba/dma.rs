@@ -6,6 +6,9 @@ pub struct DMAChannel {
     pub destination: Word, // Destination Address
     pub count: HalfWord,   // Word Count
     pub control: HalfWord, // Control Register
+    pub initial_source: Word,
+    pub initial_destination: Word,
+    pub initial_count: HalfWord,
     pub enabled: bool,     // Enable flag
     pub pending: bool,     // Pending immediate transfer request
 }
@@ -17,6 +20,9 @@ impl DMAChannel {
             destination: 0,
             count: 0,
             control: 0,
+            initial_source: 0,
+            initial_destination: 0,
+            initial_count: 0,
             enabled: false,
             pending: false,
         }
@@ -57,6 +63,10 @@ impl DMAChannel {
 
     pub fn is_repeat(&self) -> bool {
         (self.control & 0x0200) != 0 // Bit 9: DMA Repeat
+    }
+
+    pub fn do_irq(&self) -> bool {
+        (self.control & 0x4000) != 0 // Bit 14: IRQ upon end
     }
 }
 
@@ -102,6 +112,9 @@ impl DMAController {
             // - When already enabled and timing changed to Immediate: do NOT start immediately (HW behavior)
             // - Otherwise: clear pending
             if !was_enabled && ch.enabled {
+                ch.initial_source = ch.source;
+                ch.initial_destination = ch.destination;
+                ch.initial_count = ch.count;
                 ch.pending = now_timing == 0; // Immediate only
             } else if was_enabled && ch.enabled {
                 // Mode change while enabled shouldn't start transfer immediately
@@ -111,6 +124,12 @@ impl DMAController {
             } else {
                 ch.pending = false;
             }
+        }
+    }
+
+    pub fn trigger_timing_event(&mut self, channel: usize) {
+        if channel < 4 && self.channels[channel].enabled {
+            self.channels[channel].pending = true;
         }
     }
 
@@ -136,11 +155,19 @@ impl DMAController {
 
     pub fn complete_transfer(&mut self, channel: usize) {
         if channel < 4 {
+            let repeat = self.channels[channel].is_repeat();
+            let dest_control = self.channels[channel].get_dest_control();
             // Clear pending regardless
             self.channels[channel].pending = false;
-            if !self.channels[channel].is_repeat() {
+            if !repeat {
                 self.channels[channel].enabled = false;
                 self.channels[channel].control &= !0x8000; // Clear enable bit
+            } else {
+                // For repeat mode, restore word count and destination if increment/reload.
+                self.channels[channel].count = self.channels[channel].initial_count;
+                if dest_control == 3 {
+                    self.channels[channel].destination = self.channels[channel].initial_destination;
+                }
             }
         }
     }

@@ -151,6 +151,8 @@ pub struct CpuBus {
     open_bus_pc: Cell<Word>,
     open_bus_instruction_width: Cell<Word>,
     cpu_halted: Cell<bool>,
+    prev_vblank: bool,
+    prev_hblank: bool,
 }
 
 impl BusAccessor for CpuBus {
@@ -723,6 +725,8 @@ impl CpuBus {
             open_bus_pc: Cell::new(0),
             open_bus_instruction_width: Cell::new(4),
             cpu_halted: Cell::new(false),
+            prev_vblank: false,
+            prev_hblank: false,
         }
     }
 
@@ -739,11 +743,44 @@ impl CpuBus {
     }
 
     pub(crate) fn execute_dma_transfers(&mut self) {
+        // Trigger timed DMAs on blanking edge transitions.
+        let dispstat = self.lcdc.read_halfword(0x0004);
+        let vblank = (dispstat & 0x0001) != 0;
+        let hblank = (dispstat & 0x0002) != 0;
+        let vblank_rising = !self.prev_vblank && vblank;
+        let hblank_rising = !self.prev_hblank && hblank;
+
+        if vblank_rising || hblank_rising {
+            for channel in 0..4 {
+                if !self.dma.channels[channel].enabled {
+                    continue;
+                }
+                match self.dma.channels[channel].get_timing() {
+                    1 if vblank_rising => self.dma.trigger_timing_event(channel), // VBlank
+                    2 if hblank_rising => self.dma.trigger_timing_event(channel), // HBlank
+                    _ => {}
+                }
+            }
+        }
+        self.prev_vblank = vblank;
+        self.prev_hblank = hblank;
+
         // Check for pending DMA transfers and execute them
         for channel in 0..4 {
+            let request_irq = self.dma.channels[channel].do_irq();
             if let Some((source, dest, count, transfer_size)) = self.dma.get_pending_transfer(channel) {
                 self.perform_dma_transfer(channel, source, dest, count, transfer_size);
                 self.dma.complete_transfer(channel);
+                if request_irq {
+                    let irq = match channel {
+                        0 => crate::interrupt::InterruptType::DMA0,
+                        1 => crate::interrupt::InterruptType::DMA1,
+                        2 => crate::interrupt::InterruptType::DMA2,
+                        3 => crate::interrupt::InterruptType::DMA3,
+                        _ => continue,
+                    };
+                    self.interrupt_controller.borrow_mut().request_interrupt(irq);
+                }
             }
         }
     }
@@ -827,15 +864,30 @@ impl CpuBus {
     }
 
     fn perform_dma_transfer(&mut self, channel: usize, mut source: Word, mut dest: Word, count: usize, transfer_size: usize) {
+        if transfer_size == 4 {
+            source &= !3;
+            dest &= !3;
+        } else {
+            source &= !1;
+            dest &= !1;
+        }
+
+        let src_region = source & 0xFF00_0000;
+        let dst_region = dest & 0xFF00_0000;
+        let mut src_off = source & 0x00FF_FFFF;
+        let mut dst_off = dest & 0x00FF_FFFF;
+
         for _ in 0..count {
+            let source_addr = src_region | src_off;
+            let dest_addr = dst_region | dst_off;
             if transfer_size == 4 {
                 // 32-bit transfer
-                let data = self.read_word_internal(source);
-                self.write_word_internal(dest, data);
+                let data = self.read_word_internal(source_addr);
+                self.write_word_internal(dest_addr, data);
             } else {
                 // 16-bit transfer
-                let data = self.read_halfword_internal(source);
-                self.write_halfword_internal(dest, data);
+                let data = self.read_halfword_internal(source_addr);
+                self.write_halfword_internal(dest_addr, data);
             }
 
             // Update addresses based on control settings
@@ -843,22 +895,26 @@ impl CpuBus {
             let dest_control = self.dma.channels[channel].get_dest_control();
 
             match src_control {
-                0 => source += transfer_size as u32, // Increment
-                1 => source -= transfer_size as u32, // Decrement
-                2 => {}, // Fixed
-                3 => {}, // Prohibited
+                0 => src_off = (src_off.wrapping_add(transfer_size as u32)) & 0x00FF_FFFF, // Increment
+                1 => src_off = (src_off.wrapping_sub(transfer_size as u32)) & 0x00FF_FFFF, // Decrement
+                2 => {} // Fixed
+                3 => {} // Prohibited
                 _ => {}
             }
 
             match dest_control {
-                0 => dest += transfer_size as u32, // Increment
-                1 => dest -= transfer_size as u32, // Decrement
-                2 => {}, // Fixed
-                3 => dest += transfer_size as u32, // Increment/Reload
+                0 => dst_off = (dst_off.wrapping_add(transfer_size as u32)) & 0x00FF_FFFF, // Increment
+                1 => dst_off = (dst_off.wrapping_sub(transfer_size as u32)) & 0x00FF_FFFF, // Decrement
+                2 => {} // Fixed
+                3 => dst_off = (dst_off.wrapping_add(transfer_size as u32)) & 0x00FF_FFFF, // Increment/Reload
                 _ => {}
             }
         }
 
+        // Update live DMA registers to post-transfer state.
+        self.dma.channels[channel].source = src_region | src_off;
+        self.dma.channels[channel].destination = dst_region | dst_off;
+        self.dma.channels[channel].count = 0;
     }
 
     // Internal memory access methods that bypass DMA triggering
