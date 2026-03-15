@@ -37,7 +37,7 @@ impl DISPSTAT {
     }
 
     fn is_vblank(lines: usize) -> bool {
-        lines >= 160 && lines <= 226
+        lines >= 160 && lines <= 227
     }
 
     fn is_hblank(cycles: usize) -> bool {
