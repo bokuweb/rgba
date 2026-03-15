@@ -63,7 +63,8 @@ impl Timers {
                 let i = (ofs / 4) as usize;
                 let prev_enable = self.timer[i].enable;
                 self.timer[i].prescaler = data & 0x3;
-                self.timer[i].countup_timing = (data & 0x4) != 0;
+                // Timer0 では count-up 指定(bit2)は無効（実機仕様）。
+                self.timer[i].countup_timing = i != 0 && (data & 0x4) != 0;
                 self.timer[i].irq_enable = (data & 0x40) != 0;
                 self.timer[i].enable = (data & 0x80) != 0;
                 if !prev_enable && self.timer[i].enable {
@@ -175,4 +176,3 @@ impl Timers {
         overflow
     }
 }
-

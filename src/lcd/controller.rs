@@ -77,6 +77,11 @@ pub struct LCDController {
 }
 
 impl LCDController {
+    #[inline]
+    fn trace_lcd() -> bool {
+        std::env::var("AGB_TRACE_LCD").ok().as_deref() == Some("1")
+    }
+
     pub fn new() -> LCDController {
         LCDController {
             cycles: 0,
@@ -145,7 +150,6 @@ impl LCDController {
             if prev_lines == 159 && self.lines == 160 {
                 if self.dispstat.vblank_irq_enable() {
                     vblank_irq_requested = true;
-                    println!("🔥 VBlank IRQ requested! (lines: {} -> {})", prev_lines, self.lines);
                 }
             }
 
@@ -229,76 +233,88 @@ impl LCDController {
         match addr {
             0x0000 => {
                 self.dispcnt.write(data);
-                println!(
-                    "🔧 DISPCNT write: 0x{:04x} (Mode: {}, BG0: {}, BG1: {}, BG2: {}, BG3: {}, OBJ: {})",
-                    data,
-                    self.dispcnt.mode() as u8,
-                    (data & 0x0100) != 0,
-                    (data & 0x0200) != 0,
-                    (data & 0x0400) != 0,
-                    (data & 0x0800) != 0,
-                    (data & 0x1000) != 0
-                );
+                if Self::trace_lcd() {
+                    println!(
+                        "🔧 DISPCNT write: 0x{:04x} (Mode: {}, BG0: {}, BG1: {}, BG2: {}, BG3: {}, OBJ: {})",
+                        data,
+                        self.dispcnt.mode() as u8,
+                        (data & 0x0100) != 0,
+                        (data & 0x0200) != 0,
+                        (data & 0x0400) != 0,
+                        (data & 0x0800) != 0,
+                        (data & 0x1000) != 0
+                    );
+                }
             }
             0x0004 => {
                 // DISPSTAT - General LCD Status (Read/Write)
                 self.dispstat.write(data);
-                println!(
-                    "🔧 DISPSTAT write: 0x{:04x} -> masked: 0x{:04x} (VBlank IRQ: {}, HBlank IRQ: {}, VCounter IRQ: {})",
-                    data,
-                    self.dispstat.0 & 0x0038,
-                    (data & 0x0008) != 0,
-                    (data & 0x0010) != 0,
-                    (data & 0x0020) != 0
-                );
+                if Self::trace_lcd() {
+                    println!(
+                        "🔧 DISPSTAT write: 0x{:04x} -> masked: 0x{:04x} (VBlank IRQ: {}, HBlank IRQ: {}, VCounter IRQ: {})",
+                        data,
+                        self.dispstat.0 & 0x0038,
+                        (data & 0x0008) != 0,
+                        (data & 0x0010) != 0,
+                        (data & 0x0020) != 0
+                    );
+                }
             }
             0x0008 => {
                 self.bg0cnt.write(data);
-                println!(
-                    "🔧 BG0CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})",
-                    data,
-                    self.bg0cnt.bg_priority(),
-                    self.bg0cnt.character_base_block(),
-                    self.bg0cnt.screen_base_block(),
-                    if self.bg0cnt.colors_palettes() { "256/1" } else { "16/16" },
-                    self.bg0cnt.screen_size()
-                );
+                if Self::trace_lcd() {
+                    println!(
+                        "🔧 BG0CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})",
+                        data,
+                        self.bg0cnt.bg_priority(),
+                        self.bg0cnt.character_base_block(),
+                        self.bg0cnt.screen_base_block(),
+                        if self.bg0cnt.colors_palettes() { "256/1" } else { "16/16" },
+                        self.bg0cnt.screen_size()
+                    );
+                }
             }
             0x000A => {
                 self.bg1cnt.write(data);
-                println!(
-                    "🔧 BG1CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})",
-                    data,
-                    self.bg1cnt.bg_priority(),
-                    self.bg1cnt.character_base_block(),
-                    self.bg1cnt.screen_base_block(),
-                    if self.bg1cnt.colors_palettes() { "256/1" } else { "16/16" },
-                    self.bg1cnt.screen_size()
-                );
+                if Self::trace_lcd() {
+                    println!(
+                        "🔧 BG1CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})",
+                        data,
+                        self.bg1cnt.bg_priority(),
+                        self.bg1cnt.character_base_block(),
+                        self.bg1cnt.screen_base_block(),
+                        if self.bg1cnt.colors_palettes() { "256/1" } else { "16/16" },
+                        self.bg1cnt.screen_size()
+                    );
+                }
             }
             0x000C => {
                 self.bg2cnt.write(data);
-                println!(
-                    "🔧 BG2CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})",
-                    data,
-                    self.bg2cnt.bg_priority(),
-                    self.bg2cnt.character_base_block(),
-                    self.bg2cnt.screen_base_block(),
-                    if self.bg2cnt.colors_palettes() { "256/1" } else { "16/16" },
-                    self.bg2cnt.screen_size()
-                );
+                if Self::trace_lcd() {
+                    println!(
+                        "🔧 BG2CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})",
+                        data,
+                        self.bg2cnt.bg_priority(),
+                        self.bg2cnt.character_base_block(),
+                        self.bg2cnt.screen_base_block(),
+                        if self.bg2cnt.colors_palettes() { "256/1" } else { "16/16" },
+                        self.bg2cnt.screen_size()
+                    );
+                }
             }
             0x000E => {
                 self.bg3cnt.write(data);
-                println!(
-                    "🔧 BG3CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})",
-                    data,
-                    self.bg3cnt.bg_priority(),
-                    self.bg3cnt.character_base_block(),
-                    self.bg3cnt.screen_base_block(),
-                    if self.bg3cnt.colors_palettes() { "256/1" } else { "16/16" },
-                    self.bg3cnt.screen_size()
-                );
+                if Self::trace_lcd() {
+                    println!(
+                        "🔧 BG3CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})",
+                        data,
+                        self.bg3cnt.bg_priority(),
+                        self.bg3cnt.character_base_block(),
+                        self.bg3cnt.screen_base_block(),
+                        if self.bg3cnt.colors_palettes() { "256/1" } else { "16/16" },
+                        self.bg3cnt.screen_size()
+                    );
+                }
             }
             0x0010 => {
                 // BG0HOFS - BG0 X-Offset (Write Only)
@@ -540,7 +556,9 @@ impl LCDController {
             0x0004 => {
                 // DISPSTAT - General LCD Status (Read/Write)
                 self.dispstat.write(data);
-                println!("🔧 DISPSTAT word write: 0x{:04x} -> masked: 0x{:04x}", data, self.dispstat.0 & 0x0038);
+                if Self::trace_lcd() {
+                    println!("🔧 DISPSTAT word write: 0x{:04x} -> masked: 0x{:04x}", data, self.dispstat.0 & 0x0038);
+                }
             }
             0x0008 => self.bg0cnt.write(data),
             0x000A => self.bg1cnt.write(data),
