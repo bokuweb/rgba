@@ -6,6 +6,9 @@ pub struct DMAChannel {
     pub destination: Word, // Destination Address
     pub count: HalfWord,   // Word Count
     pub control: HalfWord, // Control Register
+    pub next_source: Word,
+    pub next_destination: Word,
+    pub next_count: HalfWord,
     pub enabled: bool,     // Enable flag
     pub pending: bool,     // Pending immediate transfer request
 }
@@ -17,17 +20,20 @@ impl DMAChannel {
             destination: 0,
             count: 0,
             control: 0,
+            next_source: 0,
+            next_destination: 0,
+            next_count: 0,
             enabled: false,
             pending: false,
         }
     }
 
     pub fn set_source(&mut self, addr: Word) {
-        self.source = addr;
+        self.source = addr & 0xFFFF_FFFE;
     }
 
     pub fn set_destination(&mut self, addr: Word) {
-        self.destination = addr;
+        self.destination = addr & 0xFFFF_FFFE;
     }
 
     pub fn set_count(&mut self, count: HalfWord) {
@@ -35,8 +41,8 @@ impl DMAChannel {
     }
 
     pub fn set_control(&mut self, control: HalfWord) {
-        self.control = control;
-        self.enabled = (control & 0x8000) != 0; // Bit 15: DMA Enable
+        self.control = control & 0xFFE0;
+        self.enabled = (self.control & 0x8000) != 0; // Bit 15: DMA Enable
     }
 
     pub fn get_transfer_size(&self) -> usize {
@@ -57,6 +63,10 @@ impl DMAChannel {
 
     pub fn is_repeat(&self) -> bool {
         (self.control & 0x0200) != 0 // Bit 9: DMA Repeat
+    }
+
+    pub fn handle_irq(&self) -> bool {
+        (self.control & 0x4000) != 0 // Bit 14: IRQ upon end
     }
 }
 
@@ -96,12 +106,27 @@ impl DMAController {
             let prev_timing = ch.get_timing();
             ch.set_control(control);
             let now_timing = ch.get_timing();
+            if std::env::var("AGB_TRACE_DMA").ok().as_deref() == Some("1") {
+                println!(
+                    "DMA ctrl ch={} was_en={} en={} ctrl={:04x} timing={} repeat={} irq={}",
+                    channel,
+                    was_enabled,
+                    ch.enabled,
+                    control,
+                    now_timing,
+                    ch.is_repeat(),
+                    ch.handle_irq()
+                );
+            }
             
             // Pending scheduling policy:
             // - When enabling (edge 0->1): schedule immediately only if timing==Immediate
             // - When already enabled and timing changed to Immediate: do NOT start immediately (HW behavior)
             // - Otherwise: clear pending
             if !was_enabled && ch.enabled {
+                ch.next_source = ch.source;
+                ch.next_destination = ch.destination;
+                ch.next_count = ch.count;
                 ch.pending = now_timing == 0; // Immediate only
             } else if was_enabled && ch.enabled {
                 // Mode change while enabled shouldn't start transfer immediately
@@ -114,21 +139,27 @@ impl DMAController {
         }
     }
 
+    pub fn trigger_timing_event(&mut self, channel: usize) {
+        if channel < 4 && self.channels[channel].enabled {
+            self.channels[channel].pending = true;
+        }
+    }
+
     fn trigger_transfer(&mut self, _channel: usize) {}
 
     pub fn get_pending_transfer(&mut self, channel: usize) -> Option<(Word, Word, usize, usize)> {
         if channel < 4 && self.channels[channel].enabled && self.channels[channel].pending {
             let dma = &self.channels[channel];
-            let count = if dma.count == 0 {
+            let count = if dma.next_count == 0 {
                 match channel {
                     3 => 0x10000, // DMA3: 64KB max
                     _ => 0x4000,  // DMA0-2: 16KB max
                 }
             } else {
-                dma.count as usize
+                dma.next_count as usize
             };
             
-            Some((dma.source, dma.destination, count, dma.get_transfer_size()))
+            Some((dma.next_source, dma.next_destination, count, dma.get_transfer_size()))
         } else {
             None
         }
@@ -136,11 +167,19 @@ impl DMAController {
 
     pub fn complete_transfer(&mut self, channel: usize) {
         if channel < 4 {
+            let repeat = self.channels[channel].is_repeat();
+            let dest_control = self.channels[channel].get_dest_control();
             // Clear pending regardless
             self.channels[channel].pending = false;
-            if !self.channels[channel].is_repeat() {
+            if !repeat {
                 self.channels[channel].enabled = false;
                 self.channels[channel].control &= !0x8000; // Clear enable bit
+            } else {
+                // Repeat reloads the internal counter only; public registers stay unchanged.
+                self.channels[channel].next_count = self.channels[channel].count;
+                if dest_control == 3 {
+                    self.channels[channel].next_destination = self.channels[channel].destination;
+                }
             }
         }
     }

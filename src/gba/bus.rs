@@ -16,6 +16,7 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+use std::cell::Cell;
 
 use types::*;
 use super::dma::DMAController;
@@ -147,9 +148,31 @@ pub struct CpuBus {
     interrupt_controller: std::cell::RefCell<crate::interrupt::InterruptController>,
     timers: crate::gba::timer::Timers,
     waitcnt: HalfWord,
+    open_bus_pc: Cell<Word>,
+    open_bus_instruction_width: Cell<Word>,
+    cpu_halted: Cell<bool>,
+    prev_vblank: bool,
+    prev_hblank: bool,
+    prev_vcounter: bool,
+    dma_irq_latch: [bool; 4],
+    trace_dma: bool,
 }
 
 impl BusAccessor for CpuBus {
+    fn set_open_bus_context(&mut self, pc: Word, instruction_width: Word) {
+        self.open_bus_pc.set(pc);
+        self.open_bus_instruction_width.set(instruction_width);
+    }
+    fn set_cpu_halted(&mut self, halted: bool) {
+        self.cpu_halted.set(halted);
+    }
+    fn is_cpu_halted(&self) -> bool {
+        self.cpu_halted.get()
+    }
+    fn has_pending_interrupt_flags(&self) -> bool {
+        self.interrupt_controller.borrow().read_if() != 0
+    }
+
     fn read_byte(&self, addr: u32) -> Byte {
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_byte(addr),
@@ -186,8 +209,7 @@ impl BusAccessor for CpuBus {
                 self.sram.read_byte(addr - 0x0E00_0000)
             }
             _ => {
-                println!("⚠️  WARNING: Invalid read_byte access to 0x{:08x} (not in GBA memory map) - returning 0xFF", addr);
-                0xFF // Return invalid/unconnected bus value
+                self.read_open_bus_byte(addr)
             }
         }
     }
@@ -240,8 +262,7 @@ impl BusAccessor for CpuBus {
                 0xFFFF
             }
             _ => {
-                println!("⚠️  WARNING: Invalid read_halfword access to 0x{:08x} (not in GBA memory map) - returning 0xFFFF", addr);
-                0xFFFF
+                self.read_open_bus_halfword(addr)
             }
         }
     }
@@ -314,8 +335,7 @@ impl BusAccessor for CpuBus {
                 0xFFFFFFFF
             }
             _ => {
-                println!("⚠️  WARNING: Invalid read_word access to 0x{:08x} (not in GBA memory map) - returning 0xFFFFFFFF", addr);
-                0xFFFFFFFF
+                self.read_open_bus_word()
             }
         }
     }
@@ -460,6 +480,12 @@ impl BusAccessor for CpuBus {
                         if channel < 4 {
                             let reg = (addr - (0x0400_00B0 + (channel as u32) * 0x0C)) as u16;
                             let ch = self.dma.channels[channel];
+                            if self.trace_dma {
+                                println!(
+                                    "DMA reg16 write ch={} reg=0x{:02x} addr=0x{:08x} data=0x{:04x}",
+                                    channel, reg, addr, data
+                                );
+                            }
                             match reg {
                                 // DMAxSAD_L
                                 0x00 => {
@@ -489,6 +515,7 @@ impl BusAccessor for CpuBus {
                                 // DMAxCNT_H
                                 0x0A => {
                                     self.dma.write_control(channel, data);
+                                    self.maybe_trigger_timed_dma_immediately(channel);
                                     self.execute_dma_transfers();
                                 }
                                 _ => {}
@@ -525,7 +552,7 @@ impl BusAccessor for CpuBus {
         match addr {
             0x0000_0000..=0x0007_FFFF => {
                 // BIOS area is read-only; ignore writes.
-                println!("⚠️  WARNING: Invalid write_word to BIOS 0x{:08x} = 0x{:08x} (ignored)", addr, data);
+                let _ = data;
             }
             0x0200_0000..=0x02FF_FFFF => self.eram.write_word((addr - 0x0200_0000) & 0x3FFFF, data),
             // BIOS IF work area mirror (0x03007FF8, mirrored in all IWRAM aliases)
@@ -587,6 +614,7 @@ impl BusAccessor for CpuBus {
                     }
                     0x0400_00BA => {
                         self.dma.write_control(0, data as HalfWord);
+                        self.maybe_trigger_timed_dma_immediately(0);
                         self.execute_dma_transfers();
                     }
                     
@@ -602,6 +630,7 @@ impl BusAccessor for CpuBus {
                     }
                     0x0400_00C6 => {
                         self.dma.write_control(1, data as HalfWord);
+                        self.maybe_trigger_timed_dma_immediately(1);
                         self.execute_dma_transfers();
                     }
                     
@@ -617,6 +646,7 @@ impl BusAccessor for CpuBus {
                     }
                     0x0400_00D2 => {
                         self.dma.write_control(2, data as HalfWord);
+                        self.maybe_trigger_timed_dma_immediately(2);
                         self.execute_dma_transfers();
                     }
                     
@@ -633,6 +663,7 @@ impl BusAccessor for CpuBus {
                     }
                     0x0400_00DE => {
                         self.dma.write_control(3, data as HalfWord);
+                        self.maybe_trigger_timed_dma_immediately(3);
                         self.execute_dma_transfers();
                     }
                     
@@ -705,6 +736,14 @@ impl CpuBus {
             interrupt_controller: std::cell::RefCell::new(crate::interrupt::InterruptController::new()),
             timers: crate::gba::timer::Timers::default(),
             waitcnt: 0,
+            open_bus_pc: Cell::new(0),
+            open_bus_instruction_width: Cell::new(4),
+            cpu_halted: Cell::new(false),
+            prev_vblank: false,
+            prev_hblank: false,
+            prev_vcounter: false,
+            dma_irq_latch: [false; 4],
+            trace_dma: std::env::var("AGB_TRACE_DMA").ok().as_deref() == Some("1"),
         }
     }
 
@@ -720,12 +759,124 @@ impl CpuBus {
         self.interrupt_controller.borrow().should_service_interrupt()
     }
 
+    fn maybe_trigger_timed_dma_immediately(&mut self, channel: usize) {
+        if channel >= 4 || !self.dma.channels[channel].enabled {
+            return;
+        }
+        let timing = self.dma.channels[channel].get_timing();
+        if timing == 0 {
+            return;
+        }
+        let dispstat = self.lcdc.read_halfword(0x0004);
+        let vcount = self.lcdc.read_halfword(0x0006) as usize;
+        let in_vblank = (dispstat & 0x0001) != 0;
+        let in_hblank = (dispstat & 0x0002) != 0;
+        match timing {
+            1 if in_vblank => self.dma.trigger_timing_event(channel),
+            2 if in_hblank && vcount < 160 => self.dma.trigger_timing_event(channel),
+            _ => {}
+        }
+    }
+
     pub(crate) fn execute_dma_transfers(&mut self) {
+        // Raise DMA IRQs with a small delay (next servicing point), not in the same
+        // transfer completion moment. This better matches software expectations around IntrWait.
+        for channel in 0..4 {
+            if self.dma_irq_latch[channel] {
+                self.dma_irq_latch[channel] = false;
+                let irq = match channel {
+                    0 => crate::interrupt::InterruptType::DMA0,
+                    1 => crate::interrupt::InterruptType::DMA1,
+                    2 => crate::interrupt::InterruptType::DMA2,
+                    3 => crate::interrupt::InterruptType::DMA3,
+                    _ => continue,
+                };
+                self.interrupt_controller.borrow_mut().request_interrupt(irq);
+            }
+        }
+
+        // Trigger timed DMAs on blanking edge transitions.
+        let dispstat = self.lcdc.read_halfword(0x0004);
+        let vcount = self.lcdc.read_halfword(0x0006);
+        let vblank = (dispstat & 0x0001) != 0;
+        let hblank = (dispstat & 0x0002) != 0;
+        let vcounter = (dispstat & 0x0004) != 0;
+        let vblank_rising = !self.prev_vblank && vblank;
+        let hblank_rising = !self.prev_hblank && hblank;
+        let vcounter_rising = !self.prev_vcounter && vcounter;
+
+        if hblank_rising && (dispstat & 0x0010) != 0 {
+            self.interrupt_controller.borrow_mut().request_interrupt(crate::interrupt::InterruptType::HBlank);
+        }
+        if vcounter_rising && (dispstat & 0x0020) != 0 {
+            self.interrupt_controller.borrow_mut().request_interrupt(crate::interrupt::InterruptType::VCounter);
+        }
+
+        if vblank_rising || hblank_rising {
+            let mut has_timed_enabled = false;
+            for channel in 0..4 {
+                if self.dma.channels[channel].enabled {
+                    let t = self.dma.channels[channel].get_timing();
+                    if t == 1 || t == 2 || t == 3 {
+                        has_timed_enabled = true;
+                        break;
+                    }
+                }
+            }
+            if self.trace_dma && has_timed_enabled {
+                let vcount = self.lcdc.read_halfword(0x0006);
+                println!(
+                    "DMA timing edge vblank_rising={} hblank_rising={} vcount={}",
+                    vblank_rising, hblank_rising, vcount
+                );
+            }
+            for channel in 0..4 {
+                if !self.dma.channels[channel].enabled {
+                    continue;
+                }
+                if self.trace_dma && has_timed_enabled {
+                    println!(
+                        "DMA ch{} enabled timing={} pending={}",
+                        channel,
+                        self.dma.channels[channel].get_timing(),
+                        self.dma.channels[channel].pending
+                    );
+                }
+                match self.dma.channels[channel].get_timing() {
+                    1 if vblank_rising => self.dma.trigger_timing_event(channel), // VBlank
+                    2 if hblank_rising => self.dma.trigger_timing_event(channel), // HBlank
+                    _ => {}
+                }
+            }
+        }
+        self.prev_vblank = vblank;
+        self.prev_hblank = hblank;
+        self.prev_vcounter = vcounter;
+
         // Check for pending DMA transfers and execute them
         for channel in 0..4 {
+            let request_irq = self.dma.channels[channel].handle_irq();
             if let Some((source, dest, count, transfer_size)) = self.dma.get_pending_transfer(channel) {
+                if self.trace_dma {
+                    println!(
+                        "DMA start ch={} timing={} src={:08x} dst={:08x} count={} size={} ctrl={:04x}",
+                        channel,
+                        self.dma.channels[channel].get_timing(),
+                        source,
+                        dest,
+                        count,
+                        transfer_size,
+                        self.dma.channels[channel].control
+                    );
+                }
                 self.perform_dma_transfer(channel, source, dest, count, transfer_size);
                 self.dma.complete_transfer(channel);
+                if request_irq {
+                    self.dma_irq_latch[channel] = true;
+                    if self.trace_dma {
+                        println!("DMA irq latched ch={}", channel);
+                    }
+                }
             }
         }
     }
@@ -757,39 +908,136 @@ impl CpuBus {
         }
     }
 
+    fn read_open_bus_byte(&self, addr: Word) -> Byte {
+        let pc = self.open_bus_pc.get();
+        let width = self.open_bus_instruction_width.get();
+        let base = pc.wrapping_sub(width);
+        let src = base.wrapping_add(addr & 0x3);
+        self.read_mapped_byte_or_ff(src)
+    }
+
+    fn read_open_bus_halfword(&self, addr: Word) -> HalfWord {
+        let pc = self.open_bus_pc.get();
+        let width = self.open_bus_instruction_width.get();
+        let base = pc.wrapping_sub(width);
+        let src = base.wrapping_add(addr & 0x2);
+        let lo = self.read_mapped_byte_or_ff(src) as u16;
+        let hi = self.read_mapped_byte_or_ff(src.wrapping_add(1)) as u16;
+        lo | (hi << 8)
+    }
+
+    fn read_open_bus_word(&self) -> Word {
+        let pc = self.open_bus_pc.get();
+        let width = self.open_bus_instruction_width.get();
+        let base = pc.wrapping_sub(width);
+
+        if width == 4 {
+            let b0 = self.read_mapped_byte_or_ff(base) as u32;
+            let b1 = self.read_mapped_byte_or_ff(base.wrapping_add(1)) as u32;
+            let b2 = self.read_mapped_byte_or_ff(base.wrapping_add(2)) as u32;
+            let b3 = self.read_mapped_byte_or_ff(base.wrapping_add(3)) as u32;
+            b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+        } else {
+            let lo = self.read_mapped_byte_or_ff(base) as u16;
+            let hi = self.read_mapped_byte_or_ff(base.wrapping_add(1)) as u16;
+            let hw = lo | (hi << 8);
+            (hw as u32) | ((hw as u32) << 16)
+        }
+    }
+
+    fn read_mapped_byte_or_ff(&self, addr: Word) -> Byte {
+        match addr {
+            0x0000_0000..=0x0000_3FFF => self.bios.read_byte(addr),
+            0x0200_0000..=0x02FF_FFFF => self.eram.read_byte((addr - 0x0200_0000) & 0x3FFFF),
+            0x0300_0000..=0x03FF_FFFF => self.wram.read_byte((addr - 0x0300_0000) & 0x7FFF),
+            0x0500_0000..=0x05FF_FFFF => self.palette.read_byte((addr - 0x0500_0000) & 0x3FF),
+            0x0600_0000..=0x06FF_FFFF => self.vram.read_byte(Self::map_vram_offset(addr)),
+            0x0700_0000..=0x07FF_FFFF => self.oam.read_byte((addr - 0x0700_0000) & 0x3FF),
+            0x0800_0000..=0x0DFF_FFFF => self.rom.read_byte(Self::map_gamepak_offset(addr)),
+            0x0E00_0000..=0x0E00_FFFF => self.sram.read_byte(addr - 0x0E00_0000),
+            _ => 0xFF,
+        }
+    }
+
     fn perform_dma_transfer(&mut self, channel: usize, mut source: Word, mut dest: Word, count: usize, transfer_size: usize) {
+        if transfer_size == 4 {
+            source &= !3;
+            dest &= !3;
+        } else {
+            source &= !1;
+            dest &= !1;
+        }
+
+        let src_region = source & 0xFF00_0000;
+        let dst_region = dest & 0xFF00_0000;
+        let mut src_off = (source & 0x00FF_FFFF) as i32;
+        let mut dst_off = (dest & 0x00FF_FFFF) as i32;
+        let mut first_value: Option<u32> = None;
+        let mut last_value: Option<u32> = None;
+
         for _ in 0..count {
+            let source_addr = src_region | ((src_off as u32) & 0x00FF_FFFF);
+            let dest_addr = dst_region | ((dst_off as u32) & 0x00FF_FFFF);
             if transfer_size == 4 {
                 // 32-bit transfer
-                let data = self.read_word_internal(source);
-                self.write_word_internal(dest, data);
+                let data = self.read_word_internal(source_addr);
+                self.write_word_internal(dest_addr, data);
+                if first_value.is_none() {
+                    first_value = Some(data);
+                }
+                last_value = Some(data);
             } else {
                 // 16-bit transfer
-                let data = self.read_halfword_internal(source);
-                self.write_halfword_internal(dest, data);
+                let data = self.read_halfword_internal(source_addr);
+                self.write_halfword_internal(dest_addr, data);
+                let data32 = data as u32;
+                if first_value.is_none() {
+                    first_value = Some(data32);
+                }
+                last_value = Some(data32);
             }
 
             // Update addresses based on control settings
             let src_control = self.dma.channels[channel].get_source_control();
             let dest_control = self.dma.channels[channel].get_dest_control();
+            let step = transfer_size as i32;
 
             match src_control {
-                0 => source += transfer_size as u32, // Increment
-                1 => source -= transfer_size as u32, // Decrement
-                2 => {}, // Fixed
-                3 => {}, // Prohibited
+                0 => src_off = src_off.wrapping_add(step), // Increment
+                1 => src_off = src_off.wrapping_sub(step), // Decrement
+                2 => {} // Fixed
+                // Prohibited in docs, but many implementations treat it as increment.
+                3 => src_off = src_off.wrapping_add(step),
                 _ => {}
             }
 
             match dest_control {
-                0 => dest += transfer_size as u32, // Increment
-                1 => dest -= transfer_size as u32, // Decrement
-                2 => {}, // Fixed
-                3 => dest += transfer_size as u32, // Increment/Reload
+                0 => dst_off = dst_off.wrapping_add(step), // Increment
+                1 => dst_off = dst_off.wrapping_sub(step), // Decrement
+                2 => {} // Fixed
+                3 => dst_off = dst_off.wrapping_add(step), // Increment/Reload
                 _ => {}
             }
         }
 
+        // Update internal DMA progress state; public DMA registers retain the programmed values.
+        self.dma.channels[channel].next_source = src_region | (src_off as u32);
+        self.dma.channels[channel].next_destination = dst_region | (dst_off as u32);
+        self.dma.channels[channel].next_count = 0;
+
+        if self.trace_dma && channel == 0 {
+            println!(
+                "DMA done ch=0 first=0x{:08x} last=0x{:08x} next_src=0x{:08x} next_dst=0x{:08x} pub_src=0x{:08x} pub_dst=0x{:08x} pub_count={} en={}",
+                first_value.unwrap_or(0),
+                last_value.unwrap_or(0),
+                self.dma.channels[channel].next_source,
+                self.dma.channels[channel].next_destination,
+                self.dma.channels[channel].source,
+                self.dma.channels[channel].destination,
+                self.dma.channels[channel].count,
+                self.dma.channels[channel].enabled
+            );
+        }
     }
 
     // Internal memory access methods that bypass DMA triggering
@@ -818,6 +1066,11 @@ impl CpuBus {
     fn write_word_internal(&mut self, addr: Word, data: Word) {
         match addr {
             0x0400_00A0 | 0x0400_00A4 => {}
+            // GamePak ROM/EEPROM area: writes are typically ignored by ROM,
+            // and EEPROM uses serial protocol (not modeled here yet).
+            0x0800_0000..=0x0DFF_FFFF => {
+                let _ = data;
+            }
             0x0600_0000..=0x06FF_FFFF => {
                 let vram_addr = Self::map_vram_offset(addr);
                 self.vram.write_word(vram_addr, data);
@@ -837,7 +1090,10 @@ impl CpuBus {
     fn write_halfword_internal(&mut self, addr: Word, data: HalfWord) {
         match addr {
             0x0400_00A0 | 0x0400_00A4 => {}
-
+            // GamePak ROM/EEPROM area: treat as no-op for now.
+            0x0800_0000..=0x0DFF_FFFF => {
+                let _ = data;
+            }
 
             0x0600_0000..=0x06FF_FFFF => {
                 let vram_addr = Self::map_vram_offset(addr);
