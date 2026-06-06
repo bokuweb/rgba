@@ -37,7 +37,9 @@ impl DISPSTAT {
     }
 
     fn is_vblank(lines: usize) -> bool {
-        lines >= 160 && lines <= 227
+        // The VBlank flag is set in lines 160..=226, but NOT in the last line
+        // (227), per GBATek / hardware behaviour.
+        lines >= 160 && lines <= 226
     }
 
     fn is_hblank(cycles: usize) -> bool {

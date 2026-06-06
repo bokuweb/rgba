@@ -33,7 +33,6 @@ fn main() {
     let mut prev_time = SystemTime::now();
     let mut gba = gba::GBA::new();
     let mut key = io::Key::new();
-    let mut auto_start_frames = 180usize;
 
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -73,14 +72,6 @@ fn main() {
                     _ => {}
                 },
                 _ => {}
-            }
-        }
-
-        if auto_start_frames > 0 {
-            key.set_START(io::KeyStatus::ON);
-            auto_start_frames -= 1;
-            if auto_start_frames == 0 {
-                key.set_START(io::KeyStatus::OFF);
             }
         }
 
