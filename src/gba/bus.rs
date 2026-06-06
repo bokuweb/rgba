@@ -71,8 +71,9 @@ impl Default for CycleLUT {
         table.n16[PAGE_EWRAM] = 3;
         table.s16[PAGE_EWRAM] = 3;
 
-        table.n32[PAGE_OAM] = 2;
-        table.s32[PAGE_OAM] = 2;
+        // OAM sits on a 32-bit bus: 8/16/32-bit accesses are all 1 cycle.
+        table.n32[PAGE_OAM] = 1;
+        table.s32[PAGE_OAM] = 1;
         table.n16[PAGE_OAM] = 1;
         table.s16[PAGE_OAM] = 1;
 
@@ -151,6 +152,10 @@ pub struct CpuBus {
     sio_irq_latch: bool,
     interrupt_controller: std::cell::RefCell<crate::interrupt::InterruptController>,
     timers: crate::gba::timer::Timers,
+    /// Master clock: absolute cycle count shared by all timed components.
+    clock: u64,
+    /// Set when the LCD finishes a frame during advance_clock.
+    frame_ready: bool,
     waitcnt: HalfWord,
     open_bus_pc: Cell<Word>,
     open_bus_instruction_width: Cell<Word>,
@@ -766,6 +771,8 @@ impl CpuBus {
             sio_irq_latch: false,
             interrupt_controller: std::cell::RefCell::new(crate::interrupt::InterruptController::new()),
             timers: crate::gba::timer::Timers::default(),
+            clock: 0,
+            frame_ready: false,
             waitcnt: 0,
             open_bus_pc: Cell::new(0),
             open_bus_instruction_width: Cell::new(4),
@@ -985,6 +992,35 @@ impl CpuBus {
         self.timers.tick(now_cycles, irq);
     }
 
+    /// Advance the shared master clock by `cycles` and drive every timed
+    /// component (timers and the LCD) by the same delta. This is the single
+    /// entry point through which time passes, so DMA (which calls it per
+    /// transfer) keeps the timers/LCD in lockstep with the CPU.
+    pub(crate) fn advance_clock(&mut self, cycles: Cycle) {
+        if cycles == 0 {
+            return;
+        }
+        self.clock = self.clock.wrapping_add(cycles as u64);
+        {
+            let irq = &mut *self.interrupt_controller.borrow_mut();
+            self.timers.tick(self.clock, irq);
+        }
+        let (ready, vblank_irq) = self.lcdc.run(cycles);
+        if vblank_irq {
+            self.request_vblank_interrupt();
+        }
+        if ready {
+            self.frame_ready = true;
+        }
+    }
+
+    /// Returns and clears the "LCD finished a frame" flag.
+    pub(crate) fn take_frame_ready(&mut self) -> bool {
+        let r = self.frame_ready;
+        self.frame_ready = false;
+        r
+    }
+
     // VRAM mirror mapping helper
     // GBA VRAM is 96KB (0x18000) within a 128KB window (0x20000).
     // 0x06000000-0x06FFFFFF should wrap every 0x20000, and offsets >= 0x18000
@@ -1108,9 +1144,20 @@ impl CpuBus {
         let mut first_value: Option<u32> = None;
         let mut last_value: Option<u32> = None;
 
+        let width = if transfer_size == 4 { AccessWidth::Word } else { AccessWidth::HalfWord };
         for _ in 0..count {
             let source_addr = src_region | ((src_off as u32) & 0x00FF_FFFF);
             let dest_addr = dst_region | ((dst_off as u32) & 0x00FF_FFFF);
+
+            // A DMA unit consumes the (sequential) access cost of its source and
+            // destination. Advance the shared clock *before* reading so that a
+            // fixed source pointing at a running timer/counter is sampled at the
+            // correct, advancing value. This is what makes the cycle-timed DMA
+            // tests observe the right per-transfer deltas.
+            let cost = self.compute_cycle(source_addr, AccessType::Seq(width))
+                + self.compute_cycle(dest_addr, AccessType::Seq(width));
+            self.advance_clock(cost);
+
             if transfer_size == 4 {
                 // 32-bit transfer
                 let data = self.read_word_internal(source_addr);
@@ -1386,6 +1433,48 @@ mod tests {
         assert_eq!(bus.read_byte(0x0E00_8000), 0xA5, "0x8000 mirrors 0x0000");
         bus.write_byte(0x0E00_7FFF, 0x3C);
         assert_eq!(bus.read_byte(0x0E00_FFFF), 0x3C, "0xFFFF mirrors 0x7FFF");
+    }
+
+    #[test]
+    fn advance_clock_ticks_timers() {
+        let mut bus = new_bus();
+        bus.write_halfword(0x0400_0100, 0); // TM0 reload = 0
+        bus.write_halfword(0x0400_0102, 0x0080); // TM0 enable, prescaler /1
+        let before = bus.read_halfword(0x0400_0100);
+        bus.advance_clock(100);
+        let after = bus.read_halfword(0x0400_0100);
+        assert!(after > before, "timer must advance with the master clock: {} -> {}", before, after);
+    }
+
+    #[test]
+    fn dma_from_running_timer_samples_increasing_values() {
+        // A DMA whose fixed source is a running timer must observe the timer
+        // advancing during the transfer (cycle-accurate DMA). (jsmolka DMA16 /
+        // AGS MEMORY DMA tests.)
+        let mut bus = new_bus();
+        bus.write_halfword(0x0400_0100, 0); // TM0 reload = 0
+        bus.write_halfword(0x0400_0102, 0x0080); // TM0 enable, prescaler /1
+        // DMA3: src = TM0CNT (fixed), dst = EWRAM, 16-bit, 8 units.
+        bus.write_halfword(0x0400_00D4, 0x0100); // SAD lo
+        bus.write_halfword(0x0400_00D6, 0x0400); // SAD hi -> 0x04000100
+        bus.write_halfword(0x0400_00D8, 0x0000); // DAD lo
+        bus.write_halfword(0x0400_00DA, 0x0200); // DAD hi -> 0x02000000
+        bus.write_halfword(0x0400_00DC, 8); // count
+        // enable (bit15) + source fixed (bits 7-8 = 0b10), 16-bit -> triggers.
+        bus.write_halfword(0x0400_00DE, 0x8000 | 0x0100);
+
+        let vals: Vec<u16> = (0..8).map(|i| bus.read_halfword(0x0200_0000 + i * 2)).collect();
+        let delta = vals[2].wrapping_sub(vals[1]);
+        assert!(delta > 0, "timer must advance during DMA: {:?}", vals);
+        // The per-transfer delta is constant in steady state.
+        for i in 2..7 {
+            assert_eq!(
+                vals[i + 1].wrapping_sub(vals[i]),
+                delta,
+                "constant per-transfer delta expected: {:?}",
+                vals
+            );
+        }
     }
 
     #[test]
