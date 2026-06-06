@@ -1043,6 +1043,23 @@ impl CpuBus {
         }
     }
 
+    /// Decide the access type of one DMA unit (index `i`) at `addr`.
+    ///
+    /// DMA units use sequential timing, except in GamePak ROM
+    /// (0x08000000-0x0DFFFFFF): when a unit's access ends exactly on a 0x20000
+    /// page boundary, the *following* access is forced non-sequential — even in
+    /// fixed/decrement addressing mode (see DMA/readme). Because it affects the
+    /// following access, the first unit (i == 0) is never upgraded.
+    fn dma_access_type(addr: Word, width: AccessWidth, unit: u32, i: usize) -> AccessType {
+        let is_rom = (0x0800_0000..=0x0DFF_FFFF).contains(&addr);
+        let rom_boundary = is_rom && ((addr & 0x1_FFFF) + unit) >= 0x2_0000;
+        if i > 0 && rom_boundary {
+            AccessType::NonSeq(width)
+        } else {
+            AccessType::Seq(width)
+        }
+    }
+
     // GamePak reads beyond the end of the cartridge return an "open bus" value:
     // the lower 16 bits of (address / 2) for each addressed halfword. (gba-tests
     // unsafe t002)
@@ -1145,17 +1162,23 @@ impl CpuBus {
         let mut last_value: Option<u32> = None;
 
         let width = if transfer_size == 4 { AccessWidth::Word } else { AccessWidth::HalfWord };
-        for _ in 0..count {
+        let unit = transfer_size as u32;
+        for i in 0..count {
             let source_addr = src_region | ((src_off as u32) & 0x00FF_FFFF);
             let dest_addr = dst_region | ((dst_off as u32) & 0x00FF_FFFF);
 
-            // A DMA unit consumes the (sequential) access cost of its source and
-            // destination. Advance the shared clock *before* reading so that a
-            // fixed source pointing at a running timer/counter is sampled at the
-            // correct, advancing value. This is what makes the cycle-timed DMA
-            // tests observe the right per-transfer deltas.
-            let cost = self.compute_cycle(source_addr, AccessType::Seq(width))
-                + self.compute_cycle(dest_addr, AccessType::Seq(width));
+            // A DMA unit normally uses sequential access timing. In GamePak ROM,
+            // an access whose unit ends exactly on a 0x20000 page boundary is
+            // forced non-sequential — even in fixed/decrement mode — but this
+            // only upgrades the *following* accesses, so the first unit is left
+            // sequential (see DMA/readme).
+            let src_at = Self::dma_access_type(source_addr, width, unit, i);
+            let dst_at = Self::dma_access_type(dest_addr, width, unit, i);
+            // Advance the shared clock *before* reading so that a fixed source
+            // pointing at a running timer/counter is sampled at the correct,
+            // advancing value. This is what makes the cycle-timed DMA tests
+            // observe the right per-transfer deltas.
+            let cost = self.compute_cycle(source_addr, src_at) + self.compute_cycle(dest_addr, dst_at);
             self.advance_clock(cost);
 
             if transfer_size == 4 {
@@ -1444,6 +1467,31 @@ mod tests {
         bus.advance_clock(100);
         let after = bus.read_halfword(0x0400_0100);
         assert!(after > before, "timer must advance with the master clock: {} -> {}", before, after);
+    }
+
+    #[test]
+    fn dma_rom_boundary_forces_nonsequential() {
+        use crate::types::{AccessType, AccessWidth};
+        // First unit is sequential even at a boundary-adjacent ROM address.
+        assert!(matches!(
+            CpuBus::dma_access_type(0x0801_FFFC, AccessWidth::Word, 4, 0),
+            AccessType::Seq(_)
+        ));
+        // Later units at a ROM 0x20000-boundary-adjacent address are non-seq.
+        assert!(matches!(
+            CpuBus::dma_access_type(0x0801_FFFC, AccessWidth::Word, 4, 1),
+            AccessType::NonSeq(_)
+        ));
+        // A non-boundary ROM access stays sequential.
+        assert!(matches!(
+            CpuBus::dma_access_type(0x0800_0000, AccessWidth::Word, 4, 1),
+            AccessType::Seq(_)
+        ));
+        // Non-ROM memory never gets the boundary upgrade.
+        assert!(matches!(
+            CpuBus::dma_access_type(0x0201_FFFC, AccessWidth::Word, 4, 1),
+            AccessType::Seq(_)
+        ));
     }
 
     #[test]
