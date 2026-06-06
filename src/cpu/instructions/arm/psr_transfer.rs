@@ -15,7 +15,16 @@ where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
-    gpr[rd] = if dec.get_Pd() { spsr.get() } else { cpsr.get() };
+    gpr[rd] = if dec.get_Pd() {
+        // User/System modes have no banked SPSR; MRS spsr reads the CPSR there
+        // (ARM7TDMI behaviour, gba-tests psr t001).
+        match cpsr.get_mode() {
+            Mode::User | Mode::System => cpsr.get(),
+            _ => spsr.get(),
+        }
+    } else {
+        cpsr.get()
+    };
     let cycle = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     Ok((cycle, PipelineStatus::Continue))
 }
@@ -54,7 +63,12 @@ where
     }
 
     if dec.get_Pd() {
-        spsr.set(spsr.get() & !mask | value & mask)
+        // User/System modes have no banked SPSR; MSR spsr is ignored there
+        // (ARM7TDMI behaviour, gba-tests psr t001).
+        match cpsr.get_mode() {
+            Mode::User | Mode::System => {}
+            _ => spsr.set(spsr.get() & !mask | value & mask),
+        }
     } else {
         if mask & 0xFF00_0000 != 0 {
             cpsr.set_N(value & 0x8000_0000 != 0);
