@@ -188,7 +188,9 @@ impl LCDController {
             0x0050 => self.bldcnt,   // BLDCNT - Color Special Effects Selection
             0x0052 => self.bldalpha, // BLDALPHA - Alpha Blending Coefficients
             0x0054 => 0,             // BLDY - Brightness Coefficient (Write Only, reads as 0)
-            _ => todo!(),
+            // Write-only registers (BG scroll, BG2/BG3 reference points, MOSAIC, etc.)
+            // and any unmapped LCD I/O read back as 0 rather than panicking.
+            _ => 0,
         }
     }
 
