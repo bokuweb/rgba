@@ -212,10 +212,10 @@ impl BusAccessor for CpuBus {
             // OAM 1KB mirrors
             0x0700_0000..=0x07FF_FFFF => self.oam.read_byte((addr - 0x0700_0000) & 0x3FF),
             // GamePak ROM mirrors across WS0/WS1/WS2 (0x08000000-0x0DFFFFFF)
-            0x0800_0000..=0x0DFF_FFFF => self.rom.read_byte(Self::map_gamepak_offset(addr)),
+            0x0800_0000..=0x0DFF_FFFF => self.gamepak_read_byte(addr),
             0x0E00_0000..=0x0E00_FFFF => {
                 // SRAM/FRAM/Flash save memory (byte access only)
-                self.sram.read_byte(addr - 0x0E00_0000)
+                self.sram.read_byte((addr - 0x0E00_0000) & 0x7FFF)
             }
             _ => {
                 self.read_open_bus_byte(addr)
@@ -267,7 +267,7 @@ impl BusAccessor for CpuBus {
             0x0600_0000..=0x06FF_FFFF => self.vram.read_halfword(Self::map_vram_offset(addr)),
             // 修正(006): OAM 1KB ミラー（16bit 読み）
             0x0700_0000..=0x07FF_FFFF => self.oam.read_halfword((addr - 0x0700_0000) & 0x3FF),
-            0x0800_0000..=0x0DFF_FFFF => self.rom.read_halfword(Self::map_gamepak_offset(addr)),
+            0x0800_0000..=0x0DFF_FFFF => self.gamepak_read_halfword(addr),
             0x0E00_0000..=0x0E00_FFFF => {
                 println!("⚠️  WARNING: Invalid halfword access to SRAM at 0x{:08x} (SRAM is byte-access only) - returning 0xFFFF", addr);
                 0xFFFF
@@ -340,7 +340,7 @@ impl BusAccessor for CpuBus {
                 }
             },
             0x0500_0000..=0x05FF_FFFF => self.palette.read_word((addr - 0x0500_0000) & 0x3FF),
-            0x0800_0000..=0x0DFF_FFFF => self.rom.read_word(Self::map_gamepak_offset(addr)),
+            0x0800_0000..=0x0DFF_FFFF => self.gamepak_read_word(addr),
             0x0E00_0000..=0x0E00_FFFF => {
                 println!("⚠️  WARNING: Invalid word access to SRAM at 0x{:08x} (SRAM is byte-access only) - returning 0xFFFFFFFF", addr);
                 0xFFFFFFFF
@@ -445,7 +445,7 @@ impl BusAccessor for CpuBus {
             }
             0x0E00_0000..=0x0E00_FFFF => {
                 // SRAM/FRAM/Flash save memory (byte access only)
-                self.sram.write_byte(addr - 0x0E00_0000, data);
+                self.sram.write_byte((addr - 0x0E00_0000) & 0x7FFF, data);
             }
             _ => {
                 println!("⚠️  WARNING: Invalid write_byte to 0x{:08x} = 0x{:02x} (ignored)", addr, data);
@@ -1007,6 +1007,40 @@ impl CpuBus {
         }
     }
 
+    // GamePak reads beyond the end of the cartridge return an "open bus" value:
+    // the lower 16 bits of (address / 2) for each addressed halfword. (gba-tests
+    // unsafe t002)
+    #[inline]
+    fn gamepak_read_byte(&self, addr: Word) -> Byte {
+        let off = Self::map_gamepak_offset(addr) as usize;
+        if off < self.rom.len() {
+            self.rom.read_byte(off as u32)
+        } else {
+            let hw = (addr >> 1) & 0xFFFF;
+            if (addr & 1) != 0 { (hw >> 8) as u8 } else { (hw & 0xFF) as u8 }
+        }
+    }
+    #[inline]
+    fn gamepak_read_halfword(&self, addr: Word) -> HalfWord {
+        let off = Self::map_gamepak_offset(addr) as usize;
+        if off < self.rom.len() {
+            self.rom.read_halfword(off as u32)
+        } else {
+            ((addr >> 1) & 0xFFFF) as u16
+        }
+    }
+    #[inline]
+    fn gamepak_read_word(&self, addr: Word) -> Word {
+        let off = Self::map_gamepak_offset(addr) as usize;
+        if off < self.rom.len() {
+            self.rom.read_word(off as u32)
+        } else {
+            let lo = (addr >> 1) & 0xFFFF;
+            let hi = ((addr.wrapping_add(2)) >> 1) & 0xFFFF;
+            lo | (hi << 16)
+        }
+    }
+
     fn read_open_bus_byte(&self, addr: Word) -> Byte {
         let pc = self.open_bus_pc.get();
         let width = self.open_bus_instruction_width.get();
@@ -1052,8 +1086,8 @@ impl CpuBus {
             0x0500_0000..=0x05FF_FFFF => self.palette.read_byte((addr - 0x0500_0000) & 0x3FF),
             0x0600_0000..=0x06FF_FFFF => self.vram.read_byte(Self::map_vram_offset(addr)),
             0x0700_0000..=0x07FF_FFFF => self.oam.read_byte((addr - 0x0700_0000) & 0x3FF),
-            0x0800_0000..=0x0DFF_FFFF => self.rom.read_byte(Self::map_gamepak_offset(addr)),
-            0x0E00_0000..=0x0E00_FFFF => self.sram.read_byte(addr - 0x0E00_0000),
+            0x0800_0000..=0x0DFF_FFFF => self.gamepak_read_byte(addr),
+            0x0E00_0000..=0x0E00_FFFF => self.sram.read_byte((addr - 0x0E00_0000) & 0x7FFF),
             _ => 0xFF,
         }
     }
@@ -1142,7 +1176,7 @@ impl CpuBus {
     // Internal memory access methods that bypass DMA triggering
     fn read_word_internal(&self, addr: Word) -> Word {
         match addr {
-            0x0800_0000..=0x0DFF_FFFF => self.rom.read_word(Self::map_gamepak_offset(addr)),
+            0x0800_0000..=0x0DFF_FFFF => self.gamepak_read_word(addr),
             0x0300_0000..=0x0300_7FFF => self.wram.read_word(addr - 0x0300_0000),
             0x0200_0000..=0x0203_FFFF => self.eram.read_word(addr - 0x0200_0000),
             0x0600_0000..=0x06FF_FFFF => self.vram.read_word(Self::map_vram_offset(addr)),
@@ -1153,7 +1187,7 @@ impl CpuBus {
 
     fn read_halfword_internal(&self, addr: Word) -> HalfWord {
         match addr {
-            0x0800_0000..=0x0DFF_FFFF => self.rom.read_halfword(Self::map_gamepak_offset(addr)),
+            0x0800_0000..=0x0DFF_FFFF => self.gamepak_read_halfword(addr),
             0x0300_0000..=0x0300_7FFF => self.wram.read_halfword(addr - 0x0300_0000),
             0x0200_0000..=0x0203_FFFF => self.eram.read_halfword(addr - 0x0200_0000),
             0x0600_0000..=0x06FF_FFFF => self.vram.read_halfword(Self::map_vram_offset(addr)),
@@ -1342,5 +1376,32 @@ mod tests {
         // request_interrupt path used here must not pre-fill the BIOS work area.
         assert_eq!(bus.interrupt_controller.borrow().read_bios_if_work(), 0);
         let _ = InterruptType::VBlank; // keep import used across cfgs
+    }
+
+    #[test]
+    fn sram_mirrors_every_32kb() {
+        let mut bus = new_bus();
+        // SRAM is 32KB and mirrors within the 64KB save region. (gba-tests unsafe t001)
+        bus.write_byte(0x0E00_0000, 0xA5);
+        assert_eq!(bus.read_byte(0x0E00_8000), 0xA5, "0x8000 mirrors 0x0000");
+        bus.write_byte(0x0E00_7FFF, 0x3C);
+        assert_eq!(bus.read_byte(0x0E00_FFFF), 0x3C, "0xFFFF mirrors 0x7FFF");
+    }
+
+    #[test]
+    fn gamepak_out_of_bounds_reads_open_bus() {
+        // The default test ROM is 0x80000 bytes; reads past the cart return the
+        // lower 16 bits of (address / 2) per halfword. (gba-tests unsafe t002)
+        let bus = new_bus();
+        let addr = 0x0800_0000 + 0x0008_0000; // first byte past the cart
+        let hw = bus.read_halfword(addr);
+        assert_eq!(hw, ((addr >> 1) & 0xFFFF) as u16);
+        // Byte reads select the appropriate half of (addr/2).
+        assert_eq!(bus.read_byte(addr), ((addr >> 1) & 0xFF) as u8);
+        assert_eq!(bus.read_byte(addr + 1), (((addr + 1) >> 1) >> 8) as u8 & 0xFF);
+        // Word reads combine two consecutive open-bus halfwords.
+        let lo = (addr >> 1) & 0xFFFF;
+        let hi = ((addr + 2) >> 1) & 0xFFFF;
+        assert_eq!(bus.read_word(addr), lo | (hi << 16));
     }
 }

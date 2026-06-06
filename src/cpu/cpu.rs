@@ -1361,7 +1361,24 @@ mod test {
         arm.set_gpr(2, 0x200);
         arm.set_gpr(1, 0x1155_55AA);
         arm.run_immediately(&mut bus);
-        assert_eq!(bus.get_mem(0x2FF), 0x0000_55AA);
+        // STRH force-aligns the address (0x2FF -> 0x2FE) on ARM7TDMI.
+        assert_eq!(bus.get_mem(0x2FE), 0x0000_55AA);
+    }
+
+    #[test]
+    // mrs r1, spsr  (in System mode, which has no banked SPSR)
+    fn mrs_spsr_in_system_mode_reads_cpsr() {
+        setup();
+        let mut bus = MockBus::new();
+        &bus.set(0x0, 0xE14F_1000); // mrs r1, spsr
+        let mut arm = ARM::new();
+        arm.cpsr.set_mode(crate::cpu::registers::psr::Mode::System);
+        // Put a distinct value in the (nonexistent) SPSR to prove it is not read.
+        arm.spsr.set(0x0000_00F0);
+        arm.run_immediately(&mut bus);
+        // In User/System mode MRS spsr returns the CPSR, not the SPSR sentinel.
+        assert_eq!(arm.get_gpr(1), arm.cpsr.get());
+        assert_ne!(arm.get_gpr(1), 0x0000_00F0);
     }
 
     #[test]
