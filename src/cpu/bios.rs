@@ -311,6 +311,271 @@ impl Bios {
         }
     }
 
+    /// SWI 0x01 - RegisterRamReset
+    /// Clears the RAM/IO regions selected by the bitmask in r0.
+    pub fn register_ram_reset<T: BusAccessor>(bus: &mut T, gpr: &mut [Word; 16]) {
+        let flags = gpr[0];
+        let clear = |bus: &mut T, start: Word, end: Word| {
+            let mut a = start;
+            while a < end {
+                bus.write_word(a, 0);
+                a += 4;
+            }
+        };
+        if flags & 0x01 != 0 {
+            clear(bus, 0x0200_0000, 0x0204_0000); // EWRAM
+        }
+        if flags & 0x02 != 0 {
+            clear(bus, 0x0300_0000, 0x0300_7E00); // IWRAM (excluding BIOS/stack tail)
+        }
+        if flags & 0x04 != 0 {
+            clear(bus, 0x0500_0000, 0x0500_0400); // Palette
+        }
+        if flags & 0x08 != 0 {
+            clear(bus, 0x0600_0000, 0x0601_8000); // VRAM
+        }
+        if flags & 0x10 != 0 {
+            clear(bus, 0x0700_0000, 0x0700_0400); // OAM
+        }
+        if flags & 0x80 != 0 {
+            // Reset the LCD into forced blank, a sane default for the IO reset bit.
+            bus.write_halfword(0x0400_0000, 0x0080);
+        }
+    }
+
+    /// SWI 0x0D - GetBiosChecksum
+    /// Returns the checksum of the GBA BIOS (a fixed constant on real hardware).
+    pub fn get_bios_checksum(gpr: &mut [Word; 16]) {
+        gpr[0] = 0xBAAE_187F;
+    }
+
+    /// SWI 0x11/0x12 - LZ77UnComp (write 8-bit / 16-bit)
+    /// Decompresses LZ77-compressed data from r0 to r1. The 16-bit variant is
+    /// VRAM-safe (writes whole halfwords).
+    pub fn lz77_uncomp<T: BusAccessor>(bus: &mut T, gpr: &mut [Word; 16], vram: bool) {
+        let src = gpr[0];
+        let dst = gpr[1];
+        let header = bus.read_word(src);
+        let size = (header >> 8) as usize;
+        let mut out: Vec<u8> = Vec::with_capacity(size);
+        let mut sp = src + 4;
+        while out.len() < size {
+            let flags = bus.read_byte(sp);
+            sp += 1;
+            for bit in 0..8 {
+                if out.len() >= size {
+                    break;
+                }
+                if flags & (0x80 >> bit) != 0 {
+                    let b0 = bus.read_byte(sp) as usize;
+                    let b1 = bus.read_byte(sp + 1) as usize;
+                    sp += 2;
+                    let len = (b0 >> 4) + 3;
+                    let disp = ((b0 & 0x0F) << 8 | b1) + 1;
+                    for _ in 0..len {
+                        if out.len() >= size || disp > out.len() {
+                            break;
+                        }
+                        let idx = out.len() - disp;
+                        out.push(out[idx]);
+                    }
+                } else {
+                    out.push(bus.read_byte(sp));
+                    sp += 1;
+                }
+            }
+        }
+        Self::write_decompressed(bus, dst, &out, vram);
+    }
+
+    /// SWI 0x14/0x15 - RLUnComp (write 8-bit / 16-bit)
+    pub fn rl_uncomp<T: BusAccessor>(bus: &mut T, gpr: &mut [Word; 16], vram: bool) {
+        let src = gpr[0];
+        let dst = gpr[1];
+        let header = bus.read_word(src);
+        let size = (header >> 8) as usize;
+        let mut out: Vec<u8> = Vec::with_capacity(size);
+        let mut sp = src + 4;
+        while out.len() < size {
+            let flag = bus.read_byte(sp);
+            sp += 1;
+            if flag & 0x80 != 0 {
+                // Compressed run: (flag & 0x7F) + 3 copies of the next byte.
+                let len = (flag & 0x7F) as usize + 3;
+                let b = bus.read_byte(sp);
+                sp += 1;
+                for _ in 0..len {
+                    if out.len() >= size {
+                        break;
+                    }
+                    out.push(b);
+                }
+            } else {
+                // Uncompressed run: (flag & 0x7F) + 1 literal bytes.
+                let len = (flag & 0x7F) as usize + 1;
+                for _ in 0..len {
+                    if out.len() >= size {
+                        break;
+                    }
+                    out.push(bus.read_byte(sp));
+                    sp += 1;
+                }
+            }
+        }
+        Self::write_decompressed(bus, dst, &out, vram);
+    }
+
+    /// SWI 0x16/0x17/0x18 - Diff(8/16)bitUnFilter
+    /// Reverses delta filtering: each element is the running sum of the deltas.
+    /// `elem` is 1 (8-bit) or 2 (16-bit); `vram` selects 16-bit writes.
+    pub fn diff_unfilter<T: BusAccessor>(bus: &mut T, gpr: &mut [Word; 16], elem: usize, vram: bool) {
+        let src = gpr[0];
+        let dst = gpr[1];
+        let header = bus.read_word(src);
+        let size = (header >> 8) as usize; // size in bytes
+        let mut out: Vec<u8> = Vec::with_capacity(size);
+        let mut sp = src + 4;
+        if elem == 1 {
+            let mut acc: u8 = 0;
+            while out.len() < size {
+                acc = acc.wrapping_add(bus.read_byte(sp));
+                sp += 1;
+                out.push(acc);
+            }
+        } else {
+            let mut acc: u16 = 0;
+            while out.len() < size {
+                let d = bus.read_byte(sp) as u16 | ((bus.read_byte(sp + 1) as u16) << 8);
+                sp += 2;
+                acc = acc.wrapping_add(d);
+                out.push((acc & 0xFF) as u8);
+                out.push((acc >> 8) as u8);
+            }
+        }
+        Self::write_decompressed(bus, dst, &out, vram);
+    }
+
+    /// SWI 0x13 - HuffUnComp
+    /// Decompresses Huffman-compressed data from r0 to r1 (always 32-bit writes).
+    pub fn huff_uncomp<T: BusAccessor>(bus: &mut T, gpr: &mut [Word; 16]) {
+        let src = gpr[0];
+        let dst = gpr[1];
+        let header = bus.read_word(src);
+        let data_bits = ((header & 0x0F) as u32).max(1); // symbol size in bits (4 or 8)
+        let size = (header >> 8) as usize; // decompressed size in bytes
+        let tree_base = src + 4;
+        let tree_size = (bus.read_byte(tree_base) as u32 + 1) * 2; // bytes
+        let mut bitstream = tree_base + tree_size;
+
+        let mut out: Vec<u8> = Vec::with_capacity(size);
+        let mut cur_word: u32 = 0; // assembled output bits (LSB first)
+        let mut cur_bits: u32 = 0;
+        let mut word = bus.read_word(bitstream);
+        bitstream += 4;
+        let mut remaining = 32u32;
+        // `node` is the address of the current tree node byte; root is at tree_base+1.
+        let mut node = tree_base + 1;
+        let mut guard = 0usize;
+        while out.len() < size {
+            guard += 1;
+            if guard > size * 64 + 1024 {
+                break; // safety net against malformed input
+            }
+            if remaining == 0 {
+                word = bus.read_word(bitstream);
+                bitstream += 4;
+                remaining = 32;
+            }
+            let bit = (word >> 31) & 1;
+            word <<= 1;
+            remaining -= 1;
+
+            let node_val = bus.read_byte(node);
+            let offset = (node_val & 0x3F) as u32;
+            let next_base = (node & !1).wrapping_add(offset * 2 + 2);
+            let child = next_base + bit;
+            let is_data = if bit == 0 { node_val & 0x80 != 0 } else { node_val & 0x40 != 0 };
+            if is_data {
+                let data = bus.read_byte(child) as u32 & ((1u32 << data_bits) - 1);
+                cur_word |= data << cur_bits;
+                cur_bits += data_bits;
+                while cur_bits >= 8 {
+                    out.push((cur_word & 0xFF) as u8);
+                    cur_word >>= 8;
+                    cur_bits -= 8;
+                }
+                node = tree_base + 1; // back to root
+            } else {
+                node = child;
+            }
+        }
+        Self::write_decompressed(bus, dst, &out, false);
+    }
+
+    /// SWI 0x10 - BitUnPack
+    /// Expands packed bit groups (1/2/4/8-bit) into wider units per the unpack
+    /// info structure pointed to by r2.
+    pub fn bit_unpack<T: BusAccessor>(bus: &mut T, gpr: &mut [Word; 16]) {
+        let mut src = gpr[0];
+        let mut dst = gpr[1];
+        let info = gpr[2];
+        let src_len = bus.read_halfword(info) as usize; // bytes
+        let src_width = bus.read_byte(info + 2) as u32; // 1,2,4,8
+        let dst_width = bus.read_byte(info + 3) as u32; // 1,2,4,8,16,32
+        let param = bus.read_word(info + 4);
+        let data_offset = param & 0x7FFF_FFFF;
+        let zero_flag = (param & 0x8000_0000) != 0;
+
+        if src_width == 0 || dst_width == 0 {
+            return;
+        }
+        let mut out_word: u32 = 0;
+        let mut out_bits: u32 = 0;
+        let src_end = src + src_len as u32;
+        let mask = (1u32 << src_width) - 1;
+        while src < src_end {
+            let byte = bus.read_byte(src) as u32;
+            src += 1;
+            let mut bitpos = 0u32;
+            while bitpos < 8 {
+                let val = (byte >> bitpos) & mask;
+                let out_val = if val != 0 || zero_flag { val + data_offset } else { 0 };
+                out_word |= (out_val & ((1u32 << dst_width) - 1)) << out_bits;
+                out_bits += dst_width;
+                if out_bits >= 32 {
+                    bus.write_word(dst, out_word);
+                    dst += 4;
+                    out_word = 0;
+                    out_bits = 0;
+                }
+                bitpos += src_width;
+            }
+        }
+        if out_bits > 0 {
+            bus.write_word(dst, out_word);
+        }
+    }
+
+    /// Write a decompressed byte buffer to `dst`. When `vram` is set, writes are
+    /// performed as 16-bit halfwords (VRAM/Palette/OAM are not byte-writable).
+    fn write_decompressed<T: BusAccessor>(bus: &mut T, dst: Word, out: &[u8], vram: bool) {
+        if vram {
+            let mut i = 0;
+            while i + 1 < out.len() {
+                let hw = out[i] as u16 | ((out[i + 1] as u16) << 8);
+                bus.write_halfword(dst + i as u32, hw);
+                i += 2;
+            }
+            if i < out.len() {
+                bus.write_halfword(dst + i as u32, out[i] as u16);
+            }
+        } else {
+            for (i, b) in out.iter().enumerate() {
+                bus.write_byte(dst + i as u32, *b);
+            }
+        }
+    }
+
     /// Execute BIOS function based on SWI number
     pub fn execute_swi<T: BusAccessor>(
         bus: &mut T,
@@ -319,6 +584,7 @@ impl Bios {
     ) {
         match swi_number {
             0x00 => Self::soft_reset(bus, gpr, 0),
+            0x01 => Self::register_ram_reset(bus, gpr),
             0x02 => Self::halt(bus, gpr),
             0x04 => Self::intr_wait(bus, gpr),
             0x05 => Self::vblank_intr_wait(bus, gpr),
@@ -329,8 +595,18 @@ impl Bios {
             0x0A => Self::arc_tan2(bus, gpr),
             0x0B => Self::cpu_set(bus, gpr),
             0x0C => Self::cpu_fast_set(bus, gpr),
+            0x0D => Self::get_bios_checksum(gpr),
             0x0E => Self::bg_affine_set(bus, gpr),
             0x0F => Self::obj_affine_set(bus, gpr),
+            0x10 => Self::bit_unpack(bus, gpr),
+            0x11 => Self::lz77_uncomp(bus, gpr, false),
+            0x12 => Self::lz77_uncomp(bus, gpr, true),
+            0x13 => Self::huff_uncomp(bus, gpr),
+            0x14 => Self::rl_uncomp(bus, gpr, false),
+            0x15 => Self::rl_uncomp(bus, gpr, true),
+            0x16 => Self::diff_unfilter(bus, gpr, 1, false),
+            0x17 => Self::diff_unfilter(bus, gpr, 1, true),
+            0x18 => Self::diff_unfilter(bus, gpr, 2, true),
             _ => {
                 unimplemented!("BIOS: Unimplemented SWI 0x{:02X}", swi_number);
             }
@@ -389,16 +665,24 @@ mod tests {
             *self.memory.get(&(addr & !3)).unwrap_or(&0)
         }
 
-        fn write_byte(&mut self, _addr: Word, _value: Byte) {
-            // Implement if needed for tests
+        fn write_byte(&mut self, addr: Word, value: Byte) {
+            let word_addr = addr & !3;
+            let shift = (addr & 3) * 8;
+            let cur = *self.memory.get(&word_addr).unwrap_or(&0);
+            let new = (cur & !(0xFFu32 << shift)) | ((value as u32) << shift);
+            self.memory.insert(word_addr, new);
         }
 
-        fn write_halfword(&mut self, _addr: Word, _value: HalfWord) {
-            // Implement if needed for tests
+        fn write_halfword(&mut self, addr: Word, value: HalfWord) {
+            let word_addr = addr & !3;
+            let shift = (addr & 2) * 8;
+            let cur = *self.memory.get(&word_addr).unwrap_or(&0);
+            let new = (cur & !(0xFFFFu32 << shift)) | ((value as u32) << shift);
+            self.memory.insert(word_addr, new);
         }
 
-        fn write_word(&mut self, _addr: Word, _value: Word) {
-            // Implement if needed for tests
+        fn write_word(&mut self, addr: Word, value: Word) {
+            self.memory.insert(addr & !3, value);
         }
     }
 
@@ -448,5 +732,77 @@ mod tests {
         gpr[0] = 0;
         Bios::sqrt(&mut bus, &mut gpr);
         assert_eq!(gpr[0], 0);
+    }
+
+    fn put(bus: &mut MockBus, addr: Word, bytes: &[u8]) {
+        for (i, b) in bytes.iter().enumerate() {
+            bus.write_byte(addr + i as u32, *b);
+        }
+    }
+
+    fn read_bytes(bus: &MockBus, addr: Word, n: usize) -> Vec<u8> {
+        (0..n).map(|i| bus.read_byte(addr + i as u32)).collect()
+    }
+
+    #[test]
+    fn test_get_bios_checksum() {
+        let mut gpr = [0u32; 16];
+        Bios::get_bios_checksum(&mut gpr);
+        assert_eq!(gpr[0], 0xBAAE_187F);
+    }
+
+    #[test]
+    fn test_lz77_uncomp() {
+        let mut bus = MockBus::new();
+        let src = 0x0200_0000;
+        let dst = 0x0200_1000;
+        // Header: size=4 (<<8) | type 1 (<<4) -> 0x00000410.
+        // flag 0x40: bit0 literal 'A', bit1 compressed (disp=1,len=3) -> "AAAA".
+        put(&mut bus, src, &[0x10, 0x04, 0x00, 0x00, 0x40, 0x41, 0x00, 0x00]);
+        let mut gpr = [0u32; 16];
+        gpr[0] = src;
+        gpr[1] = dst;
+        Bios::lz77_uncomp(&mut bus, &mut gpr, false);
+        assert_eq!(read_bytes(&bus, dst, 4), vec![0x41, 0x41, 0x41, 0x41]);
+    }
+
+    #[test]
+    fn test_rl_uncomp() {
+        let mut bus = MockBus::new();
+        let src = 0x0200_0000;
+        let dst = 0x0200_1000;
+        // size=4. flag 0x81 = compressed run of (1+3)=4 of the next byte 'A'.
+        put(&mut bus, src, &[0x30, 0x04, 0x00, 0x00, 0x81, 0x41]);
+        let mut gpr = [0u32; 16];
+        gpr[0] = src;
+        gpr[1] = dst;
+        Bios::rl_uncomp(&mut bus, &mut gpr, false);
+        assert_eq!(read_bytes(&bus, dst, 4), vec![0x41, 0x41, 0x41, 0x41]);
+    }
+
+    #[test]
+    fn test_diff8_unfilter() {
+        let mut bus = MockBus::new();
+        let src = 0x0200_0000;
+        let dst = 0x0200_1000;
+        // size=4. deltas [0x10, 1, 1, 1] -> running sum [0x10, 0x11, 0x12, 0x13].
+        put(&mut bus, src, &[0x10, 0x04, 0x00, 0x00, 0x10, 0x01, 0x01, 0x01]);
+        let mut gpr = [0u32; 16];
+        gpr[0] = src;
+        gpr[1] = dst;
+        Bios::diff_unfilter(&mut bus, &mut gpr, 1, false);
+        assert_eq!(read_bytes(&bus, dst, 4), vec![0x10, 0x11, 0x12, 0x13]);
+    }
+
+    #[test]
+    fn test_register_ram_reset_clears_ewram() {
+        let mut bus = MockBus::new();
+        bus.write_word(0x0200_0000, 0xDEAD_BEEF);
+        bus.write_word(0x0203_FFFC, 0x1234_5678);
+        let mut gpr = [0u32; 16];
+        gpr[0] = 0x01; // reset EWRAM
+        Bios::register_ram_reset(&mut bus, &mut gpr);
+        assert_eq!(bus.read_word(0x0200_0000), 0);
+        assert_eq!(bus.read_word(0x0203_FFFC), 0);
     }
 }
