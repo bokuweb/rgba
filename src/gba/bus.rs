@@ -145,6 +145,10 @@ pub struct CpuBus {
     sram: Ram, // SRAM/FRAM/Flash save memory (0x0E000000-0x0E00FFFF, 64KB max)
     key: io::Key,
     keycnt: HalfWord,
+    siocnt: HalfWord,
+    /// Pending serial transfer completion: clear the SIOCNT start/busy bit and
+    /// (if enabled) raise the SIO interrupt at the next servicing point.
+    sio_irq_latch: bool,
     interrupt_controller: std::cell::RefCell<crate::interrupt::InterruptController>,
     timers: crate::gba::timer::Timers,
     waitcnt: HalfWord,
@@ -185,7 +189,12 @@ impl BusAccessor for CpuBus {
             }
             // IWRAM 32KB mirrors across 0x0300_0000-0x03FF_FFFF
             0x0300_0000..=0x03FF_FFFF => self.wram.read_byte((addr - 0x0300_0000) & 0x7FFF),
-            0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
+            0x0400_0000..=0x0400_005F => {
+                // Byte access to LCD I/O: read the containing halfword and select the byte.
+                let aligned = addr & !1;
+                let hw = self.lcdc.read_halfword(aligned - 0x0400_0000);
+                if (addr & 1) == 0 { (hw & 0x00FF) as u8 } else { (hw >> 8) as u8 }
+            }
             0x0400_0130 => (self.key.read() & 0x00FF) as u8,
             0x0400_0131 => ((self.key.read() >> 8) & 0x00FF) as u8,
             0x0400_0132 => (self.keycnt & 0x00FF) as u8,
@@ -248,6 +257,8 @@ impl BusAccessor for CpuBus {
                     0x0400_00C4 => self.dma.channels[1].count,
                     0x0400_00D0 => self.dma.channels[2].count,
                     0x0400_00DC => self.dma.channels[3].count,
+                    // SIOCNT - Serial Communication Control
+                    0x0400_0128 => self.siocnt,
                     _ => 0,
                 }
             },
@@ -368,14 +379,26 @@ impl BusAccessor for CpuBus {
                 }
                 self.wram.write_byte((addr - 0x0300_0000) & 0x7FFF, data);
             }
-            0x0400_0000..=0x0400_005F => unreachable!("A lcdc bus width should be halfword."),
+            0x0400_0000..=0x0400_005F => {
+                // Byte access to LCD I/O: read-modify-write the containing halfword.
+                let off = (addr & !1) - 0x0400_0000;
+                let cur = self.lcdc.read_halfword(off);
+                let new = if (addr & 1) == 0 {
+                    (cur & 0xFF00) | (data as u16)
+                } else {
+                    (cur & 0x00FF) | ((data as u16) << 8)
+                };
+                self.lcdc.write_halfword(off, new);
+            }
             0x0400_0132 => {
                 // KEYCNT
                 self.keycnt = (self.keycnt & 0xFF00) | (data as u16);
+                self.check_keypad_interrupt();
             }
             0x0400_0133 => {
                 // KEYCNT high byte
                 self.keycnt = (self.keycnt & 0x00FF) | ((data as u16) << 8);
+                self.check_keypad_interrupt();
             }
             0x0400_0100..=0x0400_010F => {
                 let ofs = (addr - 0x0400_0100) as u32;
@@ -460,6 +483,7 @@ impl BusAccessor for CpuBus {
             0x0400_0132 => {
                 // KEYCNT
                 self.keycnt = data;
+                self.check_keypad_interrupt();
             }
             0x0400_0100..=0x0400_010F => {
                 let lo = (data & 0x00FF) as u8;
@@ -473,6 +497,10 @@ impl BusAccessor for CpuBus {
                     // Sound FIFO A/B (accept data; no-op sink for now)
                     0x0400_00A0 | 0x0400_00A4 => {
                         let _ = data;
+                    }
+                    // SIOCNT - Serial Communication Control
+                    0x0400_0128 => {
+                        self.write_siocnt(data);
                     }
                     // DMAx registers (16-bit writes are common on GBA)
                     0x0400_00B0..=0x0400_00DE => {
@@ -582,6 +610,7 @@ impl BusAccessor for CpuBus {
             0x0400_0130 => {
                 // KEYINPUT (RO) low half ignored; KEYCNT is high halfword on word writes
                 self.keycnt = ((data >> 16) & 0xFFFF) as HalfWord;
+                self.check_keypad_interrupt();
             }
             0x0400_0200 => {
                 // IE/IF as a 32-bit pair (low=IE write, high=IF ACK write)
@@ -733,6 +762,8 @@ impl CpuBus {
             sram,
             key,
             keycnt: 0,
+            siocnt: 0,
+            sio_irq_latch: false,
             interrupt_controller: std::cell::RefCell::new(crate::interrupt::InterruptController::new()),
             timers: crate::gba::timer::Timers::default(),
             waitcnt: 0,
@@ -749,6 +780,47 @@ impl CpuBus {
 
     pub(crate) fn update_key(&mut self, key: io::Key) {
         self.key = key;
+        self.check_keypad_interrupt();
+    }
+
+    /// Evaluate the KEYCNT keypad interrupt condition against the current key
+    /// state and raise a Keypad interrupt when it is satisfied.
+    ///
+    /// KEYCNT (0x04000132): bit14 = IRQ enable, bit15 = condition (0=logical OR
+    /// / any selected key, 1=logical AND / all selected keys), bits 0-9 = key
+    /// select mask. KEYINPUT uses 0=pressed, so `pressed = !KEYINPUT & 0x3FF`.
+    pub(crate) fn check_keypad_interrupt(&mut self) {
+        if (self.keycnt & 0x4000) == 0 {
+            return; // IRQ disabled
+        }
+        let mask = self.keycnt & 0x03FF;
+        let pressed = (!self.key.read()) & 0x03FF;
+        let triggered = if (self.keycnt & 0x8000) != 0 {
+            // AND: all selected keys pressed
+            (pressed & mask) == mask
+        } else {
+            // OR: any selected key pressed
+            (pressed & mask) != 0
+        };
+        if triggered {
+            self.interrupt_controller
+                .borrow_mut()
+                .request_interrupt(crate::interrupt::InterruptType::Keypad);
+        }
+    }
+
+    /// Handle a write to SIOCNT (0x04000128). We don't emulate an actual serial
+    /// peripheral, but starting a transfer with the internal shift clock must
+    /// eventually complete and (if enabled) raise the SIO interrupt. The
+    /// start/busy bit (bit 7) stays set until the transfer "completes" on the
+    /// next servicing point, matching software that polls it.
+    fn write_siocnt(&mut self, data: HalfWord) {
+        let starting = (data & 0x0080) != 0 && (self.siocnt & 0x0080) == 0;
+        self.siocnt = data;
+        // Internal shift clock (bit 0) drives the transfer on this side.
+        if starting && (data & 0x0001) != 0 {
+            self.sio_irq_latch = true;
+        }
     }
     
     pub(crate) fn request_vblank_interrupt(&mut self) {
@@ -779,6 +851,18 @@ impl CpuBus {
     }
 
     pub(crate) fn execute_dma_transfers(&mut self) {
+        // Complete any pending serial transfer: clear the start/busy bit and, if
+        // the SIO interrupt is enabled (SIOCNT bit 14), raise it.
+        if self.sio_irq_latch {
+            self.sio_irq_latch = false;
+            self.siocnt &= !0x0080;
+            if (self.siocnt & 0x4000) != 0 {
+                self.interrupt_controller
+                    .borrow_mut()
+                    .request_interrupt(crate::interrupt::InterruptType::Serial);
+            }
+        }
+
         // Raise DMA IRQs with a small delay (next servicing point), not in the same
         // transfer completion moment. This better matches software expectations around IntrWait.
         for channel in 0..4 {
@@ -844,11 +928,26 @@ impl CpuBus {
                 }
                 match self.dma.channels[channel].get_timing() {
                     1 if vblank_rising => self.dma.trigger_timing_event(channel), // VBlank
-                    2 if hblank_rising => self.dma.trigger_timing_event(channel), // HBlank
+                    // HBlank DMA fires only during the visible lines (0..159);
+                    // it does NOT occur during VBlank.
+                    2 if hblank_rising && (vcount as usize) < 160 => self.dma.trigger_timing_event(channel),
+                    // Video-capture DMA (DMA3 "special" timing): fires each HBlank
+                    // for lines 2..=161, then stops at line 162.
+                    3 if channel == 3 && hblank_rising && (2..162).contains(&(vcount as usize)) => {
+                        self.dma.trigger_timing_event(channel)
+                    }
                     _ => {}
                 }
             }
         }
+
+        // Video-capture DMA (DMA3, special timing) is automatically disabled once
+        // VCOUNT reaches line 162.
+        if hblank_rising && vcount as usize == 162 && self.dma.channels[3].enabled && self.dma.channels[3].get_timing() == 3 {
+            self.dma.channels[3].enabled = false;
+            self.dma.channels[3].control &= !0x8000;
+        }
+
         self.prev_vblank = vblank;
         self.prev_hblank = hblank;
         self.prev_vcounter = vcounter;
