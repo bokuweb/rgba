@@ -5,6 +5,15 @@ use crate::types::*;
 use super::constants::*;
 use super::*;
 
+/// A composited sprite pixel: its colour, BG-relative priority and whether it
+/// is a semi-transparent (alpha-blended) OBJ.
+#[derive(Clone, Copy)]
+struct ObjPixel {
+    color: BGR,
+    priority: u16,
+    semi: bool,
+}
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 struct BGR(HalfWord);
 
@@ -930,23 +939,210 @@ impl LCDController {
         }
     }
 
+    /// Sprite (OBJ) sizes indexed by [shape][size] -> (width, height) in pixels.
+    fn obj_size(shape: u16, size: u16) -> (u32, u32) {
+        const T: [[(u32, u32); 4]; 3] = [
+            [(8, 8), (16, 16), (32, 32), (64, 64)],   // square
+            [(16, 8), (32, 8), (32, 16), (64, 32)],   // horizontal
+            [(8, 16), (8, 32), (16, 32), (32, 64)],   // vertical
+        ];
+        let s = (shape as usize).min(2);
+        T[s][(size & 3) as usize]
+    }
+
+    /// Sample one texel of an OBJ. `tx`/`ty` are texture coordinates inside the
+    /// sprite (already flipped). Returns None for the transparent palette index.
+    fn obj_tile_texel(
+        &self,
+        vram: &Ram,
+        palette: &Ram,
+        base_tile: u32,
+        tx: u32,
+        ty: u32,
+        sprite_w: u32,
+        is_8bpp: bool,
+        one_d: bool,
+        palbank: u32,
+        bitmap_mode: bool,
+    ) -> Option<BGR> {
+        let tile_x = tx / 8;
+        let tile_y = ty / 8;
+        let in_x = tx % 8;
+        let in_y = ty % 8;
+        let step = if is_8bpp { 2 } else { 1 };
+        let tile_id = if one_d {
+            base_tile + (tile_y * (sprite_w / 8) + tile_x) * step
+        } else {
+            base_tile + tile_y * 32 + tile_x * step
+        };
+        // In bitmap modes (3-5) only the upper OBJ char block (tiles >= 512) is
+        // usable; lower tiles overlap the BG bitmap and are not displayed.
+        if bitmap_mode && tile_id < 512 {
+            return None;
+        }
+        let char_base: u32 = 0x1_0000;
+        if is_8bpp {
+            let addr = (char_base + tile_id * 32 + in_y * 8 + in_x) & 0x1_7FFF;
+            let v = vram.read_byte(addr);
+            if v == 0 {
+                return None;
+            }
+            Some(BGR::new(palette.read_halfword(0x200 + v as u32 * 2)))
+        } else {
+            let addr = (char_base + tile_id * 32 + in_y * 4 + in_x / 2) & 0x1_7FFF;
+            let byte = vram.read_byte(addr);
+            let nib = if in_x & 1 == 0 { byte & 0x0F } else { (byte >> 4) & 0x0F };
+            if nib == 0 {
+                return None;
+            }
+            Some(BGR::new(palette.read_halfword(0x200 + (palbank * 16 + nib as u32) * 2)))
+        }
+    }
+
+    /// Render all sprites into a full-screen overlay buffer. Each entry is the
+    /// top-most (lowest OBJ index) opaque sprite pixel, with its BG-priority and
+    /// a semi-transparent flag.
+    fn render_obj(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<Option<ObjPixel>> {
+        let mut buf: Vec<Option<ObjPixel>> = vec![None; 240 * 160];
+        if !self.dispcnt.screen_display_obj() {
+            return buf;
+        }
+        let one_d = self.dispcnt.obj_char_mapping();
+        let bitmap_mode = matches!(self.dispcnt.mode(), BgMode::Mode3 | BgMode::Mode4 | BgMode::Mode5);
+
+        for idx in 0..128u32 {
+            let base = idx * 8;
+            let a0 = oam.read_halfword(base);
+            let a1 = oam.read_halfword(base + 2);
+            let a2 = oam.read_halfword(base + 4);
+
+            let affine = (a0 & 0x0100) != 0;
+            let double = (a0 & 0x0200) != 0;
+            if !affine && double {
+                continue; // disable bit
+            }
+            let mode = (a0 >> 10) & 0x3;
+            if mode == 2 || mode == 3 {
+                continue; // OBJ-window / prohibited (OBJ window not yet supported)
+            }
+            let semi = mode == 1;
+            let is_8bpp = (a0 & 0x2000) != 0;
+            let shape = (a0 >> 14) & 0x3;
+            let size = (a1 >> 14) & 0x3;
+            let (w, h) = Self::obj_size(shape, size);
+
+            let y0 = (a0 & 0xFF) as i32;
+            let mut x0 = (a1 & 0x1FF) as i32;
+            if x0 >= 256 {
+                x0 -= 512; // 9-bit signed
+            }
+            let prio = (a2 >> 10) & 0x3;
+            let base_tile = (a2 & 0x3FF) as u32;
+            let palbank = ((a2 >> 12) & 0xF) as u32;
+
+            let (bbw, bbh) = if double { (w * 2, h * 2) } else { (w, h) };
+
+            // Affine matrix (1/256 fixed point). Identity for non-affine sprites.
+            let (pa, pb, pc, pd) = if affine {
+                let g = ((a1 >> 9) & 0x1F) as u32;
+                let rd = |i: u32| oam.read_halfword(g * 32 + i * 8 + 6) as i16 as i32;
+                (rd(0), rd(1), rd(2), rd(3))
+            } else {
+                (0x100, 0, 0, 0x100)
+            };
+            let hflip = !affine && (a1 & 0x1000) != 0;
+            let vflip = !affine && (a1 & 0x2000) != 0;
+
+            for oy in 0..bbh as i32 {
+                let sy = (y0 + oy) & 0xFF;
+                if sy >= 160 {
+                    continue;
+                }
+                for ox in 0..bbw as i32 {
+                    let sx = x0 + ox;
+                    if sx < 0 || sx >= 240 {
+                        continue;
+                    }
+                    // Map screen offset -> texture coordinate.
+                    let (tx, ty) = if affine {
+                        let cx = bbw as i32 / 2;
+                        let cy = bbh as i32 / 2;
+                        let dx = ox - cx;
+                        let dy = oy - cy;
+                        let tx = ((pa * dx + pb * dy) >> 8) + w as i32 / 2;
+                        let ty = ((pc * dx + pd * dy) >> 8) + h as i32 / 2;
+                        (tx, ty)
+                    } else {
+                        let mut tx = ox;
+                        let mut ty = oy;
+                        if hflip {
+                            tx = w as i32 - 1 - tx;
+                        }
+                        if vflip {
+                            ty = h as i32 - 1 - ty;
+                        }
+                        (tx, ty)
+                    };
+                    if tx < 0 || ty < 0 || tx >= w as i32 || ty >= h as i32 {
+                        continue;
+                    }
+
+                    let dst = (sy * 240 + sx) as usize;
+                    // Lower OBJ index has priority: keep the first opaque writer.
+                    if buf[dst].is_some() {
+                        continue;
+                    }
+                    if let Some(color) = self.obj_tile_texel(
+                        vram, palette, base_tile, tx as u32, ty as u32, w, is_8bpp, one_d, palbank,
+                        bitmap_mode,
+                    ) {
+                        buf[dst] = Some(ObjPixel { color, priority: prio, semi });
+                    }
+                }
+            }
+        }
+        buf
+    }
+
     pub fn render(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
+        // Forced blank (DISPCNT bit 7): the screen outputs white.
+        if self.dispcnt.forced_vlank() {
+            return vec![0xFF; 240 * 160 * 4];
+        }
         match self.dispcnt.mode() {
-            BgMode::Mode0 => self.render_with_mode0(vram, palette),
-            BgMode::Mode3 => self.render_with_mode3(vram),
-            BgMode::Mode4 => self.render_with_mode4(vram, palette),
+            BgMode::Mode0 => self.render_with_mode0(vram, palette, oam),
+            BgMode::Mode3 => self.render_with_mode3(vram, palette, oam),
+            BgMode::Mode4 => self.render_with_mode4(vram, palette, oam),
             _ => todo!(),
         }
     }
 
-    fn render_with_mode0(&self, vram: &Ram, palette: &Ram) -> Vec<u8> {
+    /// Composite an OBJ pixel over an already-resolved BG pixel.
+    /// `bg` is (priority, color); `bg_is_2nd_target` enables semi-transparent
+    /// blending. Returns the final colour to display.
+    fn composite_obj(&self, obj: Option<ObjPixel>, bg_priority: u16, bg_color: BGR) -> BGR {
+        match obj {
+            Some(o) if o.priority <= bg_priority => {
+                if o.semi {
+                    // Semi-transparent OBJ blends with the layer below.
+                    self.alpha_blend(o.color, bg_color)
+                } else {
+                    o.color
+                }
+            }
+            _ => bg_color,
+        }
+    }
+
+    fn render_with_mode0(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
         let mut buf = vec![0; 240 * 160 * 4];
+        let obj = self.render_obj(vram, palette, oam);
 
         // Render pixel by pixel with window control and BG priority composition.
         for screen_y in 0..160 {
             for screen_x in 0..240 {
                 // Get window control for this pixel
-                let (bg0_enable, bg1_enable, bg2_enable, bg3_enable, _obj_enable, effect_enable) = self.get_window_control(screen_x, screen_y);
+                let (bg0_enable, bg1_enable, bg2_enable, bg3_enable, obj_enable, effect_enable) = self.get_window_control(screen_x, screen_y);
 
                 let buf_index = ((screen_y * 240 + screen_x) * 4) as usize;
                 let mut best: Option<(u16, usize, BGR)> = None;
@@ -972,22 +1168,22 @@ impl LCDController {
                     }
                 }
 
-                if let Some((_, _, color)) = best {
-                    buf[buf_index] = color.red();
-                    buf[buf_index + 1] = color.green();
-                    buf[buf_index + 2] = color.blue();
-                    buf[buf_index + 3] = 0xFF;
-                } else {
-                    let backdrop_color = self.apply_color_effect(
-                        BGR::new(palette.read_halfword(0)),
-                        5,
-                        effect_enable,
-                    );
-                    buf[buf_index] = backdrop_color.red();
-                    buf[buf_index + 1] = backdrop_color.green();
-                    buf[buf_index + 2] = backdrop_color.blue();
-                    buf[buf_index + 3] = 0xFF;
-                }
+                // Resolve the background pixel (priority 4 = backdrop, below all BGs).
+                let (bg_priority, bg_color) = match best {
+                    Some((p, _, c)) => (p, c),
+                    None => (
+                        4,
+                        self.apply_color_effect(BGR::new(palette.read_halfword(0)), 5, effect_enable),
+                    ),
+                };
+                // Overlay the sprite layer (subject to per-pixel OBJ enable).
+                let obj_px = if obj_enable { obj[(screen_y * 240 + screen_x) as usize] } else { None };
+                let color = self.composite_obj(obj_px, bg_priority, bg_color);
+
+                buf[buf_index] = color.red();
+                buf[buf_index + 1] = color.green();
+                buf[buf_index + 2] = color.blue();
+                buf[buf_index + 3] = 0xFF;
             }
         }
         buf
@@ -1101,29 +1297,42 @@ impl LCDController {
         Some((bgcnt.bg_priority(), color))
     }
 
-    fn render_with_mode3(&self, vram: &Ram) -> Vec<u8> {
-        let mut buf = vec![];
-        for offset in 0..(240 * 160) {
-            let p = vram.read_halfword(offset * 2);
-            buf.push((((p & 0x001F) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
-            buf.push((((p & 0x03E0).wrapping_shr(5) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
-            buf.push((((p & 0xEC00).wrapping_shr(10) as f32 / 0x1F as f32) * 0xFF as f32) as u8);
-            buf.push(255);
+    fn render_with_mode3(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
+        let mut buf = vec![0u8; 240 * 160 * 4];
+        let obj = self.render_obj(vram, palette, oam);
+        let bg_prio = self.bg2cnt.bg_priority();
+        let bg_on = self.dispcnt.screen_display_bg2();
+        for i in 0..(240 * 160) {
+            // Mode 3 BG is a direct 15-bit color bitmap (BG2).
+            let bg = BGR::new(vram.read_halfword(i as Word * 2));
+            let (p, c) = if bg_on { (bg_prio, bg) } else { (4, BGR::new(palette.read_halfword(0))) };
+            let color = self.composite_obj(obj[i], p, c);
+            let bi = i * 4;
+            buf[bi] = color.red();
+            buf[bi + 1] = color.green();
+            buf[bi + 2] = color.blue();
+            buf[bi + 3] = 0xFF;
         }
         buf
     }
 
-    fn render_with_mode4(&self, vram: &Ram, palette: &Ram) -> Vec<u8> {
-        let mut buf = vec![];
+    fn render_with_mode4(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
+        let mut buf = vec![0u8; 240 * 160 * 4];
+        let obj = self.render_obj(vram, palette, oam);
         let is_frame1 = matches!(self.dispcnt.frame(), Frame::Frame1);
         let offset = if is_frame1 { 0xA000 } else { 0x0000 };
-        for addr in 0..(240 * 160) {
-            let palette_index = vram.read_byte(addr + offset);
-            let color = BGR::new(palette.read_halfword(palette_index as Word * 2));
-            buf.push(color.red());
-            buf.push(color.green());
-            buf.push(color.blue());
-            buf.push(0xFF);
+        let bg_prio = self.bg2cnt.bg_priority();
+        let bg_on = self.dispcnt.screen_display_bg2();
+        for i in 0..(240 * 160) {
+            let palette_index = vram.read_byte(i as Word + offset);
+            let bg = BGR::new(palette.read_halfword(palette_index as Word * 2));
+            let (p, c) = if bg_on { (bg_prio, bg) } else { (4, BGR::new(palette.read_halfword(0))) };
+            let color = self.composite_obj(obj[i], p, c);
+            let bi = i * 4;
+            buf[bi] = color.red();
+            buf[bi + 1] = color.green();
+            buf[bi + 2] = color.blue();
+            buf[bi + 3] = 0xFF;
         }
         buf
     }
@@ -1132,6 +1341,7 @@ impl LCDController {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::memory::writable::*;
 
     /// Simulate the AGS `run_vblank_status_test` polling loop directly against
     /// the LCD controller: advance time in small (instruction-sized) steps,
@@ -1186,5 +1396,47 @@ mod tests {
             prev = now;
         }
         assert!(saw_match, "expected a VCount match");
+    }
+
+    #[test]
+    fn obj_size_table() {
+        assert_eq!(LCDController::obj_size(0, 0), (8, 8));
+        assert_eq!(LCDController::obj_size(0, 3), (64, 64));
+        assert_eq!(LCDController::obj_size(1, 0), (16, 8));
+        assert_eq!(LCDController::obj_size(2, 2), (16, 32));
+    }
+
+    #[test]
+    fn render_obj_draws_a_4bpp_sprite() {
+        let mut lcdc = LCDController::new();
+        // Enable OBJ + 1D mapping, mode 0.
+        lcdc.write_halfword(0x0000, 0x1000 | 0x0040);
+
+        let mut vram = Ram::new(vec![0; 0x1_8000]);
+        let mut palette = Ram::new(vec![0; 0x0400]);
+        let mut oam = Ram::new(vec![0; 0x0400]);
+
+        // OBJ tile 0 at VRAM 0x10000: fill an 8x8 4bpp tile with palette index 1.
+        // Each byte packs two 4-bit pixels (0x11 = two pixels of index 1).
+        for i in 0..32u32 {
+            vram.write_byte(0x1_0000 + i, 0x11);
+        }
+        // OBJ palette entry 1 (palette 0x200 + 1*2) = red (BGR555 0x001F).
+        palette.write_halfword(0x200 + 2, 0x001F);
+
+        // OAM sprite 0: y=0, x=0, 8x8 square, 4bpp, tile 0, priority 0.
+        oam.write_halfword(0, 0x0000); // attr0: y=0, normal, square
+        oam.write_halfword(2, 0x0000); // attr1: x=0, size 0
+        oam.write_halfword(4, 0x0000); // attr2: tile 0, prio 0, palbank 0
+
+        let buf = lcdc.render(&vram, &palette, &oam);
+        // Top-left 8x8 should be red; pixel at (10,10) should be backdrop (0).
+        let px = |x: usize, y: usize| {
+            let i = (y * 240 + x) * 4;
+            (buf[i], buf[i + 1], buf[i + 2])
+        };
+        assert_eq!(px(0, 0).0 & 0xF8, 0xF8, "sprite pixel should be red");
+        assert_eq!(px(7, 7).0 & 0xF8, 0xF8, "sprite covers 8x8");
+        assert_eq!(px(10, 10), (0, 0, 0), "outside the sprite is backdrop");
     }
 }
