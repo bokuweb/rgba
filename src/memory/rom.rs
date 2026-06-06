@@ -6,7 +6,12 @@ pub struct Rom(Vec<u8>);
 
 impl Rom {
     pub fn new(size: usize, init: &[u8]) -> Self {
+        let _ = size;
         Rom(init.to_vec())
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 }
 
