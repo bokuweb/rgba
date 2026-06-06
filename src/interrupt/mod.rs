@@ -72,10 +72,13 @@ impl InterruptController {
     /// Request an interrupt
     pub fn request_interrupt(&mut self, interrupt_type: InterruptType) {
         let bit = 1 << (interrupt_type as u16);
-        // JavaScript実装に従い: this.interruptFlags |= 1 << irqType;
+        // Set the hardware IF flag. The BIOS IF work area (0x03007FF8) must NOT be
+        // touched here: on real hardware it is only updated by the IRQ handler when
+        // an interrupt is actually dispatched (i.e. enabled in IE/IME). Setting it
+        // unconditionally would make software believe an interrupt fired even when
+        // it was masked out in IE — which breaks e.g. the AGS interrupt tests that
+        // verify "interrupt did NOT happen when disabled in IE".
         self.if_flags |= bit;
-        // Also update BIOS IF work area for IntrWait/VBlankIntrWait
-        self.bios_if_work |= bit;
         if std::env::var("AGB_TRACE_DMA").ok().as_deref() == Some("1") {
             if matches!(
                 interrupt_type,
