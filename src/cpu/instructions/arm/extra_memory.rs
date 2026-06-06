@@ -63,9 +63,9 @@ where
     if dec.get_P() {
         base = offset_base;
     }
-    // 半ワードをそのまま実効アドレスへ格納（未アラインドも許容）
-    // プロジェクト内ユニットテストの期待に合わせる。
-    bus.write_halfword(base, (gpr[rd] & 0xFFFF) as HalfWord);
+    // STRH force-aligns the effective address to a halfword boundary on
+    // ARM7TDMI: bit 0 of the address is ignored. (gba-tests arm t407)
+    bus.write_halfword(base & 0xFFFF_FFFE, (gpr[rd] & 0xFFFF) as HalfWord);
     let store_cycle = bus.compute_cycle(base, access_type);
     if !dec.get_P() {
         gpr[dec.get_Rn() as usize] = offset_base;
