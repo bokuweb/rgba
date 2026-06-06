@@ -1110,10 +1110,12 @@ impl LCDController {
             return vec![0xFF; 240 * 160 * 4];
         }
         match self.dispcnt.mode() {
-            BgMode::Mode0 => self.render_with_mode0(vram, palette, oam),
+            BgMode::Mode0 | BgMode::Mode1 | BgMode::Mode2 => {
+                self.render_tiled(self.dispcnt.mode(), vram, palette, oam)
+            }
             BgMode::Mode3 => self.render_with_mode3(vram, palette, oam),
             BgMode::Mode4 => self.render_with_mode4(vram, palette, oam),
-            _ => todo!(),
+            BgMode::Mode5 => self.render_with_mode5(vram, palette, oam),
         }
     }
 
@@ -1135,6 +1137,13 @@ impl LCDController {
     }
 
     fn render_with_mode0(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
+        self.render_tiled(BgMode::Mode0, vram, palette, oam)
+    }
+
+    /// Generic compositor for the tiled BG modes (0/1/2): per pixel, sample each
+    /// enabled BG layer, pick the highest priority, apply colour effects, then
+    /// overlay sprites.
+    fn render_tiled(&self, mode: BgMode, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
         let mut buf = vec![0; 240 * 160 * 4];
         let obj = self.render_obj(vram, palette, oam);
 
@@ -1152,7 +1161,7 @@ impl LCDController {
                         continue;
                     }
                     if let Some((priority, mut color)) =
-                        self.sample_text_bg_pixel(layer, screen_x, screen_y, vram, palette)
+                        self.sample_bg_layer(mode, layer, screen_x, screen_y, vram, palette)
                     {
                         color = self.apply_color_effect(color, layer as u8, effect_enable);
                         match best {
@@ -1297,6 +1306,94 @@ impl LCDController {
         Some((bgcnt.bg_priority(), color))
     }
 
+    /// Sample an affine (rotation/scaling) background layer (BG2 or BG3). These
+    /// are 8bpp tilemaps whose map entries are a single tile-number byte; the
+    /// texture coordinate is computed from the PA-PD matrix and the (BGxX, BGxY)
+    /// reference point.
+    fn sample_affine_bg_pixel(
+        &self,
+        layer: usize,
+        screen_x: Word,
+        screen_y: Word,
+        vram: &Ram,
+        palette: &Ram,
+    ) -> Option<(u16, BGR)> {
+        let (enabled, bgcnt, pa, pb, pc, pd, refx, refy) = match layer {
+            2 => (
+                self.dispcnt.screen_display_bg2(),
+                self.bg2cnt,
+                self.bg2pa as i16 as i32,
+                self.bg2pb as i16 as i32,
+                self.bg2pc as i16 as i32,
+                self.bg2pd as i16 as i32,
+                self.bg2x as i32,
+                self.bg2y as i32,
+            ),
+            3 => (
+                self.dispcnt.screen_display_bg3(),
+                self.bg3cnt,
+                self.bg3pa as i16 as i32,
+                self.bg3pb as i16 as i32,
+                self.bg3pc as i16 as i32,
+                self.bg3pd as i16 as i32,
+                self.bg3x as i32,
+                self.bg3y as i32,
+            ),
+            _ => return None,
+        };
+        if !enabled {
+            return None;
+        }
+
+        let size_pixels = 128i32 << bgcnt.screen_size(); // 128/256/512/1024
+        let wrap = (bgcnt.read() & 0x2000) != 0; // display-area overflow: wraparound
+        let x = screen_x as i32;
+        let y = screen_y as i32;
+        let mut tx = (refx + pa * x + pb * y) >> 8;
+        let mut ty = (refy + pc * x + pd * y) >> 8;
+        if wrap {
+            tx = tx.rem_euclid(size_pixels);
+            ty = ty.rem_euclid(size_pixels);
+        } else if tx < 0 || ty < 0 || tx >= size_pixels || ty >= size_pixels {
+            return None;
+        }
+
+        let tiles = (size_pixels / 8) as u32;
+        let map_base = bgcnt.bg_map_offset();
+        let char_base = bgcnt.bg_tile_offset();
+        let tile_x = (tx as u32) / 8;
+        let tile_y = (ty as u32) / 8;
+        let tile_num = vram.read_byte(map_base + tile_y * tiles + tile_x) as u32;
+        let in_x = (tx as u32) % 8;
+        let in_y = (ty as u32) % 8;
+        let idx = vram.read_byte((char_base + tile_num * 64 + in_y * 8 + in_x) & 0x1_7FFF);
+        if idx == 0 {
+            return None;
+        }
+        let color = BGR::new(palette.read_halfword(idx as Word * 2));
+        Some((bgcnt.bg_priority(), color))
+    }
+
+    /// Sample one BG layer for the given tiled mode (0/1/2): text layers for
+    /// Mode 0, text BG0/BG1 + affine BG2 for Mode 1, affine BG2/BG3 for Mode 2.
+    fn sample_bg_layer(
+        &self,
+        mode: BgMode,
+        layer: usize,
+        x: Word,
+        y: Word,
+        vram: &Ram,
+        palette: &Ram,
+    ) -> Option<(u16, BGR)> {
+        match (mode, layer) {
+            (BgMode::Mode0, 0..=3) => self.sample_text_bg_pixel(layer, x, y, vram, palette),
+            (BgMode::Mode1, 0) | (BgMode::Mode1, 1) => self.sample_text_bg_pixel(layer, x, y, vram, palette),
+            (BgMode::Mode1, 2) => self.sample_affine_bg_pixel(2, x, y, vram, palette),
+            (BgMode::Mode2, 2) | (BgMode::Mode2, 3) => self.sample_affine_bg_pixel(layer, x, y, vram, palette),
+            _ => None,
+        }
+    }
+
     fn render_with_mode3(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
         let mut buf = vec![0u8; 240 * 160 * 4];
         let obj = self.render_obj(vram, palette, oam);
@@ -1333,6 +1430,42 @@ impl LCDController {
             buf[bi + 1] = color.green();
             buf[bi + 2] = color.blue();
             buf[bi + 3] = 0xFF;
+        }
+        buf
+    }
+
+    /// Mode 5: a 160x128 15-bit colour bitmap (BG2), affine-transformable, with
+    /// two display frames.
+    fn render_with_mode5(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
+        let mut buf = vec![0u8; 240 * 160 * 4];
+        let obj = self.render_obj(vram, palette, oam);
+        let base = if matches!(self.dispcnt.frame(), Frame::Frame1) { 0xA000u32 } else { 0 };
+        let bg_on = self.dispcnt.screen_display_bg2();
+        let bg_prio = self.bg2cnt.bg_priority();
+        let pa = self.bg2pa as i16 as i32;
+        let pb = self.bg2pb as i16 as i32;
+        let pc = self.bg2pc as i16 as i32;
+        let pd = self.bg2pd as i16 as i32;
+        let refx = self.bg2x as i32;
+        let refy = self.bg2y as i32;
+        for y in 0..160i32 {
+            for x in 0..240i32 {
+                let tx = (refx + pa * x + pb * y) >> 8;
+                let ty = (refy + pc * x + pd * y) >> 8;
+                let (p, c) = if bg_on && (0..160).contains(&tx) && (0..128).contains(&ty) {
+                    let addr = base + (ty as u32 * 160 + tx as u32) * 2;
+                    (bg_prio, BGR::new(vram.read_halfword(addr)))
+                } else {
+                    (4, BGR::new(palette.read_halfword(0)))
+                };
+                let i = (y * 240 + x) as usize;
+                let color = self.composite_obj(obj[i], p, c);
+                let bi = i * 4;
+                buf[bi] = color.red();
+                buf[bi + 1] = color.green();
+                buf[bi + 2] = color.blue();
+                buf[bi + 3] = 0xFF;
+            }
         }
         buf
     }
@@ -1404,6 +1537,41 @@ mod tests {
         assert_eq!(LCDController::obj_size(0, 3), (64, 64));
         assert_eq!(LCDController::obj_size(1, 0), (16, 8));
         assert_eq!(LCDController::obj_size(2, 2), (16, 32));
+    }
+
+    #[test]
+    fn render_affine_bg2_identity() {
+        let mut lcdc = LCDController::new();
+        // Mode 2, BG2 display on.
+        lcdc.write_halfword(0x0000, 0x0002 | 0x0400);
+        // BG2CNT: char base block 1 (0x4000), map base block 0, screen size 0 (128x128).
+        lcdc.write_halfword(0x000C, 0x0004);
+        // Identity affine matrix, zero reference point (defaults already set, but be explicit).
+        lcdc.write_halfword(0x0020, 0x0100); // PA = 1.0
+        lcdc.write_halfword(0x0026, 0x0100); // PD = 1.0
+        lcdc.write_word(0x0028, 0); // BG2X
+        lcdc.write_word(0x002C, 0); // BG2Y
+
+        let mut vram = Ram::new(vec![0; 0x1_8000]);
+        let mut palette = Ram::new(vec![0; 0x0400]);
+        let oam = Ram::new(vec![0; 0x0400]);
+
+        // Affine map entry (0,0) -> tile number 1 (1 byte per entry, map base 0).
+        vram.write_byte(0x0000, 1);
+        // Tile 1 (8bpp) at char base 0x4000 + 1*64 = 0x4040: fill with palette index 1.
+        for i in 0..64u32 {
+            vram.write_byte(0x4040 + i, 1);
+        }
+        // BG palette index 1 = red.
+        palette.write_halfword(2, 0x001F);
+
+        let buf = lcdc.render(&vram, &palette, &oam);
+        let px = |x: usize, y: usize| {
+            let i = (y * 240 + x) * 4;
+            (buf[i], buf[i + 1], buf[i + 2])
+        };
+        assert_eq!(px(0, 0).0 & 0xF8, 0xF8, "affine BG2 pixel should be red");
+        assert_eq!(px(7, 7).0 & 0xF8, 0xF8, "tile (0,0) covers 8x8");
     }
 
     #[test]
