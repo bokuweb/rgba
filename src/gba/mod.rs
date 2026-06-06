@@ -83,43 +83,43 @@ impl GBA {
     }
 
     pub fn frame(&mut self, started: bool) -> Vec<u8> {
-        let mut total_cycles = 0;
         loop {
             let cycles = self.arm.step(&mut self.bus, started).unwrap();
-            total_cycles += cycles;
             // 累積サイクル（絶対値）を更新し、タイマーを進める
             self.cycles += cycles;
             self.bus.tick_timers(self.cycles as u64);
+
+            // Advance the LCD by exactly this instruction's cycle count so that
+            // DISPSTAT / VCOUNT / the blanking flags track CPU time at
+            // instruction granularity. Timing-sensitive software polls these in
+            // tight loops (e.g. measuring HBlank duration with a timer), so a
+            // coarse batched update would report the wrong durations.
+            let (ready, vblank_irq) = self.bus.borrow_mut_lcdc().run(cycles);
+
+            // Check for VBlank IRQ and trigger CPU interrupt if needed.
+            // Route through the interrupt controller so that the IF flag and
+            // the BIOS IF work area (0x03007FF8) get the VBlank bit set; the
+            // CPU IRQ itself is then raised via should_service_interrupt()
+            // below. Calling arm.request_irq() directly would raise the
+            // exception without setting IF, so the BIOS handler could not
+            // identify it as VBlank and IntrWait/VBlankIntrWait would spin
+            // forever.
+            if vblank_irq {
+                self.bus.request_vblank_interrupt();
+            }
+
+            // DMA + HBlank/VCounter edge detection. Runs after the LCD update so
+            // it observes the freshly-updated DISPSTAT edges.
+            self.bus.execute_dma_transfers();
 
             // IE/IF/IMEの組み合わせでサービス可能ならCPUにIRQ要求
             if self.bus.should_service_interrupt() {
                 self.arm.request_irq();
             }
 
-            // Execute any pending DMA transfers
-            self.bus.execute_dma_transfers();
-
-            // Process LCD controller with accumulated cycles more frequently for accurate DISPSTAT reads
-            if total_cycles >= 100 {
-                let lcdc = self.bus.borrow_mut_lcdc();
-                let (ready, vblank_irq) = lcdc.run(total_cycles);
-                total_cycles = 0;
-
-                // Check for VBlank IRQ and trigger CPU interrupt if needed
-                if vblank_irq {
-                    self.arm.request_irq();
-                }
-
-                if ready {
-                    break;
-                }
+            if ready {
+                break;
             }
-        }
-
-        // Process any remaining cycles
-        if total_cycles > 0 {
-            let lcdc = self.bus.borrow_mut_lcdc();
-            lcdc.run(total_cycles);
         }
 
         let lcdc = self.bus.borrow_lcdc();
