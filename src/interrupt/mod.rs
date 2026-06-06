@@ -157,3 +157,60 @@ impl InterruptController {
         self.bios_if_work &= !mask;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn request_interrupt_sets_if_but_not_bios_if_work() {
+        // The BIOS IF work area (0x03007FF8) must only be updated by the IRQ
+        // handler on actual dispatch, never by merely requesting an interrupt.
+        // (Regression test for the agb_checker INTERRUPT "did not fire when
+        // masked in IE" checks.)
+        let mut ic = InterruptController::new();
+        ic.request_interrupt(InterruptType::VBlank);
+        assert_eq!(ic.read_if() & 0x0001, 0x0001);
+        assert_eq!(ic.read_bios_if_work(), 0, "bios_if_work must stay untouched");
+    }
+
+    #[test]
+    fn should_service_requires_ie_and_ime() {
+        let mut ic = InterruptController::new();
+        ic.request_interrupt(InterruptType::VBlank);
+        // IE disabled, IME disabled -> no service.
+        assert!(!ic.should_service_interrupt());
+
+        ic.write_ie(0x0001); // enable VBlank in IE
+        assert!(!ic.should_service_interrupt(), "still needs IME");
+
+        ic.write_ime(0x0001); // enable IME
+        assert!(ic.should_service_interrupt());
+
+        // A pending interrupt not enabled in IE must not be serviced.
+        ic.write_if(0xFFFF); // clear all IF
+        ic.request_interrupt(InterruptType::Timer0);
+        assert!(!ic.should_service_interrupt(), "Timer0 not enabled in IE");
+    }
+
+    #[test]
+    fn write_if_acknowledges_only_set_bits() {
+        let mut ic = InterruptController::new();
+        ic.request_interrupt(InterruptType::VBlank);
+        ic.request_interrupt(InterruptType::HBlank);
+        // Acknowledge only VBlank.
+        ic.write_if(0x0001);
+        assert_eq!(ic.read_if() & 0x0001, 0, "VBlank acknowledged");
+        assert_eq!(ic.read_if() & 0x0002, 0x0002, "HBlank still pending");
+    }
+
+    #[test]
+    fn highest_priority_pending_interrupt_is_lowest_bit() {
+        let mut ic = InterruptController::new();
+        ic.write_ie(0xFFFF);
+        ic.write_ime(0x0001);
+        ic.request_interrupt(InterruptType::DMA1);
+        ic.request_interrupt(InterruptType::HBlank);
+        assert_eq!(ic.get_pending_interrupt(), Some(InterruptType::HBlank));
+    }
+}

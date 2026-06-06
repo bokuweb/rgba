@@ -1128,3 +1128,63 @@ impl LCDController {
         buf
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Simulate the AGS `run_vblank_status_test` polling loop directly against
+    /// the LCD controller: advance time in small (instruction-sized) steps,
+    /// poll the VBlank flag, and record VCOUNT at each flag transition. The
+    /// VBlank flag must set at line 160 and clear at line 227.
+    #[test]
+    fn vblank_flag_transitions_at_lines_160_and_227() {
+        let mut lcdc = LCDController::new();
+        let mut prev = lcdc.read_halfword(0x0004) & 0x0001;
+        let mut transitions: Vec<(u16, u16)> = Vec::new(); // (vblank_flag, vcount)
+        // Run for a couple of frames worth of small steps.
+        for _ in 0..(super::CYCLES_PER_FRAME / 4 * 3) {
+            lcdc.run(4);
+            let now = lcdc.read_halfword(0x0004) & 0x0001;
+            if now != prev {
+                let vcount = lcdc.read_halfword(0x0006);
+                transitions.push((now, vcount));
+                prev = now;
+            }
+            if transitions.len() >= 4 {
+                break;
+            }
+        }
+        assert!(transitions.len() >= 2, "expected VBlank transitions");
+        for (flag, vcount) in transitions {
+            if flag != 0 {
+                assert_eq!(vcount, 160, "VBlank flag set should occur at line 160");
+            } else {
+                assert_eq!(vcount, 227, "VBlank flag clear should occur at line 227");
+            }
+        }
+    }
+
+    /// Simulate the VCount-match polling: with a VCount setting, the match flag
+    /// must set exactly on the configured line and the VCOUNT read at that point
+    /// must equal the setting.
+    #[test]
+    fn vcount_match_flag_sets_on_configured_line() {
+        let mut lcdc = LCDController::new();
+        lcdc.write_halfword(0x0004, 100 << 8); // VCount setting = line 100
+        let mut prev = lcdc.read_halfword(0x0004) & 0x0004;
+        let mut saw_match = false;
+        for _ in 0..(super::CYCLES_PER_FRAME / 4 * 2) {
+            lcdc.run(4);
+            let now = lcdc.read_halfword(0x0004) & 0x0004;
+            if now != 0 && prev == 0 {
+                // rising edge of VCount match
+                assert_eq!(lcdc.read_halfword(0x0006), 100, "VCount match must be at line 100");
+                saw_match = true;
+                break;
+            }
+            prev = now;
+        }
+        assert!(saw_match, "expected a VCount match");
+    }
+}

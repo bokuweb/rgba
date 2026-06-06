@@ -1230,3 +1230,117 @@ impl CpuBus {
         &self.oam
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::interrupt::InterruptType;
+
+    fn new_bus() -> CpuBus {
+        let bios = Rom::new(0x4000, &[0u8; 0x4000][..]);
+        let rom = Rom::new(0x80000, &[0u8; 0x80000][..]);
+        let wram = Ram::new(vec![0; 0x8000]);
+        let eram = Ram::new(vec![0; 0x4_0000]);
+        let vram = Ram::new(vec![0; 0x1_8000]);
+        let palette = Ram::new(vec![0; 0x0400]);
+        let oam = Ram::new(vec![0; 0x0400]);
+        let sram = Ram::new(vec![0; 0x1_0000]);
+        let lcdc = lcd::LCDController::new();
+        let key = io::Key::new();
+        CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, sram, key)
+    }
+
+    fn if_flags(bus: &CpuBus) -> u16 {
+        bus.interrupt_controller.borrow().read_if()
+    }
+
+    #[test]
+    fn keypad_irq_or_condition_fires_when_any_selected_key_pressed() {
+        let mut bus = new_bus();
+        // KEYCNT: IRQ enable (bit14), OR condition (bit15=0), select START (bit3).
+        bus.write_halfword(0x0400_0132, 0x4000 | 0x0008);
+        assert_eq!(if_flags(&bus) & (1 << 12), 0, "no key pressed yet");
+
+        // Press START (KEYINPUT 0=pressed).
+        let mut key = io::Key::new();
+        key.set_START(io::KeyStatus::ON);
+        bus.update_key(key);
+        assert_ne!(if_flags(&bus) & (1 << 12), 0, "keypad IRQ should fire");
+    }
+
+    #[test]
+    fn keypad_irq_and_condition_requires_all_selected_keys() {
+        let mut bus = new_bus();
+        // AND condition (bit15=1), IRQ enable, select A (bit0) and B (bit1).
+        bus.write_halfword(0x0400_0132, 0x4000 | 0x8000 | 0x0001 | 0x0002);
+
+        // Only A pressed: AND not satisfied.
+        let mut key = io::Key::new();
+        key.set_A(io::KeyStatus::ON);
+        bus.update_key(key);
+        assert_eq!(if_flags(&bus) & (1 << 12), 0, "AND needs all keys");
+
+        // A and B pressed: AND satisfied.
+        key.set_B(io::KeyStatus::ON);
+        bus.update_key(key);
+        assert_ne!(if_flags(&bus) & (1 << 12), 0, "AND satisfied");
+    }
+
+    #[test]
+    fn keypad_irq_not_raised_when_disabled() {
+        let mut bus = new_bus();
+        // IRQ enable bit clear.
+        bus.write_halfword(0x0400_0132, 0x0008);
+        let mut key = io::Key::new();
+        key.set_START(io::KeyStatus::ON);
+        bus.update_key(key);
+        assert_eq!(if_flags(&bus) & (1 << 12), 0, "keypad IRQ disabled");
+    }
+
+    #[test]
+    fn sio_internal_transfer_raises_serial_irq_after_servicing() {
+        let mut bus = new_bus();
+        // SIOCNT: internal shift clock (bit0), IRQ enable (bit14), start (bit7).
+        bus.write_halfword(0x0400_0128, 0x4000 | 0x0001 | 0x0080);
+        // Busy bit stays set until completion (software polls it).
+        assert_ne!(bus.read_halfword(0x0400_0128) & 0x0080, 0, "busy bit set right after start");
+        assert_eq!(if_flags(&bus) & (1 << 7), 0, "IRQ not raised yet");
+
+        // Completion happens at the next servicing point.
+        bus.execute_dma_transfers();
+        assert_eq!(bus.read_halfword(0x0400_0128) & 0x0080, 0, "busy bit cleared on completion");
+        assert_ne!(if_flags(&bus) & (1 << 7), 0, "serial IRQ raised");
+    }
+
+    #[test]
+    fn sio_without_irq_enable_does_not_raise() {
+        let mut bus = new_bus();
+        // Internal clock + start, but no IRQ enable.
+        bus.write_halfword(0x0400_0128, 0x0001 | 0x0080);
+        bus.execute_dma_transfers();
+        assert_eq!(if_flags(&bus) & (1 << 7), 0, "no serial IRQ without IRQ enable");
+    }
+
+    #[test]
+    fn lcd_io_byte_access_round_trips() {
+        let mut bus = new_bus();
+        // Byte writes to DISPCNT (0x04000000) must not panic and must compose
+        // into the halfword (regression test for the byte-access panic).
+        bus.write_byte(0x0400_0000, 0x12);
+        bus.write_byte(0x0400_0001, 0x03);
+        assert_eq!(bus.read_halfword(0x0400_0000), 0x0312);
+        assert_eq!(bus.read_byte(0x0400_0000), 0x12);
+        assert_eq!(bus.read_byte(0x0400_0001), 0x03);
+    }
+
+    #[test]
+    fn request_vblank_interrupt_sets_if_flag() {
+        let mut bus = new_bus();
+        bus.request_vblank_interrupt();
+        assert_ne!(if_flags(&bus) & (1 << 0), 0, "VBlank IF bit set");
+        assert_eq!(if_flags(&bus) & !(1 << 0), 0, "only VBlank bit set");
+        // request_interrupt path used here must not pre-fill the BIOS work area.
+        assert_eq!(bus.interrupt_controller.borrow().read_bios_if_work(), 0);
+        let _ = InterruptType::VBlank; // keep import used across cfgs
+    }
+}
