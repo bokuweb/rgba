@@ -85,30 +85,14 @@ impl GBA {
     pub fn frame(&mut self, started: bool) -> Vec<u8> {
         loop {
             let cycles = self.arm.step(&mut self.bus, started).unwrap();
-            // 累積サイクル（絶対値）を更新し、タイマーを進める
-            self.cycles += cycles;
-            self.bus.tick_timers(self.cycles as u64);
 
-            // Advance the LCD by exactly this instruction's cycle count so that
-            // DISPSTAT / VCOUNT / the blanking flags track CPU time at
-            // instruction granularity. Timing-sensitive software polls these in
-            // tight loops (e.g. measuring HBlank duration with a timer), so a
-            // coarse batched update would report the wrong durations.
-            let (ready, vblank_irq) = self.bus.borrow_mut_lcdc().run(cycles);
+            // Advance the single master clock by this instruction's cycles. This
+            // drives the timers and the LCD (and raises the VBlank IRQ) off one
+            // delta. DMA advances the same clock per transfer, so timers/LCD stay
+            // in lockstep with the CPU even mid-DMA.
+            self.bus.advance_clock(cycles);
 
-            // Check for VBlank IRQ and trigger CPU interrupt if needed.
-            // Route through the interrupt controller so that the IF flag and
-            // the BIOS IF work area (0x03007FF8) get the VBlank bit set; the
-            // CPU IRQ itself is then raised via should_service_interrupt()
-            // below. Calling arm.request_irq() directly would raise the
-            // exception without setting IF, so the BIOS handler could not
-            // identify it as VBlank and IntrWait/VBlankIntrWait would spin
-            // forever.
-            if vblank_irq {
-                self.bus.request_vblank_interrupt();
-            }
-
-            // DMA + HBlank/VCounter edge detection. Runs after the LCD update so
+            // DMA + HBlank/VCounter edge detection. Runs after the clock update so
             // it observes the freshly-updated DISPSTAT edges.
             self.bus.execute_dma_transfers();
 
@@ -117,7 +101,7 @@ impl GBA {
                 self.arm.request_irq();
             }
 
-            if ready {
+            if self.bus.take_frame_ready() {
                 break;
             }
         }
