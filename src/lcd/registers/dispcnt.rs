@@ -1,7 +1,6 @@
-use super::*;
 use crate::types::*;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum BgMode {
     Mode0,
     Mode1,
@@ -12,7 +11,7 @@ pub enum BgMode {
 }
 
 bitfield! {
-    #[derive(Debug, PartialEq, Clone, Copy)]
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct DISPCNT(u16);
     pub obj_display_flag, _: 15;
     pub window1_display_flag, _: 14;
@@ -36,7 +35,7 @@ pub enum Frame {
 
 impl DISPCNT {
     pub fn new() -> Self {
-        DISPCNT::default()
+        Self::default()
     }
 
     pub fn mode(&self) -> BgMode {
@@ -52,11 +51,11 @@ impl DISPCNT {
         }
     }
 
-    pub fn write(&mut self, data: HalfWord) {
-        self.0 = data
+    pub const fn write(&mut self, data: HalfWord) {
+        self.0 = data;
     }
 
-    pub fn read(&self) -> HalfWord {
+    pub const fn read(&self) -> HalfWord {
         self.0
     }
 
@@ -71,6 +70,6 @@ impl DISPCNT {
 
 impl Default for DISPCNT {
     fn default() -> Self {
-        DISPCNT(0x0080)
+        Self(0x0080)
     }
 }

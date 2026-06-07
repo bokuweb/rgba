@@ -120,7 +120,7 @@ fn main() {
         // Persist battery-backed save memory roughly once a second (no-op unless
         // the game wrote to it). A final flush happens on exit below.
         frames = frames.wrapping_add(1);
-        if frames % 60 == 0 {
+        if frames.is_multiple_of(60) {
             gba.flush_save_if_dirty();
         }
 

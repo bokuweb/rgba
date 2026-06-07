@@ -86,7 +86,7 @@ struct Square {
 impl Square {
     /// Create a channel, optionally with a frequency-sweep unit.
     fn new(has_sweep: bool) -> Self {
-        Square { has_sweep, ..Default::default() }
+        Self { has_sweep, ..Default::default() }
     }
 
     /// Master cycles between successive duty steps for the current frequency.
@@ -125,7 +125,7 @@ impl Square {
 
     /// Compute the next swept frequency, disabling the channel if it overflows
     /// the 11-bit range (the hardware overflow check).
-    fn sweep_calc(&mut self) -> u16 {
+    const fn sweep_calc(&mut self) -> u16 {
         let delta = self.shadow_freq >> self.sweep_shift;
         let new = if self.sweep_dir_down {
             self.shadow_freq.wrapping_sub(delta)
@@ -140,7 +140,7 @@ impl Square {
 
     /// Advance the frequency sweep one tick (128 Hz). Applies the new frequency
     /// and re-checks for overflow when the sweep period elapses.
-    fn clock_sweep(&mut self) {
+    const fn clock_sweep(&mut self) {
         if !self.has_sweep || !self.sweep_enabled {
             return;
         }
@@ -162,7 +162,7 @@ impl Square {
 
     /// Advance the length counter one tick (256 Hz), disabling the channel when
     /// it reaches zero.
-    fn clock_length(&mut self) {
+    const fn clock_length(&mut self) {
         if self.length_enable && self.length_counter > 0 {
             self.length_counter -= 1;
             if self.length_counter == 0 {
@@ -172,7 +172,7 @@ impl Square {
     }
 
     /// Advance the volume envelope one tick (64 Hz).
-    fn clock_envelope(&mut self) {
+    const fn clock_envelope(&mut self) {
         if self.env_period == 0 {
             return;
         }
@@ -191,7 +191,7 @@ impl Square {
 
     /// Current DAC output level (0..15): the envelope volume while the duty
     /// pattern is high, otherwise zero.
-    fn output(&self) -> u8 {
+    const fn output(&self) -> u8 {
         if self.enabled && self.dac_on && DUTY[self.duty as usize][self.duty_pos as usize] == 1 {
             self.env_volume
         } else {
@@ -262,7 +262,7 @@ impl Wave {
     }
 
     /// Advance the length counter one tick, disabling the channel at zero.
-    fn clock_length(&mut self) {
+    const fn clock_length(&mut self) {
         if self.length_enable && self.length_counter > 0 {
             self.length_counter -= 1;
             if self.length_counter == 0 {
@@ -273,7 +273,7 @@ impl Wave {
 
     /// Current DAC output (0..15): the selected wave-RAM nibble scaled by the
     /// volume selector.
-    fn output(&self) -> u8 {
+    const fn output(&self) -> u8 {
         if !self.enabled || !self.dac_on {
             return 0;
         }
@@ -374,7 +374,7 @@ impl Noise {
     }
 
     /// Advance the length counter one tick, disabling the channel at zero.
-    fn clock_length(&mut self) {
+    const fn clock_length(&mut self) {
         if self.length_enable && self.length_counter > 0 {
             self.length_counter -= 1;
             if self.length_counter == 0 {
@@ -384,7 +384,7 @@ impl Noise {
     }
 
     /// Advance the volume envelope one tick (64 Hz).
-    fn clock_envelope(&mut self) {
+    const fn clock_envelope(&mut self) {
         if self.env_period == 0 {
             return;
         }
@@ -403,7 +403,7 @@ impl Noise {
 
     /// Current DAC output (0..15): the envelope volume while the LFSR's low bit
     /// is clear, otherwise zero.
-    fn output(&self) -> u8 {
+    const fn output(&self) -> u8 {
         if self.enabled && self.dac_on && (self.lfsr & 1) == 0 {
             self.env_volume
         } else {
@@ -522,14 +522,14 @@ pub struct Apu {
 
 impl Default for Apu {
     fn default() -> Self {
-        Apu::new()
+        Self::new()
     }
 }
 
 impl Apu {
     /// Create a powered-off APU with empty FIFOs and channels.
     pub fn new() -> Self {
-        Apu {
+        Self {
             ch1: Square::new(true),
             ch2: Square::new(false),
             ch3: Wave::default(),
@@ -619,7 +619,7 @@ impl Apu {
     /// Run one step of the 512 Hz frame sequencer, which clocks the length
     /// counters (256 Hz, even steps), the sweep unit (128 Hz, steps 2 and 6) and
     /// the volume envelopes (64 Hz, step 7).
-    fn clock_sequencer(&mut self) {
+    const fn clock_sequencer(&mut self) {
         match self.seq_step {
             0 | 4 => {
                 self.ch1.clock_length();
@@ -707,7 +707,7 @@ impl Apu {
     /// `0x04000060..=0x040000A7` (or wave RAM `0x90..=0x9F`); unmapped offsets
     /// read back as 0.
     pub fn read_register(&self, addr: u32) -> u8 {
-        let off = (addr & 0xFF) as u32;
+        let off = addr & 0xFF;
         match off {
             // Channel 1
             0x60 => self.ch1.sweep_byte(),
@@ -801,7 +801,7 @@ impl Apu {
     /// While the APU master is disabled, all registers except SOUNDCNT_X and
     /// wave RAM ignore writes, matching hardware.
     pub fn write_register(&mut self, addr: u32, data: u8) {
-        let off = (addr & 0xFF) as u32;
+        let off = addr & 0xFF;
         // With the master disabled, only SOUNDCNT_X and wave RAM are writable.
         if !self.master_enable && off != 0x84 && !(0x90..=0x9F).contains(&off) {
             return;
@@ -887,30 +887,30 @@ impl Apu {
 
 impl Square {
     /// SOUND1CNT_L (sweep) read-back, with the unused high bit set.
-    fn sweep_byte(&self) -> u8 {
+    const fn sweep_byte(&self) -> u8 {
         (self.sweep_shift & 7)
             | ((self.sweep_dir_down as u8) << 3)
             | ((self.sweep_period & 7) << 4)
             | 0x80
     }
     /// NRx2 (envelope) read-back.
-    fn envelope_byte(&self) -> u8 {
+    const fn envelope_byte(&self) -> u8 {
         (self.env_period & 7) | ((self.env_dir_up as u8) << 3) | (self.env_initial << 4)
     }
     /// Write SOUND1CNT_L: sweep shift, direction and period.
-    fn write_sweep(&mut self, d: u8) {
+    const fn write_sweep(&mut self, d: u8) {
         self.sweep_shift = d & 7;
         self.sweep_dir_down = d & 0x08 != 0;
         self.sweep_period = (d >> 4) & 7;
     }
     /// Write NRx1: duty cycle and initial length.
-    fn write_duty_length(&mut self, d: u8) {
+    const fn write_duty_length(&mut self, d: u8) {
         self.duty = (d >> 6) & 3;
         self.length_counter = 64 - (d & 0x3F) as u16;
     }
     /// Write NRx2: envelope and DAC power (disabling the channel when the DAC
     /// turns off).
-    fn write_envelope(&mut self, d: u8) {
+    const fn write_envelope(&mut self, d: u8) {
         self.env_period = d & 7;
         self.env_dir_up = d & 0x08 != 0;
         self.env_initial = (d >> 4) & 0x0F;
@@ -920,7 +920,7 @@ impl Square {
         }
     }
     /// Write the low 8 bits of the frequency (NRx3).
-    fn write_freq_lo(&mut self, d: u8) {
+    const fn write_freq_lo(&mut self, d: u8) {
         self.freq = (self.freq & 0x0700) | d as u16;
     }
     /// Write NRx4: the high frequency bits, length enable, and trigger.
@@ -935,15 +935,15 @@ impl Square {
 
 impl Wave {
     /// SOUND3CNT_L read-back: bank mode, selected bank and DAC power.
-    fn cnt_l_byte(&self) -> u8 {
+    const fn cnt_l_byte(&self) -> u8 {
         ((self.two_banks as u8) << 5) | ((self.bank) << 6) | ((self.dac_on as u8) << 7) | 0x1F
     }
     /// SOUND3CNT_H volume-byte read-back.
-    fn volume_byte(&self) -> u8 {
+    const fn volume_byte(&self) -> u8 {
         ((self.volume_code & 3) << 5) | ((self.force_75 as u8) << 7)
     }
     /// Write SOUND3CNT_L: bank mode, selected bank and DAC power.
-    fn write_cnt_l(&mut self, d: u8) {
+    const fn write_cnt_l(&mut self, d: u8) {
         self.two_banks = d & 0x20 != 0;
         self.bank = (d >> 6) & 1;
         self.dac_on = d & 0x80 != 0;
@@ -952,16 +952,16 @@ impl Wave {
         }
     }
     /// Write the initial length (256-step counter).
-    fn write_length(&mut self, d: u8) {
+    const fn write_length(&mut self, d: u8) {
         self.length_counter = 256 - d as u16;
     }
     /// Write SOUND3CNT_H: volume selector and the 75% override.
-    fn write_volume(&mut self, d: u8) {
+    const fn write_volume(&mut self, d: u8) {
         self.volume_code = (d >> 5) & 3;
         self.force_75 = d & 0x80 != 0;
     }
     /// Write the low 8 bits of the frequency.
-    fn write_freq_lo(&mut self, d: u8) {
+    const fn write_freq_lo(&mut self, d: u8) {
         self.freq = (self.freq & 0x0700) | d as u16;
     }
     /// Write the high frequency bits, length enable, and trigger.
@@ -974,12 +974,12 @@ impl Wave {
     }
     /// Read a wave-RAM byte. The CPU sees the bank that is *not* currently
     /// playing (approximated here as the opposite of `bank`).
-    fn ram_read(&self, i: usize) -> u8 {
+    const fn ram_read(&self, i: usize) -> u8 {
         let base = if self.bank == 0 { 16 } else { 0 };
         self.ram[base + i]
     }
     /// Write a wave-RAM byte into the non-playing bank.
-    fn ram_write(&mut self, i: usize, d: u8) {
+    const fn ram_write(&mut self, i: usize, d: u8) {
         let base = if self.bank == 0 { 16 } else { 0 };
         self.ram[base + i] = d;
     }
@@ -987,19 +987,19 @@ impl Wave {
 
 impl Noise {
     /// NR42 (envelope) read-back.
-    fn envelope_byte(&self) -> u8 {
+    const fn envelope_byte(&self) -> u8 {
         (self.env_period & 7) | ((self.env_dir_up as u8) << 3) | (self.env_initial << 4)
     }
     /// NR43 (polynomial counter) read-back: divisor, width and shift.
-    fn poly_byte(&self) -> u8 {
+    const fn poly_byte(&self) -> u8 {
         (self.divisor_code & 7) | ((self.width7 as u8) << 3) | (self.shift << 4)
     }
     /// Write NR41: initial length.
-    fn write_length(&mut self, d: u8) {
+    const fn write_length(&mut self, d: u8) {
         self.length_counter = 64 - (d & 0x3F) as u16;
     }
     /// Write NR42: envelope and DAC power.
-    fn write_envelope(&mut self, d: u8) {
+    const fn write_envelope(&mut self, d: u8) {
         self.env_period = d & 7;
         self.env_dir_up = d & 0x08 != 0;
         self.env_initial = (d >> 4) & 0x0F;
@@ -1009,7 +1009,7 @@ impl Noise {
         }
     }
     /// Write NR43: noise divisor, LFSR width and pre-scaler shift.
-    fn write_poly(&mut self, d: u8) {
+    const fn write_poly(&mut self, d: u8) {
         self.divisor_code = d & 7;
         self.width7 = d & 0x08 != 0;
         self.shift = (d >> 4) & 0x0F;
@@ -1032,7 +1032,7 @@ mod tests {
         let mut apu = Apu::new();
         apu.master_enable = true;
         apu.write_register(0x0400_0083, 0b0000_0011); // FIFO A: enable L/R, timer0
-        apu.push_fifo_a(0x04030201);
+        apu.push_fifo_a(0x0403_0201);
         // Four samples queued; ticking timer0 pops them in order.
         apu.on_timer_overflow(0, 1);
         assert_eq!(apu.fifo_a.sample, 0x01);

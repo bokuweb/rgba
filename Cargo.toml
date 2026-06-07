@@ -13,3 +13,70 @@ sdl2 = "0.34.3"
 log = "0.4"
 pretty_env_logger = "0.4"
 pretty_assertions = "0.6.1"
+
+[workspace]
+
+# Strictest practical clippy: deny `all` + `pedantic`, warn on `nursery`.
+# A curated allow-list opts out of lints that fight against the nature of an
+# emulator (deliberate integer-width casts, ARM mnemonics, register indexing,
+# glob imports used heavily by test modules). Each `allow` is justified inline.
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+pedantic = { level = "deny", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+
+# Integer-width juggling is the bread and butter of an emulator: register and
+# bus values are deliberately truncated, wrapped and reinterpreted. `From::from`
+# is also not const-stable, so `cast_lossless` cannot apply inside `const fn`.
+cast_lossless = "allow"
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_sign_loss = "allow"
+cast_precision_loss = "allow"
+
+# ARM/THUMB mnemonics (TST, SWI, LDRH, ...) and hardware register fields are
+# intentionally upper-case acronyms; renaming them would diverge from GBATek.
+upper_case_acronyms = "allow"
+
+# Heavy use of glob imports and `pub use foo::*` re-exports, especially in the
+# many `#[cfg(test)] mod tests { use super::*; }` blocks.
+wildcard_imports = "allow"
+
+# Register files / OAM / palettes are addressed by numeric index; index loops
+# read more clearly than iterator adaptors here.
+needless_range_loop = "allow"
+
+# Decoders and hardware models legitimately have long match statements, many
+# boolean control bits, wide constructors and identical arms per opcode.
+too_many_lines = "allow"
+too_many_arguments = "allow"
+struct_excessive_bools = "allow"
+match_same_arms = "allow"
+
+# Several accessors keep a `Result`/`&self` signature for trait/API uniformity.
+unnecessary_wraps = "allow"
+unused_self = "allow"
+
+# Naming/style noise that is not worth churning the codebase for.
+similar_names = "allow"
+many_single_char_names = "allow"
+module_inception = "allow"
+module_name_repetitions = "allow"
+doc_markdown = "allow"
+
+# Small register/handle structs are routinely passed by value or by ref by
+# design; changing every signature would be invasive for little gain.
+needless_pass_by_value = "allow"
+trivially_copy_pass_by_ref = "allow"
+
+# This is a binary crate, not a published library: doc lints add noise.
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+must_use_candidate = "allow"
+
+# `assert_eq!(x, true)` reads fine in the test suite and is less error-prone to
+# transform than `assert!(x)` / `assert!(!x)`.
+bool_assert_comparison = "allow"
+
+[lints]
+workspace = true
