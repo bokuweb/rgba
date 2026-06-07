@@ -1,6 +1,9 @@
+mod backup;
 mod bus;
 mod dma;
 mod timer;
+
+use backup::{Backup, SaveKind};
 
 use crate::io;
 use crate::lcd;
@@ -32,7 +35,7 @@ use crate::memory::Raw;
 use std::env;
 use std::fs::File;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::types::*;
 
@@ -49,12 +52,14 @@ pub struct GBA {
     pub arm: cpu::ARM,
     // pub lcdc: lcd::LCDController,
     pub bus: CpuBus,
+    /// `<rom>.sav` path used to persist backup memory (None for embedded ROMs).
+    save_path: Option<PathBuf>,
 }
 
 impl GBA {
     pub fn new() -> Self {
         let bin_path = env::args().nth(1).expect("Specify bin filename to build.");
-        let bin = GBA::load_bin(bin_path).expect("faild to read bin");
+        let bin = GBA::load_bin(bin_path.clone()).expect("faild to read bin");
         // debug!("read bin data = {:?}", bin);
         let bios = Rom::new(0x4000, &include_bytes!("../../bios/bios.bin")[..]);
         let rom = Rom::new(0x80000, &bin);
@@ -63,15 +68,45 @@ impl GBA {
         let vram = Ram::new(vec![0; 0x1_8000]);
         let palette = Ram::new(vec![0; 0x0400]);
         let oam = Ram::new(vec![0; 0x0400]);
-        let sram = Ram::new(vec![0; 0x1_0000]); // 64KB SRAM/FRAM/Flash save memory
+
+        // Pick the backup type from the ROM's SDK marker and restore any
+        // existing `.sav` file next to the ROM.
+        let kind = SaveKind::detect(&bin);
+        let save_path = PathBuf::from(&bin_path).with_extension("sav");
+        let saved = std::fs::read(&save_path).unwrap_or_default();
+        if !saved.is_empty() {
+            println!("💾 Loaded save ({:?}, {} bytes) from {}", kind, saved.len(), save_path.display());
+        } else {
+            println!("💾 Backup type: {:?} (save file: {})", kind, save_path.display());
+        }
+        let backup = Backup::new(kind, &saved);
+
         let lcdc = lcd::LCDController::new();
         let key = io::Key::new();
-        let bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, sram, key);
+        let bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, backup, key);
         let mut arm = cpu::ARM::new();
 
         arm.reset();
 
-        Self { cycles: 0, arm, bus }
+        Self { cycles: 0, arm, bus, save_path: Some(save_path) }
+    }
+
+    /// Persist backup memory to the `.sav` file if it changed since the last
+    /// flush. Cheap to call every frame: it is a no-op unless the save is dirty.
+    pub fn flush_save_if_dirty(&mut self) {
+        if !self.bus.backup_is_dirty() {
+            return;
+        }
+        if let Some(path) = &self.save_path {
+            match std::fs::write(path, self.bus.backup_bytes()) {
+                Ok(_) => self.bus.backup_clear_dirty(),
+                Err(e) => eprintln!("⚠️  failed to write save {}: {}", path.display(), e),
+            }
+        } else {
+            // No backing file (embedded ROM): drop the dirty flag so we don't
+            // keep retrying.
+            self.bus.backup_clear_dirty();
+        }
     }
 
     fn load_bin(bin: String) -> Result<Vec<u8>, std::io::Error> {
@@ -134,10 +169,10 @@ mod test {
         let vram = Ram::new(vec![0; 0x1_8000]);
         let palette = Ram::new(vec![0; 0x0400]);
         let oam = Ram::new(vec![0; 0x0400]);
-        let sram = Ram::new(vec![0; 0x1_0000]); // 64KB SRAM/FRAM/Flash save memory
+        let backup = Backup::new(SaveKind::Sram, &[]); // default save memory for tests
         let lcdc = lcd::LCDController::new();
         let key = io::Key::new();
-        let mut bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, sram, key);
+        let mut bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, backup, key);
         let mut arm = cpu::ARM::new();
         for _ in 0..step {
             arm.step(&mut bus, false).expect("should step");

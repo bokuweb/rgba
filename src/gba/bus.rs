@@ -19,6 +19,7 @@ use std::path::Path;
 use std::cell::Cell;
 
 use types::*;
+use super::backup::{Backup, SaveKind};
 use super::dma::DMAController;
 
 pub const BIOS_ADDR: u32 = 0x0000_0000;
@@ -143,7 +144,7 @@ pub struct CpuBus {
     vram: Ram,
     palette: Ram,
     oam: Ram,
-    sram: Ram, // SRAM/FRAM/Flash save memory (0x0E000000-0x0E00FFFF, 64KB max)
+    backup: Backup, // SRAM / Flash save memory (0x0E000000-0x0E00FFFF)
     key: io::Key,
     keycnt: HalfWord,
     siocnt: HalfWord,
@@ -219,8 +220,8 @@ impl BusAccessor for CpuBus {
             // GamePak ROM mirrors across WS0/WS1/WS2 (0x08000000-0x0DFFFFFF)
             0x0800_0000..=0x0DFF_FFFF => self.gamepak_read_byte(addr),
             0x0E00_0000..=0x0E00_FFFF => {
-                // SRAM/FRAM/Flash save memory (byte access only)
-                self.sram.read_byte((addr - 0x0E00_0000) & 0x7FFF)
+                // SRAM / Flash save memory (byte access only)
+                self.backup.read(addr)
             }
             _ => {
                 self.read_open_bus_byte(addr)
@@ -449,8 +450,8 @@ impl BusAccessor for CpuBus {
                 // ignore
             }
             0x0E00_0000..=0x0E00_FFFF => {
-                // SRAM/FRAM/Flash save memory (byte access only)
-                self.sram.write_byte((addr - 0x0E00_0000) & 0x7FFF, data);
+                // SRAM / Flash save memory (byte access only)
+                self.backup.write(addr, data);
             }
             _ => {
                 println!("⚠️  WARNING: Invalid write_byte to 0x{:08x} = 0x{:02x} (ignored)", addr, data);
@@ -750,7 +751,7 @@ impl CpuBus {
         vram: Ram,
         palette: Ram,
         oam: Ram,
-        sram: Ram, // SRAM/FRAM/Flash save memory
+        backup: Backup, // SRAM / Flash save memory
         key: io::Key,
     ) -> CpuBus {
         CpuBus {
@@ -764,7 +765,7 @@ impl CpuBus {
             vram,
             palette,
             oam,
-            sram,
+            backup,
             key,
             keycnt: 0,
             siocnt: 0,
@@ -788,6 +789,20 @@ impl CpuBus {
     pub(crate) fn update_key(&mut self, key: io::Key) {
         self.key = key;
         self.check_keypad_interrupt();
+    }
+
+    /// Raw backup (save) memory bytes, for persistence to a `.sav` file.
+    pub(crate) fn backup_bytes(&self) -> &[u8] {
+        self.backup.bytes()
+    }
+
+    /// Whether the backup memory changed since the last `backup_clear_dirty`.
+    pub(crate) fn backup_is_dirty(&self) -> bool {
+        self.backup.is_dirty()
+    }
+
+    pub(crate) fn backup_clear_dirty(&mut self) {
+        self.backup.clear_dirty();
     }
 
     /// Evaluate the KEYCNT keypad interrupt condition against the current key
@@ -1159,7 +1174,7 @@ impl CpuBus {
             0x0600_0000..=0x06FF_FFFF => self.vram.read_byte(Self::map_vram_offset(addr)),
             0x0700_0000..=0x07FF_FFFF => self.oam.read_byte((addr - 0x0700_0000) & 0x3FF),
             0x0800_0000..=0x0DFF_FFFF => self.gamepak_read_byte(addr),
-            0x0E00_0000..=0x0E00_FFFF => self.sram.read_byte((addr - 0x0E00_0000) & 0x7FFF),
+            0x0E00_0000..=0x0E00_FFFF => self.backup.read(addr),
             _ => 0xFF,
         }
     }
@@ -1388,10 +1403,10 @@ mod tests {
         let vram = Ram::new(vec![0; 0x1_8000]);
         let palette = Ram::new(vec![0; 0x0400]);
         let oam = Ram::new(vec![0; 0x0400]);
-        let sram = Ram::new(vec![0; 0x1_0000]);
+        let backup = Backup::new(SaveKind::Sram, &[]);
         let lcdc = lcd::LCDController::new();
         let key = io::Key::new();
-        CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, sram, key)
+        CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, backup, key)
     }
 
     fn if_flags(bus: &CpuBus) -> u16 {
