@@ -1,7 +1,7 @@
-pub(crate) mod bank_gpr;
-pub(crate) mod bank_spsr;
-pub(crate) mod psr;
+pub mod bank_gpr;
+pub mod bank_spsr;
+pub mod psr;
 
-pub(crate) use bank_gpr::*;
-pub(crate) use bank_spsr::*;
-pub(crate) use psr::*;
+pub use bank_gpr::*;
+pub use bank_spsr::*;
+pub use psr::*;

@@ -10,5 +10,3 @@ pub mod single_data_swap;
 pub mod swi;
 pub mod undefined;
 
-pub use swi::*;
-pub use undefined::*;

@@ -15,6 +15,7 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
+          components: clippy
       - uses: actions/cache@v4
         with:
           path: |
@@ -29,5 +30,10 @@ jobs:
           sudo apt-get install libsdl2-dev
       - name: build fixtures
         run: cd fixtures && make
+      - name: clippy
+        # Lint levels (deny clippy::all + clippy::pedantic, warn on nursery) are
+        # configured in Cargo.toml's [lints] table, so any all/pedantic finding
+        # fails the build. --all-targets also lints the test code.
+        run: cargo clippy --all-targets
       - name: test
         run: cargo test

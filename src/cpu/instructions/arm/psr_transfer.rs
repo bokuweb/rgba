@@ -43,13 +43,13 @@ where
     T: BusAccessor,
 {
     let value = if dec.get_I() {
-        let rotated_value = ror(
+        
+        ror(
             dec.get_imm(),
             dec.get_rotate().checked_shl(1).unwrap_or_default(),
             cpsr.get_C(),
             true,
-        );
-        rotated_value
+        )
     } else {
         gpr[dec.get_Rm() as usize]
     };
