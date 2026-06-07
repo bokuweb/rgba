@@ -607,9 +607,10 @@ impl Bios {
             0x16 => Self::diff_unfilter(bus, gpr, 1, false),
             0x17 => Self::diff_unfilter(bus, gpr, 1, true),
             0x18 => Self::diff_unfilter(bus, gpr, 2, true),
-            _ => {
-                unimplemented!("BIOS: Unimplemented SWI 0x{:02X}", swi_number);
-            }
+            // Unimplemented BIOS SWI (e.g. sound-driver calls 0x19-0x28). Treat
+            // as a no-op rather than aborting; these are typically called every
+            // frame, so we deliberately stay silent to avoid log spam.
+            _ => {}
         }
     }
 }
