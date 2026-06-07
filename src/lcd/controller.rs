@@ -38,6 +38,11 @@ impl BGR {
 pub struct LCDController {
     cycles: usize,
     lines: usize,
+    /// Accumulated RGBA8 framebuffer, filled scanline-by-scanline as the LCD
+    /// advances so mid-frame register changes affect later lines.
+    framebuffer: Vec<u8>,
+    /// Visible scanlines that have been entered and still need rendering.
+    pending_scanlines: Vec<usize>,
     // registers
     dispcnt: DISPCNT,
     dispstat: DISPSTAT,
@@ -95,6 +100,9 @@ impl LCDController {
         LCDController {
             cycles: 0,
             lines: 0,
+            framebuffer: vec![0; 240 * 160 * 4],
+            // Line 0 of the first frame is entered at startup (no wrap occurs).
+            pending_scanlines: vec![0],
             dispcnt: DISPCNT::new(),
             dispstat: DISPSTAT::new(),
             bg0cnt: BGCNT::new(),
@@ -155,18 +163,35 @@ impl LCDController {
             let prev_lines = self.lines;
             self.lines += 1;
 
-            // Check for VBlank transition (entering VBlank period)
+            // Entering VBlank (line 160): the visible lines are all rendered, so
+            // signal "frame ready to present" and raise the VBlank IRQ.
+            let mut ready = false;
             if prev_lines == 159 && self.lines == 160 {
                 if self.dispstat.vblank_irq_enable() {
                     vblank_irq_requested = true;
                 }
+                ready = true;
             }
 
             if self.lines >= LINES_PER_FRAME {
                 self.lines -= LINES_PER_FRAME;
+            }
+            // Entering a visible line: schedule it for rendering with the current
+            // register/memory state. This pushes lines 1..=159 and, on the
+            // 227->0 wrap, line 0 of the next frame (line 0 of the first frame is
+            // queued at construction).
+            if self.lines < 160 {
+                self.pending_scanlines.push(self.lines);
+            }
+            if ready {
                 return (true, vblank_irq_requested);
             }
         }
+    }
+
+    /// Drain the list of visible scanlines awaiting rendering.
+    pub fn take_pending_scanlines(&mut self) -> Vec<usize> {
+        std::mem::take(&mut self.pending_scanlines)
     }
 
     pub fn read_halfword(&self, addr: Word) -> HalfWord {
@@ -782,9 +807,12 @@ impl LCDController {
     }
 
     // Helper function to determine which layers should be rendered for a pixel
-    fn get_window_control(&self, x: Word, y: Word) -> (bool, bool, bool, bool, bool, bool) {
-        // If no windows are enabled, fall back to DISPCNT's layer enable bits
-        let any_window_enabled = self.dispcnt.window0_display_flag() || self.dispcnt.window1_display_flag();
+    fn get_window_control(&self, x: Word, y: Word, in_objwin: bool) -> (bool, bool, bool, bool, bool, bool) {
+        // If no windows are enabled, fall back to DISPCNT's layer enable bits.
+        // DISPCNT bit 15 (here `obj_display_flag`) enables the OBJ window.
+        let any_window_enabled = self.dispcnt.window0_display_flag()
+            || self.dispcnt.window1_display_flag()
+            || self.dispcnt.obj_display_flag();
         if !any_window_enabled {
             let bg0_enable = self.dispcnt.screen_display_bg0();
             let bg1_enable = self.dispcnt.screen_display_bg1();
@@ -796,12 +824,13 @@ impl LCDController {
             return (bg0_enable, bg1_enable, bg2_enable, bg3_enable, obj_enable, effect_enable);
         }
 
-        // Check which window the pixel is in (Window 0 has highest priority)
-        let in_win0 = self.is_pixel_in_window(x, y, self.win0h, self.win0v);
-        let in_win1 = self.is_pixel_in_window(x, y, self.win1h, self.win1v);
-
-        // For now, we don't implement OBJ Window, so in_objwin is always false
-        let in_objwin = false;
+        // Check which window the pixel is in (Window 0 has highest priority).
+        // Only consider win0/win1 if they are actually enabled in DISPCNT.
+        let in_win0 = self.dispcnt.window0_display_flag()
+            && self.is_pixel_in_window(x, y, self.win0h, self.win0v);
+        let in_win1 = self.dispcnt.window1_display_flag()
+            && self.is_pixel_in_window(x, y, self.win1h, self.win1v);
+        let in_objwin = in_objwin && self.dispcnt.obj_display_flag();
 
         let control_bits = if in_win0 {
             // Inside Window 0 - use WININ bits 0-5
@@ -857,86 +886,80 @@ impl LCDController {
         BGR::new(bgr_value as HalfWord)
     }
 
-    // Helper function to apply color special effects
-    fn apply_color_effect(&self, color: BGR, layer_id: u8, effect_enable: bool) -> BGR {
-        if !effect_enable {
-            return color;
-        }
+    fn is_1st_target(&self, target: u8) -> bool {
+        (self.bldcnt & (1 << target)) != 0
+    }
+    fn is_2nd_target(&self, target: u8) -> bool {
+        ((self.bldcnt >> 8) & (1 << target)) != 0
+    }
 
-        let first_target = self.bldcnt & 0x003F; // Bit 0-5: 1st Target
-        let effect_type = (self.bldcnt >> 6) & 0x0003; // Bit 6-7: Effect Type
-        let second_target = (self.bldcnt >> 8) & 0x003F; // Bit 8-13: 2nd Target
+    /// Brightness-increase (fade to white) by EVY.
+    fn brighten(&self, color: BGR) -> BGR {
+        let evy = (self.bldy & 0x1F).min(16);
+        let r = (color.red() >> 3) as u16;
+        let g = (color.green() >> 3) as u16;
+        let b = (color.blue() >> 3) as u16;
+        let r = (r + (31 - r) * evy / 16).min(31);
+        let g = (g + (31 - g) * evy / 16).min(31);
+        let b = (b + (31 - b) * evy / 16).min(31);
+        BGR::new(((b << 10) | (g << 5) | r) as HalfWord)
+    }
 
-        // Check if current layer is a first target
-        let is_first_target = (first_target & (1 << layer_id)) != 0;
+    /// Brightness-decrease (fade to black) by EVY.
+    fn darken(&self, color: BGR) -> BGR {
+        let evy = (self.bldy & 0x1F).min(16);
+        let r = (color.red() >> 3) as u16;
+        let g = (color.green() >> 3) as u16;
+        let b = (color.blue() >> 3) as u16;
+        let r = r - r * evy / 16;
+        let g = g - g * evy / 16;
+        let b = b - b * evy / 16;
+        BGR::new(((b << 10) | (g << 5) | r) as HalfWord)
+    }
 
-        if !is_first_target {
-            return color; // No effect if not a first target
-        }
-
-        match effect_type {
-            0 => color, // None - no effect
-            1 => {
-                // Alpha Blending - blend with backdrop color as a simple demonstration
-                // In a full implementation, this would blend with the actual 2nd target layer
-                let second_target = (self.bldcnt >> 8) & 0x003F; // Bit 8-13: 2nd Target
-                let backdrop_is_second_target = (second_target & 0x0020) != 0; // BD bit
-
-                if backdrop_is_second_target {
-                    // Create a simple backdrop color (dark gray)
-                    let backdrop_color = BGR::new(0x4210); // Dark gray in BGR555 format
-                    self.alpha_blend(color, backdrop_color)
-                } else {
-                    // No valid 2nd target, return original color
-                    color
+    /// Apply colour special effects to the top-most pixel given the pixel below.
+    /// `top` is (colour, BLDCNT target id, semi-transparent OBJ); `below` is the
+    /// colour/target of the next pixel down (the 2nd-target candidate).
+    fn blend_pixel(&self, top: (BGR, u8, bool), below: Option<(BGR, u8)>, effect_enable: bool) -> BGR {
+        let (c1, t1, semi) = top;
+        // A semi-transparent OBJ always alpha-blends with a 2nd target below it,
+        // regardless of the BLDCNT effect selection.
+        if semi {
+            if let Some((c2, t2)) = below {
+                if self.is_2nd_target(t2) {
+                    return self.alpha_blend(c1, c2);
                 }
             }
-            2 => {
-                // Brightness Increase (fade to white)
-                // Formula: I = I1st + (31-I1st)*EVY/16
-                let evy = self.bldy & 0x001F; // Bit 0-4: EVY Coefficient
-                let evy_clamped = if evy > 16 { 16 } else { evy };
-
-                // Extract RGB components (convert from 8-bit back to 5-bit)
-                let r1 = (color.red() >> 3) as u16; // Convert 8-bit to 5-bit
-                let g1 = (color.green() >> 3) as u16;
-                let b1 = (color.blue() >> 3) as u16;
-
-                // Apply brightness increase formula: I = I1st + (31-I1st)*EVY/16
-                let r_bright = r1 + ((31 - r1) * evy_clamped / 16);
-                let g_bright = g1 + ((31 - g1) * evy_clamped / 16);
-                let b_bright = b1 + ((31 - b1) * evy_clamped / 16);
-
-                // Clamp to 5-bit range and convert back to BGR format
-                let r_final = r_bright.min(31);
-                let g_final = g_bright.min(31);
-                let b_final = b_bright.min(31);
-
-                let bgr_value = (b_final << 10) | (g_final << 5) | r_final;
-                BGR::new(bgr_value as HalfWord)
-            }
-            3 => {
-                // Brightness Decrease (fade to black)
-                // Formula: I = I1st - I1st*EVY/16
-                let evy = self.bldy & 0x001F; // Bit 0-4: EVY Coefficient
-                let evy_clamped = if evy > 16 { 16 } else { evy };
-
-                // Extract RGB components (convert from 8-bit back to 5-bit)
-                let r1 = (color.red() >> 3) as u16; // Convert 8-bit to 5-bit
-                let g1 = (color.green() >> 3) as u16;
-                let b1 = (color.blue() >> 3) as u16;
-
-                // Apply brightness decrease formula: I = I1st - I1st*EVY/16
-                let r_dark = r1 - (r1 * evy_clamped / 16);
-                let g_dark = g1 - (g1 * evy_clamped / 16);
-                let b_dark = b1 - (b1 * evy_clamped / 16);
-
-                // Convert back to BGR format (no need to clamp as subtraction won't exceed range)
-                let bgr_value = (b_dark << 10) | (g_dark << 5) | r_dark;
-                BGR::new(bgr_value as HalfWord)
-            }
-            _ => color, // Unknown effect
+            return c1;
         }
+        if !effect_enable {
+            return c1;
+        }
+        match (self.bldcnt >> 6) & 0x3 {
+            1 => {
+                if self.is_1st_target(t1) {
+                    if let Some((c2, t2)) = below {
+                        if self.is_2nd_target(t2) {
+                            return self.alpha_blend(c1, c2);
+                        }
+                    }
+                }
+                c1
+            }
+            2 if self.is_1st_target(t1) => self.brighten(c1),
+            3 if self.is_1st_target(t1) => self.darken(c1),
+            _ => c1,
+        }
+    }
+
+    /// BG mosaic block size (h, v) in pixels (MOSAIC bits 0-7, value + 1).
+    fn bg_mosaic(&self) -> (Word, Word) {
+        ((self.mosaic & 0xF) as Word + 1, ((self.mosaic >> 4) & 0xF) as Word + 1)
+    }
+
+    /// OBJ mosaic block size (h, v) in pixels (MOSAIC bits 8-15, value + 1).
+    fn obj_mosaic(&self) -> (u32, u32) {
+        (((self.mosaic >> 8) & 0xF) as u32 + 1, ((self.mosaic >> 12) & 0xF) as u32 + 1)
     }
 
     /// Sprite (OBJ) sizes indexed by [shape][size] -> (width, height) in pixels.
@@ -1002,10 +1025,15 @@ impl LCDController {
     /// Render all sprites into a full-screen overlay buffer. Each entry is the
     /// top-most (lowest OBJ index) opaque sprite pixel, with its BG-priority and
     /// a semi-transparent flag.
-    fn render_obj(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<Option<ObjPixel>> {
-        let mut buf: Vec<Option<ObjPixel>> = vec![None; 240 * 160];
+    /// Render the sprite colour layer and the OBJ-window coverage mask. Mode-2
+    /// sprites contribute only to the window mask (they are not drawn).
+    /// Render the sprite colour layer and OBJ-window coverage for a single
+    /// scanline `line`. Returns 240-wide row buffers.
+    fn render_obj_line(&self, line: usize, vram: &Ram, palette: &Ram, oam: &Ram) -> (Vec<Option<ObjPixel>>, Vec<bool>) {
+        let mut buf: Vec<Option<ObjPixel>> = vec![None; 240];
+        let mut objwin: Vec<bool> = vec![false; 240];
         if !self.dispcnt.screen_display_obj() {
-            return buf;
+            return (buf, objwin);
         }
         let one_d = self.dispcnt.obj_char_mapping();
         let bitmap_mode = matches!(self.dispcnt.mode(), BgMode::Mode3 | BgMode::Mode4 | BgMode::Mode5);
@@ -1022,10 +1050,13 @@ impl LCDController {
                 continue; // disable bit
             }
             let mode = (a0 >> 10) & 0x3;
-            if mode == 2 || mode == 3 {
-                continue; // OBJ-window / prohibited (OBJ window not yet supported)
+            if mode == 3 {
+                continue; // prohibited
             }
+            // Mode 2 sprites define the OBJ window region instead of being drawn.
+            let is_window = mode == 2;
             let semi = mode == 1;
+            let mosaic = (a0 & 0x1000) != 0;
             let is_8bpp = (a0 & 0x2000) != 0;
             let shape = (a0 >> 14) & 0x3;
             let size = (a1 >> 14) & 0x3;
@@ -1053,11 +1084,9 @@ impl LCDController {
             let hflip = !affine && (a1 & 0x1000) != 0;
             let vflip = !affine && (a1 & 0x2000) != 0;
 
-            for oy in 0..bbh as i32 {
-                let sy = (y0 + oy) & 0xFF;
-                if sy >= 160 {
-                    continue;
-                }
+            // Which sprite row maps to this scanline (Y wraps at 256)?
+            let oy = (line as i32 - y0).rem_euclid(256);
+            if oy < bbh as i32 {
                 for ox in 0..bbw as i32 {
                     let sx = x0 + ox;
                     if sx < 0 || sx >= 240 {
@@ -1086,45 +1115,72 @@ impl LCDController {
                     if tx < 0 || ty < 0 || tx >= w as i32 || ty >= h as i32 {
                         continue;
                     }
+                    // OBJ mosaic: snap the texel coordinate to the mosaic block.
+                    let (tx, ty) = if mosaic {
+                        let (mh, mv) = self.obj_mosaic();
+                        (tx - tx % mh as i32, ty - ty % mv as i32)
+                    } else {
+                        (tx, ty)
+                    };
 
-                    let dst = (sy * 240 + sx) as usize;
-                    // Lower OBJ index has priority: keep the first opaque writer.
-                    if buf[dst].is_some() {
+                    let dst = sx as usize;
+                    // Lower OBJ index has priority: keep the first opaque writer
+                    // (window sprites only need coverage, so let them re-mark).
+                    if !is_window && buf[dst].is_some() {
                         continue;
                     }
                     if let Some(color) = self.obj_tile_texel(
                         vram, palette, base_tile, tx as u32, ty as u32, w, is_8bpp, one_d, palbank,
                         bitmap_mode,
                     ) {
-                        buf[dst] = Some(ObjPixel { color, priority: prio, semi });
+                        if is_window {
+                            objwin[dst] = true;
+                        } else {
+                            buf[dst] = Some(ObjPixel { color, priority: prio, semi });
+                        }
                     }
                 }
             }
         }
-        buf
+        (buf, objwin)
     }
 
-    pub fn render(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
-        // Forced blank (DISPCNT bit 7): the screen outputs white.
+    /// Borrow the accumulated framebuffer (RGBA8, 240x160).
+    pub fn framebuffer(&self) -> &[u8] {
+        &self.framebuffer
+    }
+
+    /// Render a single scanline into the framebuffer using the current register
+    /// state and memory. Driven per line (from `run` via the bus) so mid-frame
+    /// register changes — scroll/affine/window/palette raster effects — take
+    /// effect on the lines after they are written.
+    pub fn render_scanline(&mut self, line: usize, vram: &Ram, palette: &Ram, oam: &Ram) {
+        if line >= 160 {
+            return;
+        }
+        let base = line * 240 * 4;
+        // Forced blank (DISPCNT bit 7): the line outputs white.
         if self.dispcnt.forced_vlank() {
-            return vec![0xFF; 240 * 160 * 4];
+            for i in 0..240 * 4 {
+                self.framebuffer[base + i] = 0xFF;
+            }
+            return;
         }
         match self.dispcnt.mode() {
-            BgMode::Mode0 => self.render_with_mode0(vram, palette, oam),
-            BgMode::Mode3 => self.render_with_mode3(vram, palette, oam),
-            BgMode::Mode4 => self.render_with_mode4(vram, palette, oam),
-            _ => todo!(),
+            BgMode::Mode0 | BgMode::Mode1 | BgMode::Mode2 => {
+                self.scanline_tiled(self.dispcnt.mode(), line, vram, palette, oam)
+            }
+            BgMode::Mode3 => self.scanline_bitmap3(line, vram, palette, oam),
+            BgMode::Mode4 => self.scanline_bitmap4(line, vram, palette, oam),
+            BgMode::Mode5 => self.scanline_bitmap5(line, vram, palette, oam),
         }
     }
 
-    /// Composite an OBJ pixel over an already-resolved BG pixel.
-    /// `bg` is (priority, color); `bg_is_2nd_target` enables semi-transparent
-    /// blending. Returns the final colour to display.
+    /// Composite an OBJ pixel over an already-resolved BG pixel (bitmap modes).
     fn composite_obj(&self, obj: Option<ObjPixel>, bg_priority: u16, bg_color: BGR) -> BGR {
         match obj {
             Some(o) if o.priority <= bg_priority => {
                 if o.semi {
-                    // Semi-transparent OBJ blends with the layer below.
                     self.alpha_blend(o.color, bg_color)
                 } else {
                     o.color
@@ -1134,59 +1190,46 @@ impl LCDController {
         }
     }
 
-    fn render_with_mode0(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
-        let mut buf = vec![0; 240 * 160 * 4];
-        let obj = self.render_obj(vram, palette, oam);
+    /// Compose one scanline for the tiled BG modes (0/1/2).
+    fn scanline_tiled(&mut self, mode: BgMode, line: usize, vram: &Ram, palette: &Ram, oam: &Ram) {
+        let (obj, objwin) = self.render_obj_line(line, vram, palette, oam);
+        let base = line * 240 * 4;
+        let y = line as Word;
+        for screen_x in 0..240u32 {
+            let in_objwin = objwin[screen_x as usize];
+            let (bg0_enable, bg1_enable, bg2_enable, bg3_enable, obj_enable, effect_enable) =
+                self.get_window_control(screen_x, y, in_objwin);
+            let window_enabled = [bg0_enable, bg1_enable, bg2_enable, bg3_enable];
 
-        // Render pixel by pixel with window control and BG priority composition.
-        for screen_y in 0..160 {
-            for screen_x in 0..240 {
-                // Get window control for this pixel
-                let (bg0_enable, bg1_enable, bg2_enable, bg3_enable, obj_enable, effect_enable) = self.get_window_control(screen_x, screen_y);
-
-                let buf_index = ((screen_y * 240 + screen_x) * 4) as usize;
-                let mut best: Option<(u16, usize, BGR)> = None;
-                let window_enabled = [bg0_enable, bg1_enable, bg2_enable, bg3_enable];
-                for layer in 0..4 {
-                    if !window_enabled[layer] {
-                        continue;
-                    }
-                    if let Some((priority, mut color)) =
-                        self.sample_text_bg_pixel(layer, screen_x, screen_y, vram, palette)
-                    {
-                        color = self.apply_color_effect(color, layer as u8, effect_enable);
-                        match best {
-                            None => best = Some((priority, layer, color)),
-                            Some((best_priority, best_layer, _))
-                                if priority < best_priority
-                                    || (priority == best_priority && layer < best_layer) =>
-                            {
-                                best = Some((priority, layer, color));
-                            }
-                            _ => {}
-                        }
-                    }
+            // Collect candidate pixels: (priority, kind, target, color, semi).
+            // kind orders ties: 0=OBJ, 1=BG, 2=backdrop (OBJ wins BG ties).
+            let mut layers: Vec<(u16, u8, u8, BGR, bool)> = Vec::with_capacity(6);
+            for layer in 0..4 {
+                if !window_enabled[layer] {
+                    continue;
                 }
-
-                // Resolve the background pixel (priority 4 = backdrop, below all BGs).
-                let (bg_priority, bg_color) = match best {
-                    Some((p, _, c)) => (p, c),
-                    None => (
-                        4,
-                        self.apply_color_effect(BGR::new(palette.read_halfword(0)), 5, effect_enable),
-                    ),
-                };
-                // Overlay the sprite layer (subject to per-pixel OBJ enable).
-                let obj_px = if obj_enable { obj[(screen_y * 240 + screen_x) as usize] } else { None };
-                let color = self.composite_obj(obj_px, bg_priority, bg_color);
-
-                buf[buf_index] = color.red();
-                buf[buf_index + 1] = color.green();
-                buf[buf_index + 2] = color.blue();
-                buf[buf_index + 3] = 0xFF;
+                if let Some((priority, color)) = self.sample_bg_layer(mode, layer, screen_x, y, vram, palette) {
+                    layers.push((priority, 1, layer as u8, color, false));
+                }
             }
+            if obj_enable {
+                if let Some(o) = obj[screen_x as usize] {
+                    layers.push((o.priority, 0, 4, o.color, o.semi));
+                }
+            }
+            layers.push((5, 2, 5, BGR::new(palette.read_halfword(0)), false));
+            layers.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+
+            let (_, _, t1, c1, semi) = layers[0];
+            let below = layers.get(1).map(|l| (l.3, l.2));
+            let color = self.blend_pixel((c1, t1, semi), below, effect_enable);
+
+            let i = base + screen_x as usize * 4;
+            self.framebuffer[i] = color.red();
+            self.framebuffer[i + 1] = color.green();
+            self.framebuffer[i + 2] = color.blue();
+            self.framebuffer[i + 3] = 0xFF;
         }
-        buf
     }
 
     fn sample_text_bg_pixel(
@@ -1228,6 +1271,14 @@ impl LCDController {
         if !enabled {
             return None;
         }
+
+        // BG mosaic: snap the on-screen coordinate to the mosaic block.
+        let (screen_x, screen_y) = if bgcnt.mosaic() {
+            let (mh, mv) = self.bg_mosaic();
+            (screen_x - screen_x % mh, screen_y - screen_y % mv)
+        } else {
+            (screen_x, screen_y)
+        };
 
         let (width, height) = match bgcnt.screen_size() {
             0 => (256, 256),
@@ -1297,44 +1348,173 @@ impl LCDController {
         Some((bgcnt.bg_priority(), color))
     }
 
-    fn render_with_mode3(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
-        let mut buf = vec![0u8; 240 * 160 * 4];
-        let obj = self.render_obj(vram, palette, oam);
-        let bg_prio = self.bg2cnt.bg_priority();
-        let bg_on = self.dispcnt.screen_display_bg2();
-        for i in 0..(240 * 160) {
-            // Mode 3 BG is a direct 15-bit color bitmap (BG2).
-            let bg = BGR::new(vram.read_halfword(i as Word * 2));
-            let (p, c) = if bg_on { (bg_prio, bg) } else { (4, BGR::new(palette.read_halfword(0))) };
-            let color = self.composite_obj(obj[i], p, c);
-            let bi = i * 4;
-            buf[bi] = color.red();
-            buf[bi + 1] = color.green();
-            buf[bi + 2] = color.blue();
-            buf[bi + 3] = 0xFF;
+    /// Sample an affine (rotation/scaling) background layer (BG2 or BG3). These
+    /// are 8bpp tilemaps whose map entries are a single tile-number byte; the
+    /// texture coordinate is computed from the PA-PD matrix and the (BGxX, BGxY)
+    /// reference point.
+    fn sample_affine_bg_pixel(
+        &self,
+        layer: usize,
+        screen_x: Word,
+        screen_y: Word,
+        vram: &Ram,
+        palette: &Ram,
+    ) -> Option<(u16, BGR)> {
+        let (enabled, bgcnt, pa, pb, pc, pd, refx, refy) = match layer {
+            2 => (
+                self.dispcnt.screen_display_bg2(),
+                self.bg2cnt,
+                self.bg2pa as i16 as i32,
+                self.bg2pb as i16 as i32,
+                self.bg2pc as i16 as i32,
+                self.bg2pd as i16 as i32,
+                self.bg2x as i32,
+                self.bg2y as i32,
+            ),
+            3 => (
+                self.dispcnt.screen_display_bg3(),
+                self.bg3cnt,
+                self.bg3pa as i16 as i32,
+                self.bg3pb as i16 as i32,
+                self.bg3pc as i16 as i32,
+                self.bg3pd as i16 as i32,
+                self.bg3x as i32,
+                self.bg3y as i32,
+            ),
+            _ => return None,
+        };
+        if !enabled {
+            return None;
         }
-        buf
+
+        let size_pixels = 128i32 << bgcnt.screen_size(); // 128/256/512/1024
+        let wrap = (bgcnt.read() & 0x2000) != 0; // display-area overflow: wraparound
+        // BG mosaic snaps the on-screen coordinate to the mosaic block.
+        let (screen_x, screen_y) = if bgcnt.mosaic() {
+            let (mh, mv) = self.bg_mosaic();
+            (screen_x - screen_x % mh, screen_y - screen_y % mv)
+        } else {
+            (screen_x, screen_y)
+        };
+        let x = screen_x as i32;
+        let y = screen_y as i32;
+        let mut tx = (refx + pa * x + pb * y) >> 8;
+        let mut ty = (refy + pc * x + pd * y) >> 8;
+        if wrap {
+            tx = tx.rem_euclid(size_pixels);
+            ty = ty.rem_euclid(size_pixels);
+        } else if tx < 0 || ty < 0 || tx >= size_pixels || ty >= size_pixels {
+            return None;
+        }
+
+        let tiles = (size_pixels / 8) as u32;
+        let map_base = bgcnt.bg_map_offset();
+        let char_base = bgcnt.bg_tile_offset();
+        let tile_x = (tx as u32) / 8;
+        let tile_y = (ty as u32) / 8;
+        let tile_num = vram.read_byte(map_base + tile_y * tiles + tile_x) as u32;
+        let in_x = (tx as u32) % 8;
+        let in_y = (ty as u32) % 8;
+        let idx = vram.read_byte((char_base + tile_num * 64 + in_y * 8 + in_x) & 0x1_7FFF);
+        if idx == 0 {
+            return None;
+        }
+        let color = BGR::new(palette.read_halfword(idx as Word * 2));
+        Some((bgcnt.bg_priority(), color))
     }
 
-    fn render_with_mode4(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
-        let mut buf = vec![0u8; 240 * 160 * 4];
-        let obj = self.render_obj(vram, palette, oam);
-        let is_frame1 = matches!(self.dispcnt.frame(), Frame::Frame1);
-        let offset = if is_frame1 { 0xA000 } else { 0x0000 };
+    /// Sample one BG layer for the given tiled mode (0/1/2): text layers for
+    /// Mode 0, text BG0/BG1 + affine BG2 for Mode 1, affine BG2/BG3 for Mode 2.
+    fn sample_bg_layer(
+        &self,
+        mode: BgMode,
+        layer: usize,
+        x: Word,
+        y: Word,
+        vram: &Ram,
+        palette: &Ram,
+    ) -> Option<(u16, BGR)> {
+        match (mode, layer) {
+            (BgMode::Mode0, 0..=3) => self.sample_text_bg_pixel(layer, x, y, vram, palette),
+            (BgMode::Mode1, 0) | (BgMode::Mode1, 1) => self.sample_text_bg_pixel(layer, x, y, vram, palette),
+            (BgMode::Mode1, 2) => self.sample_affine_bg_pixel(2, x, y, vram, palette),
+            (BgMode::Mode2, 2) | (BgMode::Mode2, 3) => self.sample_affine_bg_pixel(layer, x, y, vram, palette),
+            _ => None,
+        }
+    }
+
+    fn scanline_bitmap3(&mut self, line: usize, vram: &Ram, palette: &Ram, oam: &Ram) {
+        let (obj, _objwin) = self.render_obj_line(line, vram, palette, oam);
         let bg_prio = self.bg2cnt.bg_priority();
         let bg_on = self.dispcnt.screen_display_bg2();
-        for i in 0..(240 * 160) {
+        let backdrop = BGR::new(palette.read_halfword(0));
+        let base = line * 240 * 4;
+        for x in 0..240usize {
+            let i = line * 240 + x;
+            let bg = BGR::new(vram.read_halfword(i as Word * 2)); // direct 15-bit colour
+            let (p, c) = if bg_on { (bg_prio, bg) } else { (4, backdrop) };
+            let color = self.composite_obj(obj[x], p, c);
+            let bi = base + x * 4;
+            self.framebuffer[bi] = color.red();
+            self.framebuffer[bi + 1] = color.green();
+            self.framebuffer[bi + 2] = color.blue();
+            self.framebuffer[bi + 3] = 0xFF;
+        }
+    }
+
+    fn scanline_bitmap4(&mut self, line: usize, vram: &Ram, palette: &Ram, oam: &Ram) {
+        let (obj, _objwin) = self.render_obj_line(line, vram, palette, oam);
+        let offset = if matches!(self.dispcnt.frame(), Frame::Frame1) { 0xA000 } else { 0x0000 };
+        let bg_prio = self.bg2cnt.bg_priority();
+        let bg_on = self.dispcnt.screen_display_bg2();
+        let backdrop = BGR::new(palette.read_halfword(0));
+        let base = line * 240 * 4;
+        for x in 0..240usize {
+            let i = line * 240 + x;
             let palette_index = vram.read_byte(i as Word + offset);
             let bg = BGR::new(palette.read_halfword(palette_index as Word * 2));
-            let (p, c) = if bg_on { (bg_prio, bg) } else { (4, BGR::new(palette.read_halfword(0))) };
-            let color = self.composite_obj(obj[i], p, c);
-            let bi = i * 4;
-            buf[bi] = color.red();
-            buf[bi + 1] = color.green();
-            buf[bi + 2] = color.blue();
-            buf[bi + 3] = 0xFF;
+            let (p, c) = if bg_on { (bg_prio, bg) } else { (4, backdrop) };
+            let color = self.composite_obj(obj[x], p, c);
+            let bi = base + x * 4;
+            self.framebuffer[bi] = color.red();
+            self.framebuffer[bi + 1] = color.green();
+            self.framebuffer[bi + 2] = color.blue();
+            self.framebuffer[bi + 3] = 0xFF;
         }
-        buf
+    }
+
+    /// Mode 5: a 160x128 15-bit colour bitmap (BG2), affine-transformable, with
+    /// two display frames.
+    fn scanline_bitmap5(&mut self, line: usize, vram: &Ram, palette: &Ram, oam: &Ram) {
+        let (obj, _objwin) = self.render_obj_line(line, vram, palette, oam);
+        let base_addr = if matches!(self.dispcnt.frame(), Frame::Frame1) { 0xA000u32 } else { 0 };
+        let bg_on = self.dispcnt.screen_display_bg2();
+        let bg_prio = self.bg2cnt.bg_priority();
+        let pa = self.bg2pa as i16 as i32;
+        let pb = self.bg2pb as i16 as i32;
+        let pc = self.bg2pc as i16 as i32;
+        let pd = self.bg2pd as i16 as i32;
+        let refx = self.bg2x as i32;
+        let refy = self.bg2y as i32;
+        let backdrop = BGR::new(palette.read_halfword(0));
+        let y = line as i32;
+        let base = line * 240 * 4;
+        for x in 0..240i32 {
+            let tx = (refx + pa * x + pb * y) >> 8;
+            let ty = (refy + pc * x + pd * y) >> 8;
+            let (p, c) = if bg_on && (0..160).contains(&tx) && (0..128).contains(&ty) {
+                let addr = base_addr + (ty as u32 * 160 + tx as u32) * 2;
+                (bg_prio, BGR::new(vram.read_halfword(addr)))
+            } else {
+                (4, backdrop)
+            };
+            let color = self.composite_obj(obj[x as usize], p, c);
+            let bi = base + x as usize * 4;
+            self.framebuffer[bi] = color.red();
+            self.framebuffer[bi + 1] = color.green();
+            self.framebuffer[bi + 2] = color.blue();
+            self.framebuffer[bi + 3] = 0xFF;
+        }
     }
 }
 
@@ -1342,6 +1522,38 @@ impl LCDController {
 mod tests {
     use super::*;
     use crate::memory::writable::*;
+
+    /// Render every visible scanline and return the framebuffer (test helper).
+    fn render_full(lcdc: &mut LCDController, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
+        for y in 0..160 {
+            lcdc.render_scanline(y, vram, palette, oam);
+        }
+        lcdc.framebuffer().to_vec()
+    }
+
+    #[test]
+    fn scanline_rendering_captures_midframe_changes() {
+        // Mode 0, no BGs/OBJ -> every pixel is the backdrop (palette[0]). Changing
+        // the backdrop between scanlines must affect only the later lines.
+        let mut lcdc = LCDController::new();
+        lcdc.write_halfword(0x0000, 0x0000); // mode 0, forced-blank off, all layers off
+        let vram = Ram::new(vec![0; 0x1_8000]);
+        let oam = Ram::new(vec![0; 0x0400]);
+        let mut palette = Ram::new(vec![0; 0x0400]);
+
+        palette.write_halfword(0, 0x001F); // red backdrop
+        lcdc.render_scanline(0, &vram, &palette, &oam);
+        palette.write_halfword(0, 0x03E0); // change to green mid-frame
+        lcdc.render_scanline(1, &vram, &palette, &oam);
+
+        let fb = lcdc.framebuffer();
+        // Line 0 captured red; line 1 captured the changed green backdrop.
+        assert_eq!(fb[0] & 0xF8, 0xF8, "line 0 backdrop is red");
+        assert_eq!(fb[1] & 0xF8, 0, "line 0 has no green");
+        let l1 = 240 * 4;
+        assert_eq!(fb[l1] & 0xF8, 0, "line 1 has no red");
+        assert_eq!(fb[l1 + 1] & 0xF8, 0xF8, "line 1 backdrop is green");
+    }
 
     /// Simulate the AGS `run_vblank_status_test` polling loop directly against
     /// the LCD controller: advance time in small (instruction-sized) steps,
@@ -1399,11 +1611,139 @@ mod tests {
     }
 
     #[test]
+    fn obj_window_gates_bg_inside_sprite() {
+        let mut lcdc = LCDController::new();
+        // mode 0, BG0 on, OBJ on, OBJ-window display on (bit 15).
+        lcdc.write_halfword(0x0000, 0x0100 | 0x1000 | 0x8000);
+        // BG0CNT: char base 0, map base block 1 (0x800).
+        lcdc.write_halfword(0x0008, 1 << 8);
+        // WINOUT: outside = all off (0x00); OBJ-window region = BG0 on (bit 8).
+        lcdc.write_halfword(0x004A, 0x0100);
+
+        let mut vram = Ram::new(vec![0; 0x1_8000]);
+        let mut palette = Ram::new(vec![0; 0x0400]);
+        let mut oam = Ram::new(vec![0; 0x0400]);
+        // BG0: tile 0 entirely palette index 1 (red), map entry 0.
+        for i in 0..32u32 {
+            vram.write_byte(i, 0x11);
+        }
+        vram.write_halfword(0x0800, 0);
+        palette.write_halfword(2, 0x001F);
+        // OBJ window sprite 0: mode 2 (bits 10-11 = 10 -> 0x0800), 8x8, tile 0.
+        oam.write_halfword(0, 0x0800);
+        oam.write_halfword(2, 0x0000);
+        oam.write_halfword(4, 0x0000);
+        // OBJ tile 0 at 0x10000: non-transparent (defines window coverage).
+        for i in 0..32u32 {
+            vram.write_byte(0x1_0000 + i, 0x11);
+        }
+
+        let buf = render_full(&mut lcdc, &vram, &palette, &oam);
+        let red = |x: usize, y: usize| buf[(y * 240 + x) * 4] & 0xF8 == 0xF8;
+        assert!(red(0, 0), "inside the OBJ window BG0 is enabled -> red");
+        assert!(red(7, 7), "OBJ window covers the 8x8 sprite");
+        assert!(!red(10, 10), "outside the OBJ window BG0 is masked -> backdrop");
+    }
+
+    #[test]
+    fn alpha_blend_top_two_bg_layers() {
+        let mut lcdc = LCDController::new();
+        lcdc.write_halfword(0x0000, 0x0300); // mode 0, BG0 + BG1 on
+        // BG0: priority 0, char base 0, map base block 2 (0x1000).
+        lcdc.write_halfword(0x0008, 0x0000 | (2 << 8));
+        // BG1: priority 1, char base block 1 (0x4000), map base block 3 (0x1800).
+        lcdc.write_halfword(0x000A, 0x0001 | (1 << 2) | (3 << 8));
+        // BLDCNT: 1st target BG0 (bit0), alpha effect (bits6-7=01), 2nd target BG1 (bit9).
+        lcdc.write_halfword(0x0050, 0x0001 | 0x0040 | 0x0200);
+        // BLDALPHA: EVA = 16, EVB = 16.
+        lcdc.write_halfword(0x0052, 0x10 | (0x10 << 8));
+
+        let mut vram = Ram::new(vec![0; 0x1_8000]);
+        let mut palette = Ram::new(vec![0; 0x0400]);
+        let oam = Ram::new(vec![0; 0x0400]);
+        // BG0 tile 0 = palette index 1 (red); BG1 tile 0 = index 2 (green).
+        vram.write_byte(0x0000, 0x11);
+        vram.write_byte(0x4000, 0x22);
+        vram.write_halfword(0x1000, 0); // BG0 map entry 0
+        vram.write_halfword(0x1800, 0); // BG1 map entry 0
+        palette.write_halfword(2, 0x001F); // idx1 = red
+        palette.write_halfword(4, 0x03E0); // idx2 = green
+
+        let buf = render_full(&mut lcdc, &vram, &palette, &oam);
+        let (r, g, b) = (buf[0], buf[1], buf[2]);
+        // With EVA=EVB=16 the red (BG0, 1st) and green (BG1, 2nd) saturate -> yellow.
+        assert!(r & 0xF8 == 0xF8, "blended pixel keeps red (got {r:#x})");
+        assert!(g & 0xF8 == 0xF8, "blended pixel gains green from the 2nd target (got {g:#x})");
+        assert_eq!(b & 0xF8, 0, "no blue (got {b:#x})");
+    }
+
+    #[test]
+    fn bg_mosaic_snaps_horizontally() {
+        let mut lcdc = LCDController::new();
+        lcdc.write_halfword(0x0000, 0x0100); // mode 0, BG0 on
+        // BG0CNT: mosaic on (bit6), char base block 0, map base block 1 (0x800).
+        lcdc.write_halfword(0x0008, 0x0040 | (1 << 8));
+        lcdc.write_halfword(0x004C, 0x0001); // MOSAIC: BG h-size = 2
+
+        let mut vram = Ram::new(vec![0; 0x1_8000]);
+        let mut palette = Ram::new(vec![0; 0x0400]);
+        let oam = Ram::new(vec![0; 0x0400]);
+        // Map entry (0,0) -> tile 0 (map base 0x800).
+        vram.write_halfword(0x0800, 0);
+        // Tile 0 (4bpp) row 0: col0 = idx1, col1 = idx2 (byte 0 = 0x21).
+        vram.write_byte(0x0000, 0x21);
+        palette.write_halfword(2, 0x001F); // idx1 = red
+        palette.write_halfword(4, 0x03E0); // idx2 = green
+
+        let buf = render_full(&mut lcdc, &vram, &palette, &oam);
+        let r = |x: usize| buf[(x) * 4]; // red channel of pixel (x,0)
+        let g = |x: usize| buf[(x) * 4 + 1];
+        // With h-mosaic 2, pixel 1 samples pixel 0 -> both red, no green.
+        assert!(r(0) & 0xF8 == 0xF8 && g(0) == 0, "pixel 0 is red");
+        assert!(r(1) & 0xF8 == 0xF8 && g(1) == 0, "pixel 1 mosaics to red, not green");
+    }
+
+    #[test]
     fn obj_size_table() {
         assert_eq!(LCDController::obj_size(0, 0), (8, 8));
         assert_eq!(LCDController::obj_size(0, 3), (64, 64));
         assert_eq!(LCDController::obj_size(1, 0), (16, 8));
         assert_eq!(LCDController::obj_size(2, 2), (16, 32));
+    }
+
+    #[test]
+    fn render_affine_bg2_identity() {
+        let mut lcdc = LCDController::new();
+        // Mode 2, BG2 display on.
+        lcdc.write_halfword(0x0000, 0x0002 | 0x0400);
+        // BG2CNT: char base block 1 (0x4000), map base block 0, screen size 0 (128x128).
+        lcdc.write_halfword(0x000C, 0x0004);
+        // Identity affine matrix, zero reference point (defaults already set, but be explicit).
+        lcdc.write_halfword(0x0020, 0x0100); // PA = 1.0
+        lcdc.write_halfword(0x0026, 0x0100); // PD = 1.0
+        lcdc.write_word(0x0028, 0); // BG2X
+        lcdc.write_word(0x002C, 0); // BG2Y
+
+        let mut vram = Ram::new(vec![0; 0x1_8000]);
+        let mut palette = Ram::new(vec![0; 0x0400]);
+        let oam = Ram::new(vec![0; 0x0400]);
+
+        // Affine map entry (0,0) -> tile number 1 (1 byte per entry, map base 0).
+        vram.write_byte(0x0000, 1);
+        // Tile 1 (8bpp) at char base 0x4000 + 1*64 = 0x4040: fill with palette index 1.
+        for i in 0..64u32 {
+            vram.write_byte(0x4040 + i, 1);
+        }
+        // BG palette index 1 = red.
+        palette.write_halfword(2, 0x001F);
+
+        let buf = render_full(&mut lcdc, &vram, &palette, &oam);
+        let px = |x: usize, y: usize| {
+            let i = (y * 240 + x) * 4;
+            (buf[i], buf[i + 1], buf[i + 2])
+        };
+        assert_eq!(px(0, 0).0 & 0xF8, 0xF8, "affine BG2 pixel should be red");
+        assert_eq!(px(7, 7).0 & 0xF8, 0xF8, "tile (0,0) covers 8x8");
     }
 
     #[test]
@@ -1429,7 +1769,7 @@ mod tests {
         oam.write_halfword(2, 0x0000); // attr1: x=0, size 0
         oam.write_halfword(4, 0x0000); // attr2: tile 0, prio 0, palbank 0
 
-        let buf = lcdc.render(&vram, &palette, &oam);
+        let buf = render_full(&mut lcdc, &vram, &palette, &oam);
         // Top-left 8x8 should be red; pixel at (10,10) should be backdrop (0).
         let px = |x: usize, y: usize| {
             let i = (y * 240 + x) * 4;
