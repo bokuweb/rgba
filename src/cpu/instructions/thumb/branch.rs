@@ -14,7 +14,7 @@ pub fn exec_thumb_b(dec: Branch, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Execut
     // Bits[11:8] are condition code, Bits[7:0] is signed 8-bit offset << 1
     let cond: Cond = dec.get_cond().into();
     let offset8 = dec.get_offset8();
-    let signed = if (offset8 & 0x80) != 0 { (offset8 as u16 | 0xFF00) as i16 } else { offset8 as i16 };
+    let signed = if (offset8 & 0x80) != 0 { (offset8 | 0xFF00) as i16 } else { offset8 as i16 };
     if cpsr.condition_ok(cond) {
         let delta = (signed as i32).wrapping_shl(1) as i64;
         gpr[PC] = (gpr[PC] as i64 + delta) as u32;
@@ -25,7 +25,7 @@ pub fn exec_thumb_b(dec: Branch, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Execut
 }
 
 /// Format 18
-pub fn exec_thumb_b2(dec: Branch, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+pub fn exec_thumb_b2(dec: Branch, gpr: &mut [Word; 16], _cpsr: &mut PSR) -> ExecuteResult {
     // THUMB.18: unconditional branch, 11-bit signed offset << 1
     let offset11 = dec.get_offset11();
     let signed = if (offset11 & 0x0400) != 0 {
@@ -54,7 +54,7 @@ pub fn exec_thumb_bl1<T: BusAccessor>(bus: &T, dec: Branch, gpr: &mut [Word; 16]
         (s_cycle, PipelineStatus::Flush)
     } else {
         let offset = if offset & 0x0400 != 0 {
-            ((offset as u32 | 0xFFFF_FC00 as u32) as i32).wrapping_shl(12)
+            ((offset as u32 | 0xFFFF_FC00_u32) as i32).wrapping_shl(12)
         } else {
             (offset as i32).wrapping_shl(12)
         };

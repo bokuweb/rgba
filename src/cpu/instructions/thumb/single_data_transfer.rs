@@ -6,7 +6,7 @@ use crate::cpu::decoder::thumb::*;
 use crate::cpu::instructions::{helpers::read_ldr_data, ExecuteResult};
 use crate::types::*;
 
-pub fn exec_thumb_ldr_imm_offset<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16], started: bool) -> ExecuteResult
+pub fn exec_thumb_ldr_imm_offset<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &mut [Word; 16], _started: bool) -> ExecuteResult
 where
     T: BusAccessor,
 {
@@ -239,7 +239,7 @@ where
 {
     let rd = dec.get_Rd10_8() as usize;
     let offset = dec.get_off8() as u32;
-    let data = gpr[rd as usize];
+    let data = gpr[rd];
     let addr = gpr[SP] + offset.wrapping_shl(2);
 
     bus.write_word(addr, data);

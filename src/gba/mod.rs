@@ -11,13 +11,7 @@ use crate::lcd;
 
 use bus::CpuBus;
 
-use crate::cpu::bus::accessor::BusAccessor;
-use crate::cpu::constants;
 use crate::cpu::cpu;
-use crate::cpu::decoder;
-use crate::cpu::instructions;
-use crate::cpu::registers;
-use crate::cpu::types;
 
 // mod error;
 // mod instructions;
@@ -28,17 +22,13 @@ use crate::cpu::types;
 // use constants::*;
 // use error::*;
 use crate::memory::ram::Ram;
-use crate::memory::readable::*;
 use crate::memory::rom::Rom;
-use crate::memory::writable::*;
-use crate::memory::Raw;
 
 use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use crate::types::*;
 
 // Visible     240 dots,  57.221 us,    960 cycles - 78% of h-time
 // H-Blanking   68 dots,  16.212 us,    272 cycles - 22% of h-time
@@ -46,7 +36,7 @@ use crate::types::*;
 // Visible (*) 160 lines, 11.749 ms, 197120 cycles - 70% of v-time
 // V-Blanking   68 lines,  4.994 ms,  83776 cycles - 30% of v-time
 // Total       228 lines, 16.743 ms, 280896 cycles - ca. 59.737 Hz
-const CYCLES_PER_FRAME: usize = 280896;
+const CYCLES_PER_FRAME: usize = 280_896;
 
 pub struct GBA {
     pub cycles: usize,
@@ -60,7 +50,7 @@ pub struct GBA {
 impl GBA {
     pub fn new() -> Self {
         let bin_path = env::args().nth(1).expect("Specify bin filename to build.");
-        let bin = GBA::load_bin(bin_path.clone()).expect("faild to read bin");
+        let bin = Self::load_bin(bin_path.clone()).expect("faild to read bin");
         // debug!("read bin data = {:?}", bin);
         let bios = Rom::new(0x4000, &include_bytes!("../../bios/bios.bin")[..]);
         let rom = Rom::new(0x80000, &bin);
@@ -75,10 +65,10 @@ impl GBA {
         let kind = SaveKind::detect(&bin);
         let save_path = PathBuf::from(&bin_path).with_extension("sav");
         let saved = std::fs::read(&save_path).unwrap_or_default();
-        if !saved.is_empty() {
-            println!("💾 Loaded save ({:?}, {} bytes) from {}", kind, saved.len(), save_path.display());
-        } else {
+        if saved.is_empty() {
             println!("💾 Backup type: {:?} (save file: {})", kind, save_path.display());
+        } else {
+            println!("💾 Loaded save ({:?}, {} bytes) from {}", kind, saved.len(), save_path.display());
         }
         let backup = Backup::new(kind, &saved);
 
@@ -100,7 +90,7 @@ impl GBA {
         }
         if let Some(path) = &self.save_path {
             match std::fs::write(path, self.bus.backup_bytes()) {
-                Ok(_) => self.bus.backup_clear_dirty(),
+                Ok(()) => self.bus.backup_clear_dirty(),
                 Err(e) => eprintln!("⚠️  failed to write save {}: {}", path.display(), e),
             }
         } else {
@@ -148,7 +138,7 @@ impl GBA {
 
     pub fn update_key(&mut self, key: io::Key) {
         // dbg!("update_key", key);
-        self.bus.update_key(key)
+        self.bus.update_key(key);
     }
 
     /// Output sample rate of the audio stream returned by [`GBA::take_audio`].
@@ -166,13 +156,14 @@ mod test {
     use super::*;
     use pretty_assertions::*;
 
+    use crate::cpu::bus::accessor::BusAccessor; // brings `read_halfword` into scope for CpuBus
     use crate::memory::ram::Ram;
     use crate::memory::rom::Rom;
 
     pub fn run_with_step(step: u64, bin: &[u8]) -> (cpu::ARM, CpuBus) {
         // env_logger::init();
         let bios = Rom::new(0x4000, &include_bytes!("../../bios/bios.bin")[..]);
-        let rom = Rom::new(0x80000, &bin);
+        let rom = Rom::new(0x80000, bin);
         let wram = Ram::new(vec![0; 0x8000]);
         let eram = Ram::new(vec![0; 0x4_0000]);
         let vram = Ram::new(vec![0; 0x1_8000]);
@@ -193,7 +184,7 @@ mod test {
     // step
     fn test_hello_rom() {
         let bin = include_bytes!("../../fixtures/hello/hello.gba");
-        let (cpu, bus) = run_with_step(400000, bin);
+        let (cpu, bus) = run_with_step(400_000, bin);
         self::assert_eq!(
             cpu.gpr,
             [

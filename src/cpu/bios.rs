@@ -8,7 +8,7 @@ pub struct Bios;
 impl Bios {
     /// SWI 0x00 - SoftReset
     /// Clears 0x7E00-0x7FFF in IWRAM and sets up registers for reset
-    pub fn soft_reset<T: BusAccessor>(
+    pub const fn soft_reset<T: BusAccessor>(
         _bus: &mut T,
         gpr: &mut [Word; 16],
         _iwram_flag: u8,
@@ -16,13 +16,13 @@ impl Bios {
         // Clear most of IWRAM (0x7E00-0x7FFF)
         // Set LR based on flag at 0x7FFA
         // For now, just set a default return address
-        gpr[14] = 0x08000000; // Default to ROM
+        gpr[14] = 0x0800_0000; // Default to ROM
     }
 
     /// SWI 0x02 - Halt
     /// Halts the CPU until an interrupt occurs
-    pub fn halt<T: BusAccessor>(_bus: &mut T, _gpr: &mut [Word; 16]) {
-        _bus.set_cpu_halted(true);
+    pub fn halt<T: BusAccessor>(bus: &mut T, _gpr: &mut [Word; 16]) {
+        bus.set_cpu_halted(true);
     }
 
     /// SWI 0x04 - IntrWait
@@ -53,7 +53,7 @@ impl Bios {
         let current_if = bus.read_halfword(0x0400_0202);
         if !discard_old && (current_if & interrupt_flags) != 0 {
             if trace_dma {
-                println!("BIOS IntrWait immediate return IF=0x{:04x}", current_if);
+                println!("BIOS IntrWait immediate return IF=0x{current_if:04x}");
             }
             return;
         }
@@ -83,7 +83,7 @@ impl Bios {
 
     /// SWI 0x06 - Div
     /// Signed division r0/r1
-    pub fn div<T: BusAccessor>(_bus: &mut T, gpr: &mut [Word; 16]) {
+    pub const fn div<T: BusAccessor>(_bus: &mut T, gpr: &mut [Word; 16]) {
         let numerator = gpr[0] as i32;
         let denominator = gpr[1] as i32;
 
@@ -91,9 +91,9 @@ impl Bios {
         if denominator == 0 {
             // Division by zero typically causes endless loop in BIOS
             // For testing, we'll return max values
-            gpr[0] = if numerator >= 0 { 0x7FFFFFFF } else { 0x80000000 };
+            gpr[0] = if numerator >= 0 { 0x7FFF_FFFF } else { 0x8000_0000 };
             gpr[1] = numerator as u32;
-            gpr[3] = 0x7FFFFFFF;
+            gpr[3] = 0x7FFF_FFFF;
         } else {
             let result = numerator / denominator;
             let remainder = numerator % denominator;
@@ -105,12 +105,10 @@ impl Bios {
 
     /// SWI 0x07 - DivArm
     /// Division with swapped parameters (ARM library compatibility)
-    pub fn div_arm<T: BusAccessor>(_bus: &mut T, gpr: &mut [Word; 16]) {
+    pub const fn div_arm<T: BusAccessor>(bus: &mut T, gpr: &mut [Word; 16]) {
         // Swap parameters and call regular div
-        let temp = gpr[0];
-        gpr[0] = gpr[1];
-        gpr[1] = temp;
-        Self::div(_bus, gpr);
+        gpr.swap(0, 1);
+        Self::div(bus, gpr);
     }
 
     /// SWI 0x08 - Sqrt
@@ -154,7 +152,7 @@ impl Bios {
 
         // Convert to 0-FFFFh range for 0-2PI
         let normalized = if atan2_result < 0.0 {
-            atan2_result + 2.0 * std::f64::consts::PI
+            2.0f64.mul_add(std::f64::consts::PI, atan2_result)
         } else {
             atan2_result
         };
@@ -170,9 +168,9 @@ impl Bios {
         let dest = gpr[1];
         let control = gpr[2];
 
-        let count = control & 0x000FFFFF;
-        let fill_mode = (control & 0x01000000) != 0;
-        let word_size = if (control & 0x04000000) != 0 { 4 } else { 2 };
+        let count = control & 0x000F_FFFF;
+        let fill_mode = (control & 0x0100_0000) != 0;
+        let word_size = if (control & 0x0400_0000) != 0 { 4 } else { 2 };
 
         if fill_mode {
             // Fill mode - repeat first value
@@ -214,9 +212,9 @@ impl Bios {
         let dest = gpr[1] & !3;   // Force word alignment
         let control = gpr[2];
 
-        let count = control & 0x000FFFFF;
+        let count = control & 0x000F_FFFF;
         let count = ((count + 7) >> 3) << 3; // Rounded up to multiples of 8 words
-        let fill_mode = (control & 0x01000000) != 0;
+        let fill_mode = (control & 0x0100_0000) != 0;
 
         if fill_mode {
             let fill_value = bus.read_word(source);
@@ -345,7 +343,7 @@ impl Bios {
 
     /// SWI 0x0D - GetBiosChecksum
     /// Returns the checksum of the GBA BIOS (a fixed constant on real hardware).
-    pub fn get_bios_checksum(gpr: &mut [Word; 16]) {
+    pub const fn get_bios_checksum(gpr: &mut [Word; 16]) {
         gpr[0] = 0xBAAE_187F;
     }
 
@@ -461,7 +459,7 @@ impl Bios {
         let src = gpr[0];
         let dst = gpr[1];
         let header = bus.read_word(src);
-        let data_bits = ((header & 0x0F) as u32).max(1); // symbol size in bits (4 or 8)
+        let data_bits = (header & 0x0F).max(1); // symbol size in bits (4 or 8)
         let size = (header >> 8) as usize; // decompressed size in bytes
         let tree_base = src + 4;
         let tree_size = (bus.read_byte(tree_base) as u32 + 1) * 2; // bytes

@@ -1,9 +1,7 @@
-use crate::types::HalfWord;
 
-use super::*;
 
 bitfield! {
-    #[derive(Debug, PartialEq, Clone, Copy)]
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct BlockDataTransfer(u16);
     #[allow(non_snake_case)]
     pub get_L, _: 11;
