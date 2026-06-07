@@ -1,2 +1,2 @@
-pub(crate) mod accessor;
+pub mod accessor;
 

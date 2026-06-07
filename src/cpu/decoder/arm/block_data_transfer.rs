@@ -8,7 +8,7 @@
 // W = 1: Auto Index
 // L = 0: Store / 1: Load
 bitfield! {
-    #[derive(Debug, PartialEq, Clone)]
+    #[derive(Debug, PartialEq, Eq, Clone)]
     pub struct BlockDataTransfer(u32);
     pub get_cond, _: 31, 28;
     #[allow(non_snake_case)]

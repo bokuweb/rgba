@@ -14,9 +14,7 @@ where
 {
     let mut base = gpr[dec.get_Rn() as usize];
     // INFO: Treat as imm12 if not I.
-    let offset = if !dec.get_I() {
-        dec.get_imm()
-    } else {
+    let offset = if dec.get_I() {
         let rm = dec.get_Rm() as usize;
         let sh = dec.get_sh().into();
         let shamt5 = dec.get_shamt5();
@@ -25,6 +23,8 @@ where
         //  - テストでは C=1, Rm=0 により RRX(0) = 0x8000_0000 となることを期待。
         //  - ここで shift(...) を使って RRX を含むシフトを評価し、オフセットに反映する。
         shift(sh, gpr[rm], shamt5, cpsr.get_C(), false)
+    } else {
+        dec.get_imm()
     };
     // t362 の目的は RRX により 0x8000_0000 を生成し、プリインデックス/書き戻しで Rn に反映させること。
     // 以前の 28bit マスクは外し、wrap演算の結果をそのまま使う（GBAのアドレスラップはバス側で処理）。
@@ -58,13 +58,13 @@ where
 {
     let mut base = gpr[dec.get_Rn() as usize];
     // INFO: Treat as imm12 if not I.
-    let offset = if !dec.get_I() {
-        dec.get_imm()
-    } else {
+    let offset = if dec.get_I() {
         let rm = dec.get_Rm() as usize;
         let sh = dec.get_sh().into();
         let shamt5 = dec.get_shamt5();
         shift(sh, gpr[rm], shamt5, cpsr.get_C(), false)
+    } else {
+        dec.get_imm()
     };
     let offset_base = if dec.get_U() {
         base.wrapping_add(offset)
@@ -101,11 +101,11 @@ where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
-    let res = exec_memory_load(bus, gpr, dec, cpsr, |gpr, base| {
+    
+    exec_memory_load(bus, gpr, dec, cpsr, |gpr, base| {
         let data = read_ldr_data(bus, base);
         gpr[rd] = data;
-    });
-    res
+    })
 }
 
 #[allow(non_snake_case)]
@@ -124,7 +124,8 @@ where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
-    let res = exec_memory_store(bus, gpr, dec, cpsr, |bus, gpr, base| {
+    
+    exec_memory_store(bus, gpr, dec, cpsr, |bus, gpr, base| {
         // t354: Misaligned store
         //  - ARMv4 (ARM7TDMI) 仕様では、ワードストアが未アラインドアドレスに対して行われた場合、
         //    アドレスの下位2bitは無視され、4バイト境界にアラインされたアドレスへ書き込む。
@@ -137,8 +138,7 @@ where
         //  - 参照: fixtures/gba-tests/arm/single_transfer.asm の t356 ("ARM 7: Store PC + 4")
         let value = if rd == PC { gpr[PC].wrapping_add(4) } else { gpr[rd] };
         bus.write_word(eff_addr, value);
-    });
-    res
+    })
 }
 
 pub fn exec_arm_strb<T>(bus: &mut T, dec: Memory, gpr: &mut [Word; 16], cpsr: &PSR) -> Result<ExecuteResult, ()>
