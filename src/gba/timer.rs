@@ -18,7 +18,7 @@ struct Timer {
 }
 
 impl Timers {
-    pub fn read(&self, ofs: u32) -> u8 {
+    pub const fn read(&self, ofs: u32) -> u8 {
         match ofs {
             // TMxCNT_L
             0x00 | 0x01 | 0x04 | 0x05 | 0x08 | 0x09 | 0x0C | 0x0D => {
@@ -31,7 +31,7 @@ impl Timers {
                 let i = (ofs / 4) as usize;
                 let t = &self.timer[i];
                 let mut v: u8 = 0;
-                v |= (t.prescaler & 0x3) as u8;           // bits 0..1
+                v |= t.prescaler & 0x3;           // bits 0..1
                 v |= (t.countup_timing as u8) << 2;       // bit 2
                 v |= (t.irq_enable as u8) << 6;           // bit 6
                 v |= (t.enable as u8) << 7;               // bit 7
@@ -43,7 +43,7 @@ impl Timers {
         }
     }
 
-    pub fn write(&mut self, ofs: u32, data: u8) {
+    pub const fn write(&mut self, ofs: u32, data: u8) {
         match ofs {
             // TMxCNT_L (reload value). 実機準拠: 無効化中はカウンタにも即時反映。
             0x00 | 0x01 | 0x04 | 0x05 | 0x08 | 0x09 | 0x0C | 0x0D => {

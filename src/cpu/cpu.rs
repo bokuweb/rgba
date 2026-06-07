@@ -43,8 +43,8 @@ pub struct ARM {
 }
 
 impl ARM {
-    pub fn new() -> ARM {
-        ARM {
+    pub fn new() -> Self {
+        Self {
             pipeline_wait: INITIAL_PIPELINE_WAIT,
             gpr: [0; 16],
             bank_gpr: BankGpr::default(),
@@ -66,7 +66,7 @@ impl ARM {
     }
 
     pub fn reset(&mut self) {
-        self.gpr[PC] = 0x00000000;
+        self.gpr[PC] = 0x0000_0000;
 
         self.cpsr = PSR::default();
 
@@ -85,7 +85,7 @@ impl ARM {
         self.gpr[SP] = 0x0300_7F00;
     }
 
-    fn flush_pipeline(&mut self) {
+    const fn flush_pipeline(&mut self) {
         self.pipeline_wait = INITIAL_PIPELINE_WAIT;
         self.arm_pipe_curr = None;
         self.arm_pipe_next1 = None;
@@ -132,23 +132,23 @@ impl ARM {
         }
     }
 
-    pub fn get_gpr(&self, n: usize) -> Word {
+    pub const fn get_gpr(&self, n: usize) -> Word {
         self.gpr[n]
     }
 
-    pub fn get_cpsr(&self) -> PSR {
+    pub const fn get_cpsr(&self) -> PSR {
         self.cpsr
     }
 
-    pub fn set_gpr(&mut self, n: usize, data: u32) {
+    pub const fn set_gpr(&mut self, n: usize, data: u32) {
         self.gpr[n] = data;
     }
 
-    pub fn request_irq(&mut self) {
+    pub const fn request_irq(&mut self) {
         self.irq_pending = true;
     }
 
-    fn handle_irq<T>(&mut self, bus: &mut T) -> Cycle
+    fn handle_irq<T>(&mut self, _bus: &mut T) -> Cycle
     where
         T: BusAccessor,
     {
@@ -234,7 +234,7 @@ impl ARM {
         }
         // consume 1S cycle for next cycle prefetch
         let next = bus.compute_cycle(self.gpr[PC], AccessType::Seq(width));
-        return next + cycle;
+        next + cycle
     }
 
     pub fn step<T>(&mut self, bus: &mut T, started: bool) -> Result<Cycle, ()>
@@ -273,7 +273,7 @@ impl ARM {
         bus.set_open_bus_context(self.gpr[PC], instruction_width);
         // let log = format!("{:?}", self.gpr);
         // dbg!(&self.gpr);
-        if self.gpr[15] == 134225604 {
+        if self.gpr[15] == 134_225_604 {
             // panic!("aa")
         }
 
@@ -511,7 +511,7 @@ impl ARM {
                 arm::Instruction::BX(dec) => exec_arm_bx(dec, &mut self.cpsr, &mut self.gpr)?,
                 arm::Instruction::LDM(dec) => exec_arm_ldm(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
                 arm::Instruction::STM(dec) => exec_arm_stm(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
-                arm::Instruction::MRS(dec) => exec_arm_mrs(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr)?,
+                arm::Instruction::MRS(dec) => exec_arm_mrs(bus, dec, &mut self.gpr, &self.cpsr, &self.spsr)?,
                 arm::Instruction::MSR(dec) => exec_arm_msr(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr, &mut self.bank_gpr, &mut self.bank_spsr)?,
                 arm::Instruction::SWP(dec) => exec_arm_swp(bus, dec, &mut self.gpr)?,
                 arm::Instruction::SWPB(dec) => exec_arm_swpb(bus, dec, &mut self.gpr)?,
@@ -689,7 +689,7 @@ mod test {
 
     impl MockBus {
         pub fn new() -> Self {
-            MockBus { mem: vec![0; 1024] }
+            Self { mem: vec![0; 1024] }
         }
 
         pub fn set(&mut self, addr: Word, data: Word) {
@@ -697,7 +697,7 @@ mod test {
         }
 
         pub fn get_mem(&self, addr: usize) -> u32 {
-            LittleEndian::read_u32(&self.mem[(addr as usize)..])
+            LittleEndian::read_u32(&self.mem[addr..])
         }
     }
 
@@ -737,7 +737,7 @@ mod test {
         where
             T: BusAccessor,
         {
-            for _ in 0..(INITIAL_PIPELINE_WAIT + 1) {
+            for _ in 0..=INITIAL_PIPELINE_WAIT {
                 self.step(bus, false);
             }
         }
@@ -795,7 +795,7 @@ mod test {
     fn mov_r0_imm1() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE3A0_0001);
+        bus.set(0x0, 0xE3A0_0001);
         let mut arm = ARM::new();
         arm.run_immediately(&mut bus);
         assert_eq!(arm.get_gpr(0), 0x0000_0001);
@@ -807,7 +807,7 @@ mod test {
     fn and_r3_r1_r2() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE001_3002);
+        bus.set(0x0, 0xE001_3002);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0xAA55_55AA);
         arm.set_gpr(2, 0xA050_1122);
@@ -821,7 +821,7 @@ mod test {
     fn eor_r3_r1_r2() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE021_3002);
+        bus.set(0x0, 0xE021_3002);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0xAA55_55AA);
         arm.set_gpr(2, 0xA050_1122);
@@ -835,7 +835,7 @@ mod test {
     fn sub_r3_r1_r2() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE041_3002);
+        bus.set(0x0, 0xE041_3002);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0xAA55_5588);
         arm.set_gpr(2, 0xA050_1122);
@@ -849,7 +849,7 @@ mod test {
     fn rsb_r3_r1_r2() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE061_3002);
+        bus.set(0x0, 0xE061_3002);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0x1234_5678);
         arm.set_gpr(2, 0x2345_6789);
@@ -863,7 +863,7 @@ mod test {
     fn add_r3_r1_r2() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE081_3002);
+        bus.set(0x0, 0xE081_3002);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0x1234_5678);
         arm.set_gpr(2, 0x2345_6789);
@@ -877,7 +877,7 @@ mod test {
     fn adc_r3_r1_r2() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE0A1_3002);
+        bus.set(0x0, 0xE0A1_3002);
         let mut arm = ARM::new();
         arm.cpsr.set_C(true);
         arm.set_gpr(1, 0x1234_5678);
@@ -892,7 +892,7 @@ mod test {
     fn sbc_r3_r1_r2_with_set_c() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE0C1_3002);
+        bus.set(0x0, 0xE0C1_3002);
         let mut arm = ARM::new();
         arm.cpsr.set_C(true);
         arm.set_gpr(1, 0x2345_6789);
@@ -907,7 +907,7 @@ mod test {
     fn sbc_r3_r1_r2_with_cleared_c() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE0C1_3002);
+        bus.set(0x0, 0xE0C1_3002);
         let mut arm = ARM::new();
         arm.cpsr.set_C(false);
         arm.set_gpr(1, 0x2345_6789);
@@ -922,7 +922,7 @@ mod test {
     fn rsc_r3_r1_r2() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE061_3002);
+        bus.set(0x0, 0xE061_3002);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0x1234_5678);
         arm.set_gpr(2, 0x2345_6789);
@@ -935,7 +935,7 @@ mod test {
     fn tst_r0_r1() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE110_0001);
+        bus.set(0x0, 0xE110_0001);
         let mut arm = ARM::new();
         arm.set_gpr(0, 0x8234_5678);
         arm.set_gpr(1, 0x8345_6789);
@@ -950,7 +950,7 @@ mod test {
     fn tst_r1_r2_asr_4_without_zero() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE111_0242);
+        bus.set(0x0, 0xE111_0242);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0x8234_5678);
         arm.set_gpr(2, 0x80FF_0008);
@@ -965,7 +965,7 @@ mod test {
     fn tst_r1_r2_asr_4_with_zero() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE111_0242);
+        bus.set(0x0, 0xE111_0242);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0x8234_5678);
         arm.set_gpr(2, 0x0000_0000);
@@ -980,7 +980,7 @@ mod test {
     fn tst_r1_r2_equal() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE131_0002);
+        bus.set(0x0, 0xE131_0002);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0x8234_5678);
         arm.set_gpr(2, 0x8234_5678);
@@ -995,7 +995,7 @@ mod test {
     fn tst_r1_r2_not_equal() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE131_0002);
+        bus.set(0x0, 0xE131_0002);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0x8234_5678);
         arm.set_gpr(2, 0x0234_5678);
@@ -1010,7 +1010,7 @@ mod test {
     fn cmp_r1_r2_carry() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE151_0002);
+        bus.set(0x0, 0xE151_0002);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0x0000_0002);
         arm.set_gpr(2, 0x0000_0001);
@@ -1026,7 +1026,7 @@ mod test {
     fn cmp_r1_r2_without_carry() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE151_0002);
+        bus.set(0x0, 0xE151_0002);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0x0000_0001);
         arm.set_gpr(2, 0x0000_0002);
@@ -1042,7 +1042,7 @@ mod test {
     fn cmp_r1_r2_with_overflow() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE151_0002);
+        bus.set(0x0, 0xE151_0002);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0x8000_0000);
         arm.set_gpr(2, 0x0000_0001);
@@ -1058,7 +1058,7 @@ mod test {
     fn cmn_r1_r2_with_overflow() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE171_0001);
+        bus.set(0x0, 0xE171_0001);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0x7FFF_FFFF);
         arm.set_gpr(2, 0x0000_0001);
@@ -1074,7 +1074,7 @@ mod test {
     fn orr_r1_r2_r3() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE182_1003);
+        bus.set(0x0, 0xE182_1003);
         let mut arm = ARM::new();
         arm.set_gpr(2, 0xAA55_55AA);
         arm.set_gpr(3, 0x5500_AA00);
@@ -1087,7 +1087,7 @@ mod test {
     fn lsl_r1_r2_16() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE1A0_1802);
+        bus.set(0x0, 0xE1A0_1802);
         let mut arm = ARM::new();
         arm.set_gpr(2, 0x0000_AA55);
         arm.run_immediately(&mut bus);
@@ -1099,7 +1099,7 @@ mod test {
     fn lsr_r1_r2_16() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE1A0_1822);
+        bus.set(0x0, 0xE1A0_1822);
         let mut arm = ARM::new();
         arm.set_gpr(2, 0x00AA_AA55);
         arm.run_immediately(&mut bus);
@@ -1111,7 +1111,7 @@ mod test {
     fn asr_r1_r2_16() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE1A0_1842);
+        bus.set(0x0, 0xE1A0_1842);
         let mut arm = ARM::new();
         arm.set_gpr(2, 0x80AA_AA55);
         arm.run_immediately(&mut bus);
@@ -1123,7 +1123,7 @@ mod test {
     fn rrx_r2_r1() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE1A0_2061);
+        bus.set(0x0, 0xE1A0_2061);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0x0000_007b);
         arm.cpsr.set_C(false);
@@ -1136,7 +1136,7 @@ mod test {
     fn ror_r1_r2_16() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE1A0_1862);
+        bus.set(0x0, 0xE1A0_1862);
         let mut arm = ARM::new();
         arm.set_gpr(2, 0x00AA_AA55);
         arm.run_immediately(&mut bus);
@@ -1148,7 +1148,7 @@ mod test {
     fn bic_r1_r2_r3() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE1C2_1003);
+        bus.set(0x0, 0xE1C2_1003);
         let mut arm = ARM::new();
         arm.set_gpr(2, 0x00AA_AA55);
         arm.set_gpr(3, 0x00AA_AAAA);
@@ -1161,7 +1161,7 @@ mod test {
     fn mvn_r1_r2() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE1E0_1002);
+        bus.set(0x0, 0xE1E0_1002);
         let mut arm = ARM::new();
         arm.set_gpr(2, 0x00AA_AA55);
         arm.run_immediately(&mut bus);
@@ -1173,7 +1173,7 @@ mod test {
     fn mul_r1_r2_r3() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE001_0392);
+        bus.set(0x0, 0xE001_0392);
         let mut arm = ARM::new();
         arm.set_gpr(2, 0xF000_0000);
         arm.set_gpr(3, 2);
@@ -1186,7 +1186,7 @@ mod test {
     fn mla_r1_r2_r3_r4() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE021_4392);
+        bus.set(0x0, 0xE021_4392);
         let mut arm = ARM::new();
         arm.set_gpr(2, 0xF000_0000);
         arm.set_gpr(3, 2);
@@ -1200,7 +1200,7 @@ mod test {
     fn umull_r1_r2_r3_r4() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE082_1493);
+        bus.set(0x0, 0xE082_1493);
         let mut arm = ARM::new();
         arm.set_gpr(3, 0x7000_0001);
         arm.set_gpr(4, 0x0070_0000);
@@ -1214,7 +1214,7 @@ mod test {
     fn umlal_r1_r2_r3_r4() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE0A2_1493);
+        bus.set(0x0, 0xE0A2_1493);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0x0000_0001);
         arm.set_gpr(2, 0x0000_0002);
@@ -1230,7 +1230,7 @@ mod test {
     fn smull_r1_r2_r3_r4() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE0C2_1493);
+        bus.set(0x0, 0xE0C2_1493);
         let mut arm = ARM::new();
         arm.set_gpr(3, 0xFFFF_FFFE);
         arm.set_gpr(4, 0x7FFF_FFFF);
@@ -1244,7 +1244,7 @@ mod test {
     fn smlal_r1_r2_r3_r4() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE0E2_1493);
+        bus.set(0x0, 0xE0E2_1493);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0xFFFF_FFFF);
         arm.set_gpr(2, 0xFFFF_FFFF);
@@ -1260,8 +1260,8 @@ mod test {
     fn ldr_pc_eq0x8000_0000() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE51F_F004);
-        &bus.set(0x4, 0x0000_0010);
+        bus.set(0x0, 0xE51F_F004);
+        bus.set(0x4, 0x0000_0010);
         let mut arm = ARM::new();
         arm.run_immediately(&mut bus);
         assert_eq!(arm.get_gpr(PC), 0x0000_0020);
@@ -1273,8 +1273,8 @@ mod test {
     fn ldrb_r1_r0() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE5D0_1000);
-        &bus.set(0x100, 0xAAAA_5555);
+        bus.set(0x0, 0xE5D0_1000);
+        bus.set(0x100, 0xAAAA_5555);
         let mut arm = ARM::new();
         arm.set_gpr(0, 0x100);
         arm.run_immediately(&mut bus);
@@ -1288,8 +1288,8 @@ mod test {
     fn ldrb_r0_r1_4() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE491_0004);
-        &bus.set(0x100, 0xAAAA_5555);
+        bus.set(0x0, 0xE491_0004);
+        bus.set(0x100, 0xAAAA_5555);
         let mut arm = ARM::new();
         arm.set_gpr(1, 0x100);
         arm.run_immediately(&mut bus);
@@ -1303,8 +1303,8 @@ mod test {
     fn ldr_r8_r9_r2_lsl_2() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE799_8102);
-        &bus.set(0x140, 0xAA55_55AA);
+        bus.set(0x0, 0xE799_8102);
+        bus.set(0x140, 0xAA55_55AA);
         let mut arm = ARM::new();
         arm.set_gpr(2, 0x10);
         arm.set_gpr(9, 0x100);
@@ -1317,7 +1317,7 @@ mod test {
     fn str_r4_r3() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE583_4000);
+        bus.set(0x0, 0xE583_4000);
         let mut arm = ARM::new();
         arm.set_gpr(3, 0x200);
         arm.set_gpr(4, 0xAA55_55AA);
@@ -1330,7 +1330,7 @@ mod test {
     fn strb_r4_r3() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE5C3_4000);
+        bus.set(0x0, 0xE5C3_4000);
         let mut arm = ARM::new();
         arm.set_gpr(3, 0x200);
         arm.set_gpr(4, 0x1155_55AA);
@@ -1343,7 +1343,7 @@ mod test {
     fn strh_r1_r2() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE1C2_10B0);
+        bus.set(0x0, 0xE1C2_10B0);
         let mut arm = ARM::new();
         arm.set_gpr(2, 0x200);
         arm.set_gpr(1, 0x1155_55AA);
@@ -1356,7 +1356,7 @@ mod test {
     fn strh_r1_r2_0xff() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE1C2_1FBF);
+        bus.set(0x0, 0xE1C2_1FBF);
         let mut arm = ARM::new();
         arm.set_gpr(2, 0x200);
         arm.set_gpr(1, 0x1155_55AA);
@@ -1370,7 +1370,7 @@ mod test {
     fn mrs_spsr_in_system_mode_reads_cpsr() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE14F_1000); // mrs r1, spsr
+        bus.set(0x0, 0xE14F_1000); // mrs r1, spsr
         let mut arm = ARM::new();
         arm.cpsr.set_mode(crate::cpu::registers::psr::Mode::System);
         // Put a distinct value in the (nonexistent) SPSR to prove it is not read.
@@ -1386,8 +1386,8 @@ mod test {
     fn ldrh_r1_r2() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE1D2_10B0);
-        &bus.set(0x200, 0xA5A5_5A5A);
+        bus.set(0x0, 0xE1D2_10B0);
+        bus.set(0x200, 0xA5A5_5A5A);
         let mut arm = ARM::new();
         arm.set_gpr(2, 0x200);
         arm.run_immediately(&mut bus);
@@ -1399,8 +1399,8 @@ mod test {
     fn ldrsb_r1_r2() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE1D2_10D0);
-        &bus.set(0x200, 0xA5A5_5AFF);
+        bus.set(0x0, 0xE1D2_10D0);
+        bus.set(0x200, 0xA5A5_5AFF);
         let mut arm = ARM::new();
         arm.set_gpr(2, 0x200);
         arm.run_immediately(&mut bus);
@@ -1412,8 +1412,8 @@ mod test {
     fn ldrsh_r1_r2() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0, 0xE1D2_10D0);
-        &bus.set(0x200, 0xA5A5_FFFE);
+        bus.set(0x0, 0xE1D2_10D0);
+        bus.set(0x200, 0xA5A5_FFFE);
         let mut arm = ARM::new();
         arm.set_gpr(2, 0x200);
         arm.run_immediately(&mut bus);
@@ -1425,7 +1425,7 @@ mod test {
     fn b_pc_sub_2() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0000_0000, 0xEAFF_FFFE);
+        bus.set(0x0000_0000, 0xEAFF_FFFE);
         let mut arm = ARM::new();
         arm.run_immediately(&mut bus);
         assert_eq!(arm.get_gpr(PC), 0x0000_0008);
@@ -1436,7 +1436,7 @@ mod test {
     fn bl_pc_sub_2() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0000_0000, 0xEBFF_FFFE);
+        bus.set(0x0000_0000, 0xEBFF_FFFE);
         let mut arm = ARM::new();
         arm.run_immediately(&mut bus);
         assert_eq!(arm.get_gpr(PC), 0x0000_0008);
@@ -1449,9 +1449,9 @@ mod test {
     fn ldm_r0_r4_r11() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0000_0000, 0xE8B0_0FF0);
+        bus.set(0x0000_0000, 0xE8B0_0FF0);
         for i in 0..0x10 {
-            &bus.set(0x100 + (i * 4), 0xA000_0000 + i);
+            bus.set(0x100 + (i * 4), 0xA000_0000 + i);
         }
         let mut arm = ARM::new();
         arm.set_gpr(0, 0x100);
@@ -1475,7 +1475,7 @@ mod test {
     fn stm_r0_r4_r11() {
         setup();
         let mut bus = MockBus::new();
-        &bus.set(0x0000_0000, 0xE8A0_0FF0);
+        bus.set(0x0000_0000, 0xE8A0_0FF0);
         let mut arm = ARM::new();
         arm.set_gpr(0, 0x100);
         for i in 0..8 {

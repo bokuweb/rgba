@@ -1,5 +1,5 @@
 bitfield! {
-    #[derive(Debug, PartialEq, Clone, Copy)]
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct DataProcessing(u16);
     pub get_op12_11, _: 12, 11;
     pub get_op10_9, _: 9, 6;

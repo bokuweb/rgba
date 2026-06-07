@@ -20,10 +20,9 @@ pub use psr_transfer::*;
 pub use single_data_swap::*;
 pub use swi::*;
 
-use crate::cpu::types::Cond;
 use crate::types::Word;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum InstructionType {
     Undefined,
     PsrTransfer,
@@ -38,7 +37,7 @@ pub enum InstructionType {
     Swi,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Instruction {
     // DataProcessing
     AND(DataProcessing),
@@ -109,7 +108,7 @@ pub enum Instruction {
 //     AL,
 // }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum IndexMode {
     PostIndex,
     Unsupported,
@@ -130,7 +129,7 @@ fn decode_multiple(raw: Word) -> Instruction {
     }
 }
 
-fn decode_psr_transfer(raw: Word) -> Instruction {
+const fn decode_psr_transfer(raw: Word) -> Instruction {
     match raw {
         v if (v & 0x00b0_f000) == 0x0020_f000 => Instruction::MSR(PsrTransfer(raw)),
         _ => Instruction::MRS(PsrTransfer(raw)),
@@ -139,13 +138,10 @@ fn decode_psr_transfer(raw: Word) -> Instruction {
 
 fn decode_single_data_swap(raw: Word) -> Instruction {
     let dec = SingleDataSwap(raw);
-    match dec.get_B() {
-        true => Instruction::SWPB(dec),
-        false => Instruction::SWP(dec),
-    }
+    if dec.get_B() { Instruction::SWPB(dec) } else { Instruction::SWP(dec) }
 }
 
-fn decode_memory(raw: Word) -> Instruction {
+const fn decode_memory(raw: Word) -> Instruction {
     match raw {
         v if (v & 0x0050_0000) == 0x0050_0000 => Instruction::LDRB(Memory(raw)),
         v if (v & 0x0010_0000) == 0x0010_0000 => Instruction::LDR(Memory(raw)),
@@ -210,7 +206,7 @@ fn decode_block_data_transfer(raw: Word) -> Instruction {
     }
 }
 
-fn decode_branch(raw: Word) -> Instruction {
+const fn decode_branch(raw: Word) -> Instruction {
     let with_link = raw & 0x0100_0000 != 0;
     if with_link {
         Instruction::BL(Branch(raw))
@@ -230,7 +226,7 @@ pub fn decode(raw: Word) -> Instruction {
     let instruction_type = match raw {
         // SWI must be detected before other overlapping classes
         v if (v & 0x0F00_0000) == 0x0F00_0000 => InstructionType::Swi,
-        v if ((v & 0x0ffffff0) == 0x012fff10) => InstructionType::BranchAndExchange,
+        v if ((v & 0x0fff_fff0) == 0x012f_ff10) => InstructionType::BranchAndExchange,
         v if (v & 0x0F80_0FF0) == 0x0100_0090 => InstructionType::SingleDataSwap,
         v if (v & 0x0E00_0000) == 0x0A00_0000 => InstructionType::Branch,
         v if (v & 0x0E00_0000) == 0x0800_0000 => InstructionType::BlockDataTransfer, // LDM and STM,

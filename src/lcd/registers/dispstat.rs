@@ -2,7 +2,7 @@ use super::constants::*;
 use crate::types::*;
 
 bitfield! {
-    #[derive(Debug, PartialEq, Clone, Copy)]
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct DISPSTAT(u16);
     pub vcount_setting, _: 15, 8;
     pub vcounter_irq_enable, _: 5;
@@ -12,21 +12,21 @@ bitfield! {
 
 impl DISPSTAT {
     pub fn new() -> Self {
-        DISPSTAT::default()
+        Self::default()
     }
 
-    pub fn write(&mut self, data: HalfWord) {
+    pub const fn write(&mut self, data: HalfWord) {
         self.0 = data & 0xFFF8;
     }
 
     pub fn read(&self, cycles: usize, lines: usize) -> HalfWord {
         let mut v = self.0;
 
-        if DISPSTAT::is_vblank(lines) {
+        if Self::is_vblank(lines) {
             v |= 0x0001;
         }
 
-        if DISPSTAT::is_hblank(cycles) {
+        if Self::is_hblank(cycles) {
             v |= 0x0002;
         }
 
@@ -36,22 +36,25 @@ impl DISPSTAT {
         v
     }
 
-    fn is_vblank(lines: usize) -> bool {
+    const fn is_vblank(lines: usize) -> bool {
         // The VBlank flag is set in lines 160..=226, but NOT in the last line
         // (227), per GBATek / hardware behaviour.
         lines >= 160 && lines <= 226
     }
 
-    fn is_hblank(cycles: usize) -> bool {
+    const fn is_hblank(cycles: usize) -> bool {
         cycles % CYCLES_PER_LINE >= CYCLES_PER_LINE - HBLANK_LENGTH
     }
 }
 
+// `Default` cannot be derived through the `bitfield!` macro, so keep it manual.
+#[allow(clippy::derivable_impls)]
 impl Default for DISPSTAT {
     fn default() -> Self {
-        DISPSTAT(0x0000)
+        Self(0x0000)
     }
 }
+
 
 #[cfg(test)]
 mod tests {

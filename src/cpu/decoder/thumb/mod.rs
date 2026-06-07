@@ -12,7 +12,7 @@ pub use data_processing::*;
 pub use single_data_transfer::*;
 pub use swi::*;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Instruction {
     LDR1(SingleDataTransfer),
     LDRB(SingleDataTransfer),
@@ -235,6 +235,6 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 Instruction::PUSH(dec)
             }
         }
-        _ => panic!(format!("Unsupported instruction {:x}", raw)),
+        _ => panic!("Unsupported instruction {:x}", raw),
     }
 }
