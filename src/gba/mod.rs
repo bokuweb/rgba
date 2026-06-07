@@ -2,9 +2,11 @@ mod apu;
 mod backup;
 mod bus;
 mod dma;
+mod eeprom;
 mod timer;
 
 use backup::{Backup, SaveKind};
+use eeprom::Eeprom;
 
 use crate::io;
 use crate::lcd;
@@ -61,20 +63,29 @@ impl GBA {
         let oam = Ram::new(vec![0; 0x0400]);
 
         // Pick the backup type from the ROM's SDK marker and restore any
-        // existing `.sav` file next to the ROM.
+        // existing `.sav` file next to the ROM. EEPROM carts use a separate
+        // serial device in the 0x0D region; everything else is SRAM/Flash.
+        let is_eeprom = backup::is_eeprom(&bin);
         let kind = SaveKind::detect(&bin);
         let save_path = PathBuf::from(&bin_path).with_extension("sav");
         let saved = std::fs::read(&save_path).unwrap_or_default();
+        let label = if is_eeprom { "EEPROM" } else { "SRAM/Flash" };
         if saved.is_empty() {
-            println!("💾 Backup type: {:?} (save file: {})", kind, save_path.display());
+            println!("💾 Backup type: {label} ({kind:?}) (save file: {})", save_path.display());
         } else {
-            println!("💾 Loaded save ({:?}, {} bytes) from {}", kind, saved.len(), save_path.display());
+            println!("💾 Loaded save ({label}, {} bytes) from {}", saved.len(), save_path.display());
         }
-        let backup = Backup::new(kind, &saved);
+
+        // A Backup is always constructed (it backs the 0x0E region); for EEPROM
+        // carts it stays unused and the EEPROM device holds the save instead.
+        let backup = Backup::new(kind, if is_eeprom { &[] } else { &saved });
 
         let lcdc = lcd::LCDController::new();
         let key = io::Key::new();
-        let bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, backup, key);
+        let mut bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, backup, key);
+        if is_eeprom {
+            bus.attach_eeprom(Eeprom::new(&saved));
+        }
         let mut arm = cpu::ARM::new();
 
         arm.reset();
@@ -82,20 +93,32 @@ impl GBA {
         Self { cycles: 0, arm, bus, save_path: Some(save_path) }
     }
 
-    /// Persist backup memory to the `.sav` file if it changed since the last
-    /// flush. Cheap to call every frame: it is a no-op unless the save is dirty.
+    /// Persist save memory (SRAM/Flash or EEPROM) to the `.sav` file if it
+    /// changed since the last flush. Cheap to call every frame: it is a no-op
+    /// unless the save is dirty.
     pub fn flush_save_if_dirty(&mut self) {
-        if !self.bus.backup_is_dirty() {
+        let eeprom_dirty = self.bus.eeprom_is_dirty();
+        let backup_dirty = self.bus.backup_is_dirty();
+        if !eeprom_dirty && !backup_dirty {
             return;
         }
+        let bytes = if eeprom_dirty {
+            self.bus.eeprom_bytes().to_vec()
+        } else {
+            self.bus.backup_bytes().to_vec()
+        };
         if let Some(path) = &self.save_path {
-            match std::fs::write(path, self.bus.backup_bytes()) {
-                Ok(()) => self.bus.backup_clear_dirty(),
+            match std::fs::write(path, &bytes) {
+                Ok(()) => {
+                    self.bus.eeprom_clear_dirty();
+                    self.bus.backup_clear_dirty();
+                }
                 Err(e) => eprintln!("⚠️  failed to write save {}: {}", path.display(), e),
             }
         } else {
-            // No backing file (embedded ROM): drop the dirty flag so we don't
+            // No backing file (embedded ROM): drop the dirty flags so we don't
             // keep retrying.
+            self.bus.eeprom_clear_dirty();
             self.bus.backup_clear_dirty();
         }
     }
