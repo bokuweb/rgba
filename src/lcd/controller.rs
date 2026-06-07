@@ -782,9 +782,12 @@ impl LCDController {
     }
 
     // Helper function to determine which layers should be rendered for a pixel
-    fn get_window_control(&self, x: Word, y: Word) -> (bool, bool, bool, bool, bool, bool) {
-        // If no windows are enabled, fall back to DISPCNT's layer enable bits
-        let any_window_enabled = self.dispcnt.window0_display_flag() || self.dispcnt.window1_display_flag();
+    fn get_window_control(&self, x: Word, y: Word, in_objwin: bool) -> (bool, bool, bool, bool, bool, bool) {
+        // If no windows are enabled, fall back to DISPCNT's layer enable bits.
+        // DISPCNT bit 15 (here `obj_display_flag`) enables the OBJ window.
+        let any_window_enabled = self.dispcnt.window0_display_flag()
+            || self.dispcnt.window1_display_flag()
+            || self.dispcnt.obj_display_flag();
         if !any_window_enabled {
             let bg0_enable = self.dispcnt.screen_display_bg0();
             let bg1_enable = self.dispcnt.screen_display_bg1();
@@ -796,12 +799,13 @@ impl LCDController {
             return (bg0_enable, bg1_enable, bg2_enable, bg3_enable, obj_enable, effect_enable);
         }
 
-        // Check which window the pixel is in (Window 0 has highest priority)
-        let in_win0 = self.is_pixel_in_window(x, y, self.win0h, self.win0v);
-        let in_win1 = self.is_pixel_in_window(x, y, self.win1h, self.win1v);
-
-        // For now, we don't implement OBJ Window, so in_objwin is always false
-        let in_objwin = false;
+        // Check which window the pixel is in (Window 0 has highest priority).
+        // Only consider win0/win1 if they are actually enabled in DISPCNT.
+        let in_win0 = self.dispcnt.window0_display_flag()
+            && self.is_pixel_in_window(x, y, self.win0h, self.win0v);
+        let in_win1 = self.dispcnt.window1_display_flag()
+            && self.is_pixel_in_window(x, y, self.win1h, self.win1v);
+        let in_objwin = in_objwin && self.dispcnt.obj_display_flag();
 
         let control_bits = if in_win0 {
             // Inside Window 0 - use WININ bits 0-5
@@ -857,86 +861,80 @@ impl LCDController {
         BGR::new(bgr_value as HalfWord)
     }
 
-    // Helper function to apply color special effects
-    fn apply_color_effect(&self, color: BGR, layer_id: u8, effect_enable: bool) -> BGR {
-        if !effect_enable {
-            return color;
-        }
+    fn is_1st_target(&self, target: u8) -> bool {
+        (self.bldcnt & (1 << target)) != 0
+    }
+    fn is_2nd_target(&self, target: u8) -> bool {
+        ((self.bldcnt >> 8) & (1 << target)) != 0
+    }
 
-        let first_target = self.bldcnt & 0x003F; // Bit 0-5: 1st Target
-        let effect_type = (self.bldcnt >> 6) & 0x0003; // Bit 6-7: Effect Type
-        let second_target = (self.bldcnt >> 8) & 0x003F; // Bit 8-13: 2nd Target
+    /// Brightness-increase (fade to white) by EVY.
+    fn brighten(&self, color: BGR) -> BGR {
+        let evy = (self.bldy & 0x1F).min(16);
+        let r = (color.red() >> 3) as u16;
+        let g = (color.green() >> 3) as u16;
+        let b = (color.blue() >> 3) as u16;
+        let r = (r + (31 - r) * evy / 16).min(31);
+        let g = (g + (31 - g) * evy / 16).min(31);
+        let b = (b + (31 - b) * evy / 16).min(31);
+        BGR::new(((b << 10) | (g << 5) | r) as HalfWord)
+    }
 
-        // Check if current layer is a first target
-        let is_first_target = (first_target & (1 << layer_id)) != 0;
+    /// Brightness-decrease (fade to black) by EVY.
+    fn darken(&self, color: BGR) -> BGR {
+        let evy = (self.bldy & 0x1F).min(16);
+        let r = (color.red() >> 3) as u16;
+        let g = (color.green() >> 3) as u16;
+        let b = (color.blue() >> 3) as u16;
+        let r = r - r * evy / 16;
+        let g = g - g * evy / 16;
+        let b = b - b * evy / 16;
+        BGR::new(((b << 10) | (g << 5) | r) as HalfWord)
+    }
 
-        if !is_first_target {
-            return color; // No effect if not a first target
-        }
-
-        match effect_type {
-            0 => color, // None - no effect
-            1 => {
-                // Alpha Blending - blend with backdrop color as a simple demonstration
-                // In a full implementation, this would blend with the actual 2nd target layer
-                let second_target = (self.bldcnt >> 8) & 0x003F; // Bit 8-13: 2nd Target
-                let backdrop_is_second_target = (second_target & 0x0020) != 0; // BD bit
-
-                if backdrop_is_second_target {
-                    // Create a simple backdrop color (dark gray)
-                    let backdrop_color = BGR::new(0x4210); // Dark gray in BGR555 format
-                    self.alpha_blend(color, backdrop_color)
-                } else {
-                    // No valid 2nd target, return original color
-                    color
+    /// Apply colour special effects to the top-most pixel given the pixel below.
+    /// `top` is (colour, BLDCNT target id, semi-transparent OBJ); `below` is the
+    /// colour/target of the next pixel down (the 2nd-target candidate).
+    fn blend_pixel(&self, top: (BGR, u8, bool), below: Option<(BGR, u8)>, effect_enable: bool) -> BGR {
+        let (c1, t1, semi) = top;
+        // A semi-transparent OBJ always alpha-blends with a 2nd target below it,
+        // regardless of the BLDCNT effect selection.
+        if semi {
+            if let Some((c2, t2)) = below {
+                if self.is_2nd_target(t2) {
+                    return self.alpha_blend(c1, c2);
                 }
             }
-            2 => {
-                // Brightness Increase (fade to white)
-                // Formula: I = I1st + (31-I1st)*EVY/16
-                let evy = self.bldy & 0x001F; // Bit 0-4: EVY Coefficient
-                let evy_clamped = if evy > 16 { 16 } else { evy };
-
-                // Extract RGB components (convert from 8-bit back to 5-bit)
-                let r1 = (color.red() >> 3) as u16; // Convert 8-bit to 5-bit
-                let g1 = (color.green() >> 3) as u16;
-                let b1 = (color.blue() >> 3) as u16;
-
-                // Apply brightness increase formula: I = I1st + (31-I1st)*EVY/16
-                let r_bright = r1 + ((31 - r1) * evy_clamped / 16);
-                let g_bright = g1 + ((31 - g1) * evy_clamped / 16);
-                let b_bright = b1 + ((31 - b1) * evy_clamped / 16);
-
-                // Clamp to 5-bit range and convert back to BGR format
-                let r_final = r_bright.min(31);
-                let g_final = g_bright.min(31);
-                let b_final = b_bright.min(31);
-
-                let bgr_value = (b_final << 10) | (g_final << 5) | r_final;
-                BGR::new(bgr_value as HalfWord)
-            }
-            3 => {
-                // Brightness Decrease (fade to black)
-                // Formula: I = I1st - I1st*EVY/16
-                let evy = self.bldy & 0x001F; // Bit 0-4: EVY Coefficient
-                let evy_clamped = if evy > 16 { 16 } else { evy };
-
-                // Extract RGB components (convert from 8-bit back to 5-bit)
-                let r1 = (color.red() >> 3) as u16; // Convert 8-bit to 5-bit
-                let g1 = (color.green() >> 3) as u16;
-                let b1 = (color.blue() >> 3) as u16;
-
-                // Apply brightness decrease formula: I = I1st - I1st*EVY/16
-                let r_dark = r1 - (r1 * evy_clamped / 16);
-                let g_dark = g1 - (g1 * evy_clamped / 16);
-                let b_dark = b1 - (b1 * evy_clamped / 16);
-
-                // Convert back to BGR format (no need to clamp as subtraction won't exceed range)
-                let bgr_value = (b_dark << 10) | (g_dark << 5) | r_dark;
-                BGR::new(bgr_value as HalfWord)
-            }
-            _ => color, // Unknown effect
+            return c1;
         }
+        if !effect_enable {
+            return c1;
+        }
+        match (self.bldcnt >> 6) & 0x3 {
+            1 => {
+                if self.is_1st_target(t1) {
+                    if let Some((c2, t2)) = below {
+                        if self.is_2nd_target(t2) {
+                            return self.alpha_blend(c1, c2);
+                        }
+                    }
+                }
+                c1
+            }
+            2 if self.is_1st_target(t1) => self.brighten(c1),
+            3 if self.is_1st_target(t1) => self.darken(c1),
+            _ => c1,
+        }
+    }
+
+    /// BG mosaic block size (h, v) in pixels (MOSAIC bits 0-7, value + 1).
+    fn bg_mosaic(&self) -> (Word, Word) {
+        ((self.mosaic & 0xF) as Word + 1, ((self.mosaic >> 4) & 0xF) as Word + 1)
+    }
+
+    /// OBJ mosaic block size (h, v) in pixels (MOSAIC bits 8-15, value + 1).
+    fn obj_mosaic(&self) -> (u32, u32) {
+        (((self.mosaic >> 8) & 0xF) as u32 + 1, ((self.mosaic >> 12) & 0xF) as u32 + 1)
     }
 
     /// Sprite (OBJ) sizes indexed by [shape][size] -> (width, height) in pixels.
@@ -1002,10 +1000,13 @@ impl LCDController {
     /// Render all sprites into a full-screen overlay buffer. Each entry is the
     /// top-most (lowest OBJ index) opaque sprite pixel, with its BG-priority and
     /// a semi-transparent flag.
-    fn render_obj(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<Option<ObjPixel>> {
+    /// Render the sprite colour layer and the OBJ-window coverage mask. Mode-2
+    /// sprites contribute only to the window mask (they are not drawn).
+    fn render_obj(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> (Vec<Option<ObjPixel>>, Vec<bool>) {
         let mut buf: Vec<Option<ObjPixel>> = vec![None; 240 * 160];
+        let mut objwin: Vec<bool> = vec![false; 240 * 160];
         if !self.dispcnt.screen_display_obj() {
-            return buf;
+            return (buf, objwin);
         }
         let one_d = self.dispcnt.obj_char_mapping();
         let bitmap_mode = matches!(self.dispcnt.mode(), BgMode::Mode3 | BgMode::Mode4 | BgMode::Mode5);
@@ -1022,10 +1023,13 @@ impl LCDController {
                 continue; // disable bit
             }
             let mode = (a0 >> 10) & 0x3;
-            if mode == 2 || mode == 3 {
-                continue; // OBJ-window / prohibited (OBJ window not yet supported)
+            if mode == 3 {
+                continue; // prohibited
             }
+            // Mode 2 sprites define the OBJ window region instead of being drawn.
+            let is_window = mode == 2;
             let semi = mode == 1;
+            let mosaic = (a0 & 0x1000) != 0;
             let is_8bpp = (a0 & 0x2000) != 0;
             let shape = (a0 >> 14) & 0x3;
             let size = (a1 >> 14) & 0x3;
@@ -1086,22 +1090,34 @@ impl LCDController {
                     if tx < 0 || ty < 0 || tx >= w as i32 || ty >= h as i32 {
                         continue;
                     }
+                    // OBJ mosaic: snap the texel coordinate to the mosaic block.
+                    let (tx, ty) = if mosaic {
+                        let (mh, mv) = self.obj_mosaic();
+                        (tx - tx % mh as i32, ty - ty % mv as i32)
+                    } else {
+                        (tx, ty)
+                    };
 
                     let dst = (sy * 240 + sx) as usize;
-                    // Lower OBJ index has priority: keep the first opaque writer.
-                    if buf[dst].is_some() {
+                    // Lower OBJ index has priority: keep the first opaque writer
+                    // (window sprites only need coverage, so let them re-mark).
+                    if !is_window && buf[dst].is_some() {
                         continue;
                     }
                     if let Some(color) = self.obj_tile_texel(
                         vram, palette, base_tile, tx as u32, ty as u32, w, is_8bpp, one_d, palbank,
                         bitmap_mode,
                     ) {
-                        buf[dst] = Some(ObjPixel { color, priority: prio, semi });
+                        if is_window {
+                            objwin[dst] = true;
+                        } else {
+                            buf[dst] = Some(ObjPixel { color, priority: prio, semi });
+                        }
                     }
                 }
             }
         }
-        buf
+        (buf, objwin)
     }
 
     pub fn render(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
@@ -1145,49 +1161,44 @@ impl LCDController {
     /// overlay sprites.
     fn render_tiled(&self, mode: BgMode, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
         let mut buf = vec![0; 240 * 160 * 4];
-        let obj = self.render_obj(vram, palette, oam);
+        let (obj, objwin) = self.render_obj(vram, palette, oam);
 
         // Render pixel by pixel with window control and BG priority composition.
         for screen_y in 0..160 {
             for screen_x in 0..240 {
                 // Get window control for this pixel
-                let (bg0_enable, bg1_enable, bg2_enable, bg3_enable, obj_enable, effect_enable) = self.get_window_control(screen_x, screen_y);
+                let in_objwin = objwin[(screen_y * 240 + screen_x) as usize];
+                let (bg0_enable, bg1_enable, bg2_enable, bg3_enable, obj_enable, effect_enable) = self.get_window_control(screen_x, screen_y, in_objwin);
 
                 let buf_index = ((screen_y * 240 + screen_x) * 4) as usize;
-                let mut best: Option<(u16, usize, BGR)> = None;
                 let window_enabled = [bg0_enable, bg1_enable, bg2_enable, bg3_enable];
+
+                // Collect candidate pixels: (priority, kind, target, color, semi).
+                // kind orders ties: 0=OBJ, 1=BG, 2=backdrop (OBJ wins BG ties).
+                let mut layers: Vec<(u16, u8, u8, BGR, bool)> = Vec::with_capacity(6);
                 for layer in 0..4 {
                     if !window_enabled[layer] {
                         continue;
                     }
-                    if let Some((priority, mut color)) =
+                    if let Some((priority, color)) =
                         self.sample_bg_layer(mode, layer, screen_x, screen_y, vram, palette)
                     {
-                        color = self.apply_color_effect(color, layer as u8, effect_enable);
-                        match best {
-                            None => best = Some((priority, layer, color)),
-                            Some((best_priority, best_layer, _))
-                                if priority < best_priority
-                                    || (priority == best_priority && layer < best_layer) =>
-                            {
-                                best = Some((priority, layer, color));
-                            }
-                            _ => {}
-                        }
+                        layers.push((priority, 1, layer as u8, color, false));
                     }
                 }
+                if obj_enable {
+                    if let Some(o) = obj[(screen_y * 240 + screen_x) as usize] {
+                        layers.push((o.priority, 0, 4, o.color, o.semi));
+                    }
+                }
+                // Backdrop is always present, below everything.
+                layers.push((5, 2, 5, BGR::new(palette.read_halfword(0)), false));
+                // Top-most first: by priority, then OBJ-before-BG, then BG layer index.
+                layers.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
 
-                // Resolve the background pixel (priority 4 = backdrop, below all BGs).
-                let (bg_priority, bg_color) = match best {
-                    Some((p, _, c)) => (p, c),
-                    None => (
-                        4,
-                        self.apply_color_effect(BGR::new(palette.read_halfword(0)), 5, effect_enable),
-                    ),
-                };
-                // Overlay the sprite layer (subject to per-pixel OBJ enable).
-                let obj_px = if obj_enable { obj[(screen_y * 240 + screen_x) as usize] } else { None };
-                let color = self.composite_obj(obj_px, bg_priority, bg_color);
+                let (_, _, t1, c1, semi) = layers[0];
+                let below = layers.get(1).map(|l| (l.3, l.2));
+                let color = self.blend_pixel((c1, t1, semi), below, effect_enable);
 
                 buf[buf_index] = color.red();
                 buf[buf_index + 1] = color.green();
@@ -1237,6 +1248,14 @@ impl LCDController {
         if !enabled {
             return None;
         }
+
+        // BG mosaic: snap the on-screen coordinate to the mosaic block.
+        let (screen_x, screen_y) = if bgcnt.mosaic() {
+            let (mh, mv) = self.bg_mosaic();
+            (screen_x - screen_x % mh, screen_y - screen_y % mv)
+        } else {
+            (screen_x, screen_y)
+        };
 
         let (width, height) = match bgcnt.screen_size() {
             0 => (256, 256),
@@ -1347,6 +1366,13 @@ impl LCDController {
 
         let size_pixels = 128i32 << bgcnt.screen_size(); // 128/256/512/1024
         let wrap = (bgcnt.read() & 0x2000) != 0; // display-area overflow: wraparound
+        // BG mosaic snaps the on-screen coordinate to the mosaic block.
+        let (screen_x, screen_y) = if bgcnt.mosaic() {
+            let (mh, mv) = self.bg_mosaic();
+            (screen_x - screen_x % mh, screen_y - screen_y % mv)
+        } else {
+            (screen_x, screen_y)
+        };
         let x = screen_x as i32;
         let y = screen_y as i32;
         let mut tx = (refx + pa * x + pb * y) >> 8;
@@ -1396,7 +1422,7 @@ impl LCDController {
 
     fn render_with_mode3(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
         let mut buf = vec![0u8; 240 * 160 * 4];
-        let obj = self.render_obj(vram, palette, oam);
+        let (obj, _objwin) = self.render_obj(vram, palette, oam);
         let bg_prio = self.bg2cnt.bg_priority();
         let bg_on = self.dispcnt.screen_display_bg2();
         for i in 0..(240 * 160) {
@@ -1415,7 +1441,7 @@ impl LCDController {
 
     fn render_with_mode4(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
         let mut buf = vec![0u8; 240 * 160 * 4];
-        let obj = self.render_obj(vram, palette, oam);
+        let (obj, _objwin) = self.render_obj(vram, palette, oam);
         let is_frame1 = matches!(self.dispcnt.frame(), Frame::Frame1);
         let offset = if is_frame1 { 0xA000 } else { 0x0000 };
         let bg_prio = self.bg2cnt.bg_priority();
@@ -1438,7 +1464,7 @@ impl LCDController {
     /// two display frames.
     fn render_with_mode5(&self, vram: &Ram, palette: &Ram, oam: &Ram) -> Vec<u8> {
         let mut buf = vec![0u8; 240 * 160 * 4];
-        let obj = self.render_obj(vram, palette, oam);
+        let (obj, _objwin) = self.render_obj(vram, palette, oam);
         let base = if matches!(self.dispcnt.frame(), Frame::Frame1) { 0xA000u32 } else { 0 };
         let bg_on = self.dispcnt.screen_display_bg2();
         let bg_prio = self.bg2cnt.bg_priority();
@@ -1529,6 +1555,99 @@ mod tests {
             prev = now;
         }
         assert!(saw_match, "expected a VCount match");
+    }
+
+    #[test]
+    fn obj_window_gates_bg_inside_sprite() {
+        let mut lcdc = LCDController::new();
+        // mode 0, BG0 on, OBJ on, OBJ-window display on (bit 15).
+        lcdc.write_halfword(0x0000, 0x0100 | 0x1000 | 0x8000);
+        // BG0CNT: char base 0, map base block 1 (0x800).
+        lcdc.write_halfword(0x0008, 1 << 8);
+        // WINOUT: outside = all off (0x00); OBJ-window region = BG0 on (bit 8).
+        lcdc.write_halfword(0x004A, 0x0100);
+
+        let mut vram = Ram::new(vec![0; 0x1_8000]);
+        let mut palette = Ram::new(vec![0; 0x0400]);
+        let mut oam = Ram::new(vec![0; 0x0400]);
+        // BG0: tile 0 entirely palette index 1 (red), map entry 0.
+        for i in 0..32u32 {
+            vram.write_byte(i, 0x11);
+        }
+        vram.write_halfword(0x0800, 0);
+        palette.write_halfword(2, 0x001F);
+        // OBJ window sprite 0: mode 2 (bits 10-11 = 10 -> 0x0800), 8x8, tile 0.
+        oam.write_halfword(0, 0x0800);
+        oam.write_halfword(2, 0x0000);
+        oam.write_halfword(4, 0x0000);
+        // OBJ tile 0 at 0x10000: non-transparent (defines window coverage).
+        for i in 0..32u32 {
+            vram.write_byte(0x1_0000 + i, 0x11);
+        }
+
+        let buf = lcdc.render(&vram, &palette, &oam);
+        let red = |x: usize, y: usize| buf[(y * 240 + x) * 4] & 0xF8 == 0xF8;
+        assert!(red(0, 0), "inside the OBJ window BG0 is enabled -> red");
+        assert!(red(7, 7), "OBJ window covers the 8x8 sprite");
+        assert!(!red(10, 10), "outside the OBJ window BG0 is masked -> backdrop");
+    }
+
+    #[test]
+    fn alpha_blend_top_two_bg_layers() {
+        let mut lcdc = LCDController::new();
+        lcdc.write_halfword(0x0000, 0x0300); // mode 0, BG0 + BG1 on
+        // BG0: priority 0, char base 0, map base block 2 (0x1000).
+        lcdc.write_halfword(0x0008, 0x0000 | (2 << 8));
+        // BG1: priority 1, char base block 1 (0x4000), map base block 3 (0x1800).
+        lcdc.write_halfword(0x000A, 0x0001 | (1 << 2) | (3 << 8));
+        // BLDCNT: 1st target BG0 (bit0), alpha effect (bits6-7=01), 2nd target BG1 (bit9).
+        lcdc.write_halfword(0x0050, 0x0001 | 0x0040 | 0x0200);
+        // BLDALPHA: EVA = 16, EVB = 16.
+        lcdc.write_halfword(0x0052, 0x10 | (0x10 << 8));
+
+        let mut vram = Ram::new(vec![0; 0x1_8000]);
+        let mut palette = Ram::new(vec![0; 0x0400]);
+        let oam = Ram::new(vec![0; 0x0400]);
+        // BG0 tile 0 = palette index 1 (red); BG1 tile 0 = index 2 (green).
+        vram.write_byte(0x0000, 0x11);
+        vram.write_byte(0x4000, 0x22);
+        vram.write_halfword(0x1000, 0); // BG0 map entry 0
+        vram.write_halfword(0x1800, 0); // BG1 map entry 0
+        palette.write_halfword(2, 0x001F); // idx1 = red
+        palette.write_halfword(4, 0x03E0); // idx2 = green
+
+        let buf = lcdc.render(&vram, &palette, &oam);
+        let (r, g, b) = (buf[0], buf[1], buf[2]);
+        // With EVA=EVB=16 the red (BG0, 1st) and green (BG1, 2nd) saturate -> yellow.
+        assert!(r & 0xF8 == 0xF8, "blended pixel keeps red (got {r:#x})");
+        assert!(g & 0xF8 == 0xF8, "blended pixel gains green from the 2nd target (got {g:#x})");
+        assert_eq!(b & 0xF8, 0, "no blue (got {b:#x})");
+    }
+
+    #[test]
+    fn bg_mosaic_snaps_horizontally() {
+        let mut lcdc = LCDController::new();
+        lcdc.write_halfword(0x0000, 0x0100); // mode 0, BG0 on
+        // BG0CNT: mosaic on (bit6), char base block 0, map base block 1 (0x800).
+        lcdc.write_halfword(0x0008, 0x0040 | (1 << 8));
+        lcdc.write_halfword(0x004C, 0x0001); // MOSAIC: BG h-size = 2
+
+        let mut vram = Ram::new(vec![0; 0x1_8000]);
+        let mut palette = Ram::new(vec![0; 0x0400]);
+        let oam = Ram::new(vec![0; 0x0400]);
+        // Map entry (0,0) -> tile 0 (map base 0x800).
+        vram.write_halfword(0x0800, 0);
+        // Tile 0 (4bpp) row 0: col0 = idx1, col1 = idx2 (byte 0 = 0x21).
+        vram.write_byte(0x0000, 0x21);
+        palette.write_halfword(2, 0x001F); // idx1 = red
+        palette.write_halfword(4, 0x03E0); // idx2 = green
+
+        let buf = lcdc.render(&vram, &palette, &oam);
+        let r = |x: usize| buf[(x) * 4]; // red channel of pixel (x,0)
+        let g = |x: usize| buf[(x) * 4 + 1];
+        // With h-mosaic 2, pixel 1 samples pixel 0 -> both red, no green.
+        assert!(r(0) & 0xF8 == 0xF8 && g(0) == 0, "pixel 0 is red");
+        assert!(r(1) & 0xF8 == 0xF8 && g(1) == 0, "pixel 1 mosaics to red, not green");
     }
 
     #[test]
