@@ -1,4 +1,4 @@
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Cond {
     EQ = 0b0000,
     NE = 0b0001,
@@ -18,49 +18,49 @@ pub enum Cond {
     NV = 0b1111,
 }
 
-impl Into<Cond> for u32 {
-    fn into(self) -> Cond {
-        match self {
-            0b0000 => Cond::EQ,
-            0b0001 => Cond::NE,
-            0b0010 => Cond::CS,
-            0b0011 => Cond::CC,
-            0b0100 => Cond::MI,
-            0b0101 => Cond::PL,
-            0b0110 => Cond::VS,
-            0b0111 => Cond::VC,
-            0b1000 => Cond::HI,
-            0b1001 => Cond::LS,
-            0b1010 => Cond::GE,
-            0b1011 => Cond::LT,
-            0b1100 => Cond::GT,
-            0b1101 => Cond::LE,
-            0b1110 => Cond::AL,
-            0b1111 => Cond::NV,
+impl From<u32> for Cond {
+    fn from(val: u32) -> Self {
+        match val {
+            0b0000 => Self::EQ,
+            0b0001 => Self::NE,
+            0b0010 => Self::CS,
+            0b0011 => Self::CC,
+            0b0100 => Self::MI,
+            0b0101 => Self::PL,
+            0b0110 => Self::VS,
+            0b0111 => Self::VC,
+            0b1000 => Self::HI,
+            0b1001 => Self::LS,
+            0b1010 => Self::GE,
+            0b1011 => Self::LT,
+            0b1100 => Self::GT,
+            0b1101 => Self::LE,
+            0b1110 => Self::AL,
+            0b1111 => Self::NV,
             _ => panic!("illegal condition detected."),
         }
     }
 }
 
-impl Into<Cond> for u16 {
-    fn into(self) -> Cond {
-        match self {
-            0b0000 => Cond::EQ,
-            0b0001 => Cond::NE,
-            0b0010 => Cond::CS,
-            0b0011 => Cond::CC,
-            0b0100 => Cond::MI,
-            0b0101 => Cond::PL,
-            0b0110 => Cond::VS,
-            0b0111 => Cond::VC,
-            0b1000 => Cond::HI,
-            0b1001 => Cond::LS,
-            0b1010 => Cond::GE,
-            0b1011 => Cond::LT,
-            0b1100 => Cond::GT,
-            0b1101 => Cond::LE,
-            0b1110 => Cond::AL,
-            0b1111 => Cond::NV,
+impl From<u16> for Cond {
+    fn from(val: u16) -> Self {
+        match val {
+            0b0000 => Self::EQ,
+            0b0001 => Self::NE,
+            0b0010 => Self::CS,
+            0b0011 => Self::CC,
+            0b0100 => Self::MI,
+            0b0101 => Self::PL,
+            0b0110 => Self::VS,
+            0b0111 => Self::VC,
+            0b1000 => Self::HI,
+            0b1001 => Self::LS,
+            0b1010 => Self::GE,
+            0b1011 => Self::LT,
+            0b1100 => Self::GT,
+            0b1101 => Self::LE,
+            0b1110 => Self::AL,
+            0b1111 => Self::NV,
             _ => panic!("illegal condition detected."),
         }
     }

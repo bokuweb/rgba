@@ -7,8 +7,8 @@ use super::Raw;
 pub struct Ram(Vec<u8>);
 
 impl Ram {
-    pub fn new(buf: Vec<u8>) -> Self {
-        Ram(buf.clone())
+    pub const fn new(buf: Vec<u8>) -> Self {
+        Self(buf)
     }
 }
 

@@ -1,7 +1,7 @@
 use crate::types::*;
 
 bitfield! {
-    #[derive(Debug, PartialEq, Clone, Copy)]
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct BGCNT(u16);
     pub screen_size, _: 15, 14; // Scree Size
     bg2_3_display_area_overflow, _: 13; // 0=Transparent 1=Wraparound
@@ -14,7 +14,7 @@ bitfield! {
 
 impl BGCNT {
     pub fn new() -> Self {
-        BGCNT::default()
+        Self::default()
     }
 
     pub fn bg_tile_offset(&self) -> Word {
@@ -25,17 +25,19 @@ impl BGCNT {
         self.screen_base_block() as Word * 0x800
     }
 
-    pub fn write(&mut self, data: HalfWord) {
-        self.0 = data
+    pub const fn write(&mut self, data: HalfWord) {
+        self.0 = data;
     }
 
-    pub fn read(&self) -> HalfWord {
+    pub const fn read(&self) -> HalfWord {
         self.0
     }
 }
 
+// `Default` cannot be derived through the `bitfield!` macro, so keep it manual.
+#[allow(clippy::derivable_impls)]
 impl Default for BGCNT {
     fn default() -> Self {
-        BGCNT(0x0000)
+        Self(0x0000)
     }
 }

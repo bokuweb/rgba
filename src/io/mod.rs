@@ -1,3 +1,3 @@
 mod key;
 
-pub(crate) use key::*;
+pub use key::*;

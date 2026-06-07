@@ -7,10 +7,10 @@ pub struct Rom(Vec<u8>);
 impl Rom {
     pub fn new(size: usize, init: &[u8]) -> Self {
         let _ = size;
-        Rom(init.to_vec())
+        Self(init.to_vec())
     }
 
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.0.len()
     }
 }
@@ -55,18 +55,18 @@ impl WordReadable for Rom {
 
 #[test]
 fn rom_read_byte() {
-    let rom = Rom::new(4, &vec![0x01, 0x00, 0x00, 0x00]);
+    let rom = Rom::new(4, &[0x01, 0x00, 0x00, 0x00]);
     assert_eq!(rom.read_byte(0), 0x01);
 }
 
 #[test]
 fn rom_read_halfword() {
-    let rom = Rom::new(4, &vec![0x01, 0x02, 0x00, 0x00]);
+    let rom = Rom::new(4, &[0x01, 0x02, 0x00, 0x00]);
     assert_eq!(rom.read_halfword(0), 0x0201);
 }
 
 #[test]
 fn rom_read_word() {
-    let rom = Rom::new(4, &vec![0x01, 0x02, 0x03, 0x04]);
+    let rom = Rom::new(4, &[0x01, 0x02, 0x03, 0x04]);
     assert_eq!(rom.read_word(0), 0x0403_0201);
 }
