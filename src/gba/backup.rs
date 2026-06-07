@@ -42,11 +42,19 @@ impl SaveKind {
         } else if contains(rom, b"FLASH512_V") || contains(rom, b"FLASH_V") {
             Self::Flash512
         } else {
-            // SRAM_V / SRAM_F_V / EEPROM_V (EEPROM not modeled here) all fall
-            // back to plain SRAM, which is also the safe default.
+            // SRAM_V / SRAM_F_V (and EEPROM_V carts, whose serial device lives in
+            // the 0x0D region and is modeled separately) fall back to plain SRAM,
+            // which is also the safe default.
             Self::Sram
         }
     }
+}
+
+/// Whether the ROM declares serial EEPROM backup (an `EEPROM_V` marker). EEPROM
+/// is a separate device from [`Backup`]; the bus models it in the 0x0D region.
+#[must_use]
+pub fn is_eeprom(rom: &[u8]) -> bool {
+    contains(rom, b"EEPROM_V")
 }
 
 fn contains(haystack: &[u8], needle: &[u8]) -> bool {

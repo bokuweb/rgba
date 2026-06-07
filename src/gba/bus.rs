@@ -16,6 +16,8 @@ use std::cell::Cell;
 use super::apu::Apu;
 use super::backup::Backup;
 use super::dma::DMAController;
+use super::eeprom::Eeprom;
+use super::rtc::Rtc;
 
 pub const BIOS_ADDR: u32 = 0x0000_0000;
 pub const EWRAM_ADDR: u32 = 0x0200_0000;
@@ -140,6 +142,8 @@ pub struct CpuBus {
     palette: Ram,
     oam: Ram,
     backup: Backup, // SRAM / Flash save memory (0x0E000000-0x0E00FFFF)
+    eeprom: Option<Eeprom>, // serial EEPROM save (0x0D000000 region), when present
+    rtc: Rtc, // GamePak GPIO + real-time clock (0x080000C4-C8)
     key: io::Key,
     keycnt: HalfWord,
     siocnt: HalfWord,
@@ -277,6 +281,12 @@ impl BusAccessor for CpuBus {
             0x0600_0000..=0x06FF_FFFF => self.vram.read_halfword(Self::map_vram_offset(addr)),
             // 修正(006): OAM 1KB ミラー（16bit 読み）
             0x0700_0000..=0x07FF_FFFF => self.oam.read_halfword((addr - 0x0700_0000) & 0x3FF),
+            // GamePak GPIO / RTC registers (only readable once the game enables
+            // GPIO reads; otherwise these addresses read ROM).
+            0x0800_00C4 | 0x0800_00C6 | 0x0800_00C8 if self.rtc.read_enabled() => self.rtc.read(addr),
+            // Direct CPU reads of EEPROM only see the ready flag; real games
+            // clock data out via DMA (see `perform_dma_transfer`).
+            0x0D00_0000..=0x0DFF_FFFF if self.eeprom.is_some() => 1,
             0x0800_0000..=0x0DFF_FFFF => self.gamepak_read_halfword(addr),
             0x0E00_0000..=0x0E00_FFFF => {
                 println!("⚠️  WARNING: Invalid halfword access to SRAM at 0x{addr:08x} (SRAM is byte-access only) - returning 0xFFFF");
@@ -577,6 +587,15 @@ impl BusAccessor for CpuBus {
             }
             // 修正(006): OAM 1KB ミラー（16bit 書き）
             0x0700_0000..=0x07FF_FFFF => self.oam.write_halfword((addr - 0x0700_0000) & 0x3FF, data),
+            // GamePak GPIO / RTC registers.
+            0x0800_00C4 | 0x0800_00C6 | 0x0800_00C8 => self.rtc.write(addr, data),
+            // Direct CPU writes to EEPROM clock in one command bit (real games
+            // use DMA, but handle this for completeness).
+            0x0D00_0000..=0x0DFF_FFFF if self.eeprom.is_some() => {
+                if let Some(e) = self.eeprom.as_mut() {
+                    e.write_bit(data);
+                }
+            }
             0x0E00_0000..=0x0E00_FFFF => {
                 println!("⚠️  WARNING: Invalid halfword write to SRAM at 0x{addr:08x} = 0x{data:04x} (SRAM is byte-access only, ignored)");
             }
@@ -785,6 +804,8 @@ impl CpuBus {
             palette,
             oam,
             backup,
+            eeprom: None,
+            rtc: Rtc::new(),
             key,
             keycnt: 0,
             siocnt: 0,
@@ -823,6 +844,27 @@ impl CpuBus {
 
     pub(crate) const fn backup_clear_dirty(&mut self) {
         self.backup.clear_dirty();
+    }
+
+    /// Attach a serial EEPROM device (for carts whose save type is EEPROM).
+    pub(crate) fn attach_eeprom(&mut self, eeprom: Eeprom) {
+        self.eeprom = Some(eeprom);
+    }
+
+    /// EEPROM save bytes for persistence (empty when no EEPROM is present).
+    pub(crate) fn eeprom_bytes(&self) -> &[u8] {
+        self.eeprom.as_ref().map_or(&[], Eeprom::bytes)
+    }
+
+    /// Whether the EEPROM changed since the last `eeprom_clear_dirty`.
+    pub(crate) fn eeprom_is_dirty(&self) -> bool {
+        self.eeprom.as_ref().is_some_and(Eeprom::is_dirty)
+    }
+
+    pub(crate) fn eeprom_clear_dirty(&mut self) {
+        if let Some(e) = self.eeprom.as_mut() {
+            e.clear_dirty();
+        }
     }
 
     /// Evaluate the KEYCNT keypad interrupt condition against the current key
@@ -1282,6 +1324,19 @@ impl CpuBus {
             self.dma.channels[c].enabled && self.dma.channels[c].get_timing() == 2
         });
 
+        // Serial EEPROM (0x0D region) is driven by DMA: prime the device with the
+        // transfer length so it can detect its size and frame the command. A
+        // write targets EEPROM (dest), a read sources from it (src).
+        let eeprom_write = dst_region == GAMEPAK_WS2_HI && self.eeprom.is_some();
+        let eeprom_read = src_region == GAMEPAK_WS2_HI && self.eeprom.is_some();
+        if let Some(e) = self.eeprom.as_mut() {
+            if eeprom_write {
+                e.prepare(true, count);
+            } else if eeprom_read {
+                e.prepare(false, count);
+            }
+        }
+
         for i in 0..count {
             let source_addr = src_region | ((src_off as u32) & 0x00FF_FFFF);
             let dest_addr = dst_region | ((dst_off as u32) & 0x00FF_FFFF);
@@ -1309,9 +1364,19 @@ impl CpuBus {
                 }
                 last_value = Some(data);
             } else {
-                // 16-bit transfer
-                let data = self.read_halfword_internal(source_addr);
-                self.write_halfword_internal(dest_addr, data);
+                // 16-bit transfer (the only width EEPROM uses).
+                let data = if eeprom_read {
+                    self.eeprom.as_mut().map_or(1, Eeprom::read_bit)
+                } else {
+                    self.read_halfword_internal(source_addr)
+                };
+                if eeprom_write {
+                    if let Some(e) = self.eeprom.as_mut() {
+                        e.write_bit(data);
+                    }
+                } else {
+                    self.write_halfword_internal(dest_addr, data);
+                }
                 let data32 = data as u32;
                 if first_value.is_none() {
                     first_value = Some(data32);
