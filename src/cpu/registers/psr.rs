@@ -2,13 +2,13 @@ use crate::cpu::constants::*;
 use crate::cpu::registers::{BankGpr, BankSpsr};
 use crate::cpu::types::*;
 use crate::types::*;
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum CpuState {
     ARM,
     Thumb,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Mode {
     User = 0x10,
     FIQ = 0x11,
@@ -20,15 +20,15 @@ pub enum Mode {
 }
 
 impl From<u32> for Mode {
-    fn from(f: u32) -> Mode {
+    fn from(f: u32) -> Self {
         match f {
-            0x10 => Mode::User,
-            0x11 => Mode::FIQ,
-            0x12 => Mode::IRQ,
-            0x13 => Mode::Supervisor,
-            0x17 => Mode::Abort,
-            0x1B => Mode::Undefined,
-            0x1F => Mode::System,
+            0x10 => Self::User,
+            0x11 => Self::FIQ,
+            0x12 => Self::IRQ,
+            0x13 => Self::Supervisor,
+            0x17 => Self::Abort,
+            0x1B => Self::Undefined,
+            0x1F => Self::System,
             _ => panic!("illegal mode value({:x}) detected.", f),
         }
     }
@@ -54,7 +54,7 @@ const MODE_SYSTEM: u32 = 0b1_1111;
 // 5     T - State Bit       (0=ARM, 1=THUMB) - Do not change manually!; Bits
 // 4-0   M4-M0 - Mode Bits   (See below)                               ;/
 bitfield! {
-    #[derive(Debug, PartialEq, Clone, Copy)]
+    #[derive(Debug, PartialEq, Eq, Clone, Copy)]
     pub struct PSR(u32);
     #[allow(non_snake_case)]
     pub get_N, set_N: 31;
@@ -80,12 +80,12 @@ bitfield! {
 }
 
 impl PSR {
-    pub fn get(&self) -> u32 {
+    pub const fn get(&self) -> u32 {
         self.0
     }
 
-    pub fn set(&mut self, value: u32) {
-        self.0 = value
+    pub const fn set(&mut self, value: u32) {
+        self.0 = value;
     }
 
     pub fn set_cpu_state(&mut self, state: CpuState) {
@@ -142,15 +142,15 @@ impl PSR {
     //     self.set_V(v);
     // }
 
-    pub fn restore(&mut self, spsr: &mut PSR, gpr: &mut [Word; 16], bank_gpr: &mut BankGpr, bank_spsr: &mut BankSpsr) {
+    pub fn restore(&mut self, spsr: &mut Self, gpr: &mut [Word; 16], bank_gpr: &mut BankGpr, bank_spsr: &mut BankSpsr) {
         // Preserve the current mode's SPSR value before switch_mode mutates visible SPSR.
         let restored = *spsr;
         self.switch_mode(restored.get_mode(), gpr, spsr, bank_gpr, bank_spsr);
-        self.set(restored.get())
+        self.set(restored.get());
         // TODO: check irq??
     }
 
-    pub fn switch_mode(&mut self, new_mode: Mode, gpr: &mut [Word; 16], spsr: &mut PSR, bank_gpr: &mut BankGpr, bank_spsr: &mut BankSpsr) {
+    pub fn switch_mode(&mut self, new_mode: Mode, gpr: &mut [Word; 16], spsr: &mut Self, bank_gpr: &mut BankGpr, bank_spsr: &mut BankSpsr) {
         let current_mode = self.get_mode();
         if new_mode == current_mode {
             return;
@@ -242,7 +242,7 @@ impl PSR {
 }
 
 impl Default for PSR {
-    fn default() -> PSR {
-        PSR(RAW_DEFAULT)
+    fn default() -> Self {
+        Self(RAW_DEFAULT)
     }
 }

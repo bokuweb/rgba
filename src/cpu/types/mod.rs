@@ -6,7 +6,7 @@ pub use cond::*;
 // pub type HalfWord = u16;
 // pub type Word = u32;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Shift {
     LSL,
     LSR,
@@ -14,14 +14,14 @@ pub enum Shift {
     ROR,
 }
 
-impl Into<Shift> for u32 {
-    fn into(self) -> Shift {
-        match self {
-            0b00 => Shift::LSL,
-            0b01 => Shift::LSR,
-            0b10 => Shift::ASR,
-            0b11 => Shift::ROR,
-            _ => panic!("shift value should be 0b00~0b11. {} is illegal value", self),
+impl From<u32> for Shift {
+    fn from(val: u32) -> Self {
+        match val {
+            0b00 => Self::LSL,
+            0b01 => Self::LSR,
+            0b10 => Self::ASR,
+            0b11 => Self::ROR,
+            _ => panic!("shift value should be 0b00~0b11. {} is illegal value", val),
         }
     }
 }

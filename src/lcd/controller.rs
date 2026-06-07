@@ -18,19 +18,19 @@ struct ObjPixel {
 struct BGR(HalfWord);
 
 impl BGR {
-    fn new(c: HalfWord) -> Self {
-        BGR(c)
+    const fn new(c: HalfWord) -> Self {
+        Self(c)
     }
 
-    fn blue(&self) -> Byte {
+    const fn blue(&self) -> Byte {
         (self.0.wrapping_shr(10) as Byte).wrapping_shl(3)
     }
 
-    fn green(&self) -> Byte {
+    const fn green(&self) -> Byte {
         ((self.0.wrapping_shr(5) & 0x1F) as Byte).wrapping_shl(3)
     }
 
-    fn red(&self) -> Byte {
+    const fn red(&self) -> Byte {
         (self.0 & 0x1F).wrapping_shl(3) as Byte
     }
 }
@@ -96,8 +96,8 @@ impl LCDController {
         std::env::var("AGB_TRACE_LCD").ok().as_deref() == Some("1")
     }
 
-    pub fn new() -> LCDController {
-        LCDController {
+    pub fn new() -> Self {
+        Self {
             cycles: 0,
             lines: 0,
             framebuffer: vec![0; 240 * 160 * 4],
@@ -266,6 +266,10 @@ impl LCDController {
         }
     }
 
+    // Several window/blend registers decode their bit fields into `let _name`
+    // bindings purely to document the layout (see the commented-out debug
+    // prints); they intentionally have no runtime effect yet.
+    #[allow(clippy::no_effect_underscore_binding)]
     pub fn write_halfword(&mut self, addr: Word, data: HalfWord) {
         match addr {
             0x0000 => {
@@ -486,52 +490,52 @@ impl LCDController {
             0x0040 => {
                 // WIN0H - Window 0 Horizontal Dimensions (Write Only)
                 self.win0h = data;
-                let x1 = (data >> 8) & 0xFF; // Bit 8-15: X1, Leftmost coordinate
-                let x2 = data & 0xFF; // Bit 0-7: X2, Rightmost coordinate + 1
+                let _x1 = (data >> 8) & 0xFF; // Bit 8-15: X1, Leftmost coordinate
+                let _x2 = data & 0xFF; // Bit 0-7: X2, Rightmost coordinate + 1
                                       // println!("WIN0H write: 0x{:04x} (X1:{}, X2:{})", data, x1, x2);
             }
             0x0042 => {
                 // WIN1H - Window 1 Horizontal Dimensions (Write Only)
                 self.win1h = data;
-                let x1 = (data >> 8) & 0xFF; // Bit 8-15: X1, Leftmost coordinate
-                let x2 = data & 0xFF; // Bit 0-7: X2, Rightmost coordinate + 1
+                let _x1 = (data >> 8) & 0xFF; // Bit 8-15: X1, Leftmost coordinate
+                let _x2 = data & 0xFF; // Bit 0-7: X2, Rightmost coordinate + 1
                                       // println!("WIN1H write: 0x{:04x} (X1:{}, X2:{})", data, x1, x2);
             }
             0x0044 => {
                 // WIN0V - Window 0 Vertical Dimensions (Write Only)
                 self.win0v = data;
-                let y1 = (data >> 8) & 0xFF; // Bit 8-15: Y1, Top-most coordinate
-                let y2 = data & 0xFF; // Bit 0-7: Y2, Bottom-most coordinate + 1
+                let _y1 = (data >> 8) & 0xFF; // Bit 8-15: Y1, Top-most coordinate
+                let _y2 = data & 0xFF; // Bit 0-7: Y2, Bottom-most coordinate + 1
                                       // println!("WIN0V write: 0x{:04x} (Y1:{}, Y2:{})", data, y1, y2);
             }
             0x0046 => {
                 // WIN1V - Window 1 Vertical Dimensions (Write Only)
                 self.win1v = data;
-                let y1 = (data >> 8) & 0xFF; // Bit 8-15: Y1, Top-most coordinate
-                let y2 = data & 0xFF; // Bit 0-7: Y2, Bottom-most coordinate + 1
+                let _y1 = (data >> 8) & 0xFF; // Bit 8-15: Y1, Top-most coordinate
+                let _y2 = data & 0xFF; // Bit 0-7: Y2, Bottom-most coordinate + 1
                                       // println!("WIN1V write: 0x{:04x} (Y1:{}, Y2:{})", data, y1, y2);
             }
             0x0048 => {
                 // WININ - Control of Inside of Window(s) (Read/Write)
                 self.winin = data;
-                let win0_bg0_3 = data & 0x000F; // Bit 0-3: Window 0 BG0-BG3 Enable
-                let win0_obj = (data & 0x0010) != 0; // Bit 4: Window 0 OBJ Enable
-                let win0_effect = (data & 0x0020) != 0; // Bit 5: Window 0 Color Special Effect
-                let win1_bg0_3 = (data & 0x0F00) >> 8; // Bit 8-11: Window 1 BG0-BG3 Enable
-                let win1_obj = (data & 0x1000) != 0; // Bit 12: Window 1 OBJ Enable
-                let win1_effect = (data & 0x2000) != 0; // Bit 13: Window 1 Color Special Effect
+                let _win0_bg0_3 = data & 0x000F; // Bit 0-3: Window 0 BG0-BG3 Enable
+                let _win0_obj = (data & 0x0010) != 0; // Bit 4: Window 0 OBJ Enable
+                let _win0_effect = (data & 0x0020) != 0; // Bit 5: Window 0 Color Special Effect
+                let _win1_bg0_3 = (data & 0x0F00) >> 8; // Bit 8-11: Window 1 BG0-BG3 Enable
+                let _win1_obj = (data & 0x1000) != 0; // Bit 12: Window 1 OBJ Enable
+                let _win1_effect = (data & 0x2000) != 0; // Bit 13: Window 1 Color Special Effect
                                                         // println!("WININ write: 0x{:04x} (Win0: BG:{:04b} OBJ:{} FX:{}, Win1: BG:{:04b} OBJ:{} FX:{})",
                                                         //     data, win0_bg0_3, win0_obj, win0_effect, win1_bg0_3, win1_obj, win1_effect);
             }
             0x004A => {
                 // WINOUT - Control of Outside of Windows & Inside of OBJ Window (Read/Write)
                 self.winout = data;
-                let out_bg0_3 = data & 0x000F; // Bit 0-3: Outside BG0-BG3 Enable
-                let out_obj = (data & 0x0010) != 0; // Bit 4: Outside OBJ Enable
-                let out_effect = (data & 0x0020) != 0; // Bit 5: Outside Color Special Effect
-                let objwin_bg0_3 = (data & 0x0F00) >> 8; // Bit 8-11: OBJ Window BG0-BG3 Enable
-                let objwin_obj = (data & 0x1000) != 0; // Bit 12: OBJ Window OBJ Enable
-                let objwin_effect = (data & 0x2000) != 0; // Bit 13: OBJ Window Color Special Effect
+                let _out_bg0_3 = data & 0x000F; // Bit 0-3: Outside BG0-BG3 Enable
+                let _out_obj = (data & 0x0010) != 0; // Bit 4: Outside OBJ Enable
+                let _out_effect = (data & 0x0020) != 0; // Bit 5: Outside Color Special Effect
+                let _objwin_bg0_3 = (data & 0x0F00) >> 8; // Bit 8-11: OBJ Window BG0-BG3 Enable
+                let _objwin_obj = (data & 0x1000) != 0; // Bit 12: OBJ Window OBJ Enable
+                let _objwin_effect = (data & 0x2000) != 0; // Bit 13: OBJ Window Color Special Effect
                                                           // println!("WINOUT write: 0x{:04x} (Out: BG:{:04b} OBJ:{} FX:{}, ObjWin: BG:{:04b} OBJ:{} FX:{})",
                                                           //     data, out_bg0_3, out_obj, out_effect, objwin_bg0_3, objwin_obj, objwin_effect);
             }
@@ -542,11 +546,11 @@ impl LCDController {
             0x0050 => {
                 // BLDCNT - Color Special Effects Selection (Read/Write)
                 self.bldcnt = data;
-                let first_target = data & 0x003F; // Bit 0-5: 1st Target (BG0-3, OBJ, BD)
+                let _first_target = data & 0x003F; // Bit 0-5: 1st Target (BG0-3, OBJ, BD)
                 let effect_type = (data >> 6) & 0x0003; // Bit 6-7: Effect Type
-                let second_target = (data >> 8) & 0x003F; // Bit 8-13: 2nd Target (BG0-3, OBJ, BD)
+                let _second_target = (data >> 8) & 0x003F; // Bit 8-13: 2nd Target (BG0-3, OBJ, BD)
 
-                let effect_name = match effect_type {
+                let _effect_name = match effect_type {
                     0 => "None",
                     1 => "Alpha Blending",
                     2 => "Brightness Increase",
@@ -564,8 +568,8 @@ impl LCDController {
                 let evb = (data >> 8) & 0x001F; // Bit 8-12: EVB Coefficient (2nd Target)
 
                 // Clamp coefficients to valid range (0-16)
-                let eva_clamped = if eva > 16 { 16 } else { eva };
-                let evb_clamped = if evb > 16 { 16 } else { evb };
+                let _eva_clamped = if eva > 16 { 16 } else { eva };
+                let _evb_clamped = if evb > 16 { 16 } else { evb };
 
                 // println!("BLDALPHA write: 0x{:04x} (EVA:{}/{}, EVB:{}/{})",
                 //     data, eva, eva_clamped, evb, evb_clamped);
@@ -576,7 +580,7 @@ impl LCDController {
                 let evy = data & 0x001F; // Bit 0-4: EVY Coefficient (Brightness)
 
                 // Clamp coefficient to valid range (0-16)
-                let evy_clamped = if evy > 16 { 16 } else { evy };
+                let _evy_clamped = if evy > 16 { 16 } else { evy };
 
                 // println!("BLDY write: 0x{:04x} (EVY:{}/{})", data, evy, evy_clamped);
             }
@@ -588,6 +592,7 @@ impl LCDController {
         }
     }
 
+    #[allow(clippy::no_effect_underscore_binding)] // register field-decode documentation, see write_halfword
     pub fn write_word(&mut self, addr: Word, data: Word) {
         let data = data as HalfWord;
         match addr {
@@ -718,26 +723,26 @@ impl LCDController {
             0x0040 => {
                 // WIN0H - Window 0 Horizontal Dimensions (Write Only)
                 self.win0h = data;
-                let x1 = (data >> 8) & 0xFF; // Bit 8-15: X1, Leftmost coordinate
-                let x2 = data & 0xFF; // Bit 0-7: X2, Rightmost coordinate + 1
+                let _x1 = (data >> 8) & 0xFF; // Bit 8-15: X1, Leftmost coordinate
+                let _x2 = data & 0xFF; // Bit 0-7: X2, Rightmost coordinate + 1
             }
             0x0042 => {
                 // WIN1H - Window 1 Horizontal Dimensions (Write Only)
                 self.win1h = data;
-                let x1 = (data >> 8) & 0xFF; // Bit 8-15: X1, Leftmost coordinate
-                let x2 = data & 0xFF; // Bit 0-7: X2, Rightmost coordinate + 1
+                let _x1 = (data >> 8) & 0xFF; // Bit 8-15: X1, Leftmost coordinate
+                let _x2 = data & 0xFF; // Bit 0-7: X2, Rightmost coordinate + 1
             }
             0x0044 => {
                 // WIN0V - Window 0 Vertical Dimensions (Write Only)
                 self.win0v = data;
-                let y1 = (data >> 8) & 0xFF; // Bit 8-15: Y1, Top-most coordinate
-                let y2 = data & 0xFF; // Bit 0-7: Y2, Bottom-most coordinate + 1
+                let _y1 = (data >> 8) & 0xFF; // Bit 8-15: Y1, Top-most coordinate
+                let _y2 = data & 0xFF; // Bit 0-7: Y2, Bottom-most coordinate + 1
             }
             0x0046 => {
                 // WIN1V - Window 1 Vertical Dimensions (Write Only)
                 self.win1v = data;
-                let y1 = (data >> 8) & 0xFF; // Bit 8-15: Y1, Top-most coordinate
-                let y2 = data & 0xFF; // Bit 0-7: Y2, Bottom-most coordinate + 1
+                let _y1 = (data >> 8) & 0xFF; // Bit 8-15: Y1, Top-most coordinate
+                let _y2 = data & 0xFF; // Bit 0-7: Y2, Bottom-most coordinate + 1
             }
             0x0048 => {
                 // WININ - Control of Inside of Window(s) (Read/Write)
@@ -784,7 +789,7 @@ impl LCDController {
     }
 
     // Helper function to check if a pixel is inside a window
-    fn is_pixel_in_window(&self, x: Word, y: Word, win_h: HalfWord, win_v: HalfWord) -> bool {
+    const fn is_pixel_in_window(&self, x: Word, y: Word, win_h: HalfWord, win_v: HalfWord) -> bool {
         if win_h == 0 && win_v == 0 {
             return false; // Window disabled if both dimensions are 0
         }
@@ -891,10 +896,10 @@ impl LCDController {
         BGR::new(bgr_value as HalfWord)
     }
 
-    fn is_1st_target(&self, target: u8) -> bool {
+    const fn is_1st_target(&self, target: u8) -> bool {
         (self.bldcnt & (1 << target)) != 0
     }
-    fn is_2nd_target(&self, target: u8) -> bool {
+    const fn is_2nd_target(&self, target: u8) -> bool {
         ((self.bldcnt >> 8) & (1 << target)) != 0
     }
 
@@ -958,12 +963,12 @@ impl LCDController {
     }
 
     /// BG mosaic block size (h, v) in pixels (MOSAIC bits 0-7, value + 1).
-    fn bg_mosaic(&self) -> (Word, Word) {
+    const fn bg_mosaic(&self) -> (Word, Word) {
         ((self.mosaic & 0xF) as Word + 1, ((self.mosaic >> 4) & 0xF) as Word + 1)
     }
 
     /// OBJ mosaic block size (h, v) in pixels (MOSAIC bits 8-15, value + 1).
-    fn obj_mosaic(&self) -> (u32, u32) {
+    const fn obj_mosaic(&self) -> (u32, u32) {
         (((self.mosaic >> 8) & 0xF) as u32 + 1, ((self.mosaic >> 12) & 0xF) as u32 + 1)
     }
 
@@ -1094,7 +1099,7 @@ impl LCDController {
             if oy < bbh as i32 {
                 for ox in 0..bbw as i32 {
                     let sx = x0 + ox;
-                    if sx < 0 || sx >= 240 {
+                    if !(0..240).contains(&sx) {
                         continue;
                     }
                     // Map screen offset -> texture coordinate.
@@ -1173,7 +1178,7 @@ impl LCDController {
         }
         match self.dispcnt.mode() {
             BgMode::Mode0 | BgMode::Mode1 | BgMode::Mode2 => {
-                self.scanline_tiled(self.dispcnt.mode(), line, vram, palette, oam)
+                self.scanline_tiled(self.dispcnt.mode(), line, vram, palette, oam);
             }
             BgMode::Mode3 => self.scanline_bitmap3(line, vram, palette, oam),
             BgMode::Mode4 => self.scanline_bitmap4(line, vram, palette, oam),
@@ -1441,9 +1446,9 @@ impl LCDController {
     ) -> Option<(u16, BGR)> {
         match (mode, layer) {
             (BgMode::Mode0, 0..=3) => self.sample_text_bg_pixel(layer, x, y, vram, palette),
-            (BgMode::Mode1, 0) | (BgMode::Mode1, 1) => self.sample_text_bg_pixel(layer, x, y, vram, palette),
+            (BgMode::Mode1, 0 | 1) => self.sample_text_bg_pixel(layer, x, y, vram, palette),
             (BgMode::Mode1, 2) => self.sample_affine_bg_pixel(2, x, y, vram, palette),
-            (BgMode::Mode2, 2) | (BgMode::Mode2, 3) => self.sample_affine_bg_pixel(layer, x, y, vram, palette),
+            (BgMode::Mode2, 2 | 3) => self.sample_affine_bg_pixel(layer, x, y, vram, palette),
             _ => None,
         }
     }
@@ -1655,7 +1660,7 @@ mod tests {
         let mut lcdc = LCDController::new();
         lcdc.write_halfword(0x0000, 0x0300); // mode 0, BG0 + BG1 on
         // BG0: priority 0, char base 0, map base block 2 (0x1000).
-        lcdc.write_halfword(0x0008, 0x0000 | (2 << 8));
+        lcdc.write_halfword(0x0008, 2 << 8 );
         // BG1: priority 1, char base block 1 (0x4000), map base block 3 (0x1800).
         lcdc.write_halfword(0x000A, 0x0001 | (1 << 2) | (3 << 8));
         // BLDCNT: 1st target BG0 (bit0), alpha effect (bits6-7=01), 2nd target BG1 (bit9).
@@ -1677,8 +1682,8 @@ mod tests {
         let buf = render_full(&mut lcdc, &vram, &palette, &oam);
         let (r, g, b) = (buf[0], buf[1], buf[2]);
         // With EVA=EVB=16 the red (BG0, 1st) and green (BG1, 2nd) saturate -> yellow.
-        assert!(r & 0xF8 == 0xF8, "blended pixel keeps red (got {r:#x})");
-        assert!(g & 0xF8 == 0xF8, "blended pixel gains green from the 2nd target (got {g:#x})");
+        assert!(r & 0xF8 == 0xF8, "{}", "blended pixel keeps red (got {r:#x})");
+        assert!(g & 0xF8 == 0xF8, "{}", "blended pixel gains green from the 2nd target (got {g:#x})");
         assert_eq!(b & 0xF8, 0, "no blue (got {b:#x})");
     }
 

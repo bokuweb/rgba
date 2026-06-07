@@ -1,7 +1,7 @@
 use crate::cpu::registers::Mode;
 use crate::cpu::registers::PSR;
 
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq, Eq, Default)]
 pub struct BankSpsr {
     fiq: PSR,
     svc: PSR,
@@ -36,11 +36,11 @@ impl BankSpsr {
         }
     }
 
-    pub fn push(&mut self, value: PSR) {
-        self.escaped = value
+    pub const fn push(&mut self, value: PSR) {
+        self.escaped = value;
     }
 
-    pub fn pop(&mut self) -> PSR {
+    pub const fn pop(&mut self) -> PSR {
         self.escaped
     }
 }

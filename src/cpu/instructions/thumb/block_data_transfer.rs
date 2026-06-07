@@ -29,7 +29,7 @@ where
     }
 
     // 総転送バイト数と初期ベースを保存（ベースがrlistに含まれる場合の格納値に使用）
-    let total_bytes = (register_list.count_ones() as u32) * 4;
+    let total_bytes = register_list.count_ones() * 4;
     let initial_base = base;
     let first_index = register_list.trailing_zeros() as usize; // 最初に格納されるレジスタ番号
     for i in 0..0x8 {
@@ -60,12 +60,11 @@ where
     (cycle, PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_ldmia<T>(bus: &T, dec: BlockDataTransfer, gpr: &mut [Word; 16], started: bool) -> ExecuteResult
+pub fn exec_thumb_ldmia<T>(bus: &T, dec: BlockDataTransfer, gpr: &mut [Word; 16], _started: bool) -> ExecuteResult
 where
     T: BusAccessor,
 {
-    if started {
-    }
+    
     let rn = dec.get_Rn();
     let rn_idx = rn as usize;
     let mut base = gpr[rn_idx];
@@ -86,7 +85,7 @@ where
         return (cycle, PipelineStatus::Flush);
     }
 
-    let total_bytes = (register_list.count_ones() as u32) * 4;
+    let _total_bytes = register_list.count_ones() * 4;
     for i in 0..0x8 {
         if register_list & (1 << i) != 0 {
             let d = bus.read_word(base & 0xFFFF_FFFC);
@@ -107,8 +106,7 @@ where
     // ベースはリストに含まれていても必ず書き戻す（最終アドレス）。
     gpr[rn_idx] = base;
 
-    if started {
-    }
+    
 
     // Consume 1I cycle.
     let cycle = cycle + 1;
@@ -130,7 +128,7 @@ where
 
     if dec.get_R() {
         bus.write_word(addr, gpr[LR]);
-        addr = addr - 4;
+        addr -= 4;
     }
 
     for i in 0..0x8 {
