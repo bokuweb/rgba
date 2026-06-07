@@ -1324,6 +1324,11 @@ impl CpuBus {
             0x0300_0000..=0x0300_7FFF => self.wram.write_word(addr - 0x0300_0000, data),
             0x0200_0000..=0x02FF_FFFF => self.eram.write_word((addr - 0x0200_0000) & 0x3FFFF, data),
             0x0700_0000..=0x07FF_FFFF => self.oam.write_word((addr - 0x0700_0000) & 0x3FF, data),
+            // I/O registers (DISPCNT, BLDCNT, sound, etc.). A DMA can legitimately
+            // target memory-mapped registers (e.g. games update DISPCNT via DMA);
+            // route these through the normal register write path instead of
+            // silently dropping them.
+            0x0400_0000..=0x0400_03FF => self.write_word(addr, data),
             _ => {
                 println!("⚠️  DMA write_word to unsupported address: 0x{:08x} = 0x{:08x}", addr, data);
             }
@@ -1348,6 +1353,11 @@ impl CpuBus {
             0x0300_0000..=0x0300_7FFF => self.wram.write_halfword(addr - 0x0300_0000, data),
             0x0200_0000..=0x0203_FFFF => self.eram.write_halfword(addr - 0x0200_0000, data),
             0x0700_0000..=0x07FF_FFFF => self.oam.write_halfword((addr - 0x0700_0000) & 0x3FF, data),
+            // I/O registers (DISPCNT, BLDCNT, sound, etc.). A DMA can legitimately
+            // target memory-mapped registers (e.g. games update DISPCNT via DMA);
+            // route these through the normal register write path instead of
+            // silently dropping them.
+            0x0400_0000..=0x0400_03FF => self.write_halfword(addr, data),
             _ => {
                 println!("⚠️  DMA write_halfword to unsupported address: 0x{:08x} = 0x{:04x}", addr, data);
             }
