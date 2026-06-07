@@ -5,7 +5,7 @@ use crate::cpu::instructions::*;
 use crate::cpu::registers::psr::{CpuState, PSR};
 use crate::types::*;
 
-pub fn exec_thumb_bx<T: BusAccessor>(bus: &T, dec: Branch, cpsr: &mut PSR, gpr: &mut [Word; 16]) -> ExecuteResult {
+pub fn exec_thumb_bx<T: BusAccessor>(_bus: &T, dec: Branch, cpsr: &mut PSR, gpr: &mut [Word; 16]) -> ExecuteResult {
     let addr = gpr[dec.get_Rm() as usize];
     if addr & 0x01 == 0x01 {
         // Switch cpu mode to execute thumb instructions.
