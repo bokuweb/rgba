@@ -19,6 +19,7 @@ use std::path::Path;
 use std::cell::Cell;
 
 use types::*;
+use super::apu::Apu;
 use super::backup::{Backup, SaveKind};
 use super::dma::DMAController;
 
@@ -153,6 +154,8 @@ pub struct CpuBus {
     sio_irq_latch: bool,
     interrupt_controller: std::cell::RefCell<crate::interrupt::InterruptController>,
     timers: crate::gba::timer::Timers,
+    /// Audio processing unit.
+    apu: Apu,
     /// Master clock: absolute cycle count shared by all timed components.
     clock: u64,
     /// Set when the LCD finishes a frame during advance_clock.
@@ -210,7 +213,8 @@ impl BusAccessor for CpuBus {
                 let v = self.timers.read(ofs);
                 v
             }
-            0x0400_0060..=0x0400_03FF => 0,
+            0x0400_0060..=0x0400_00A7 => self.apu.read_register(addr),
+            0x0400_00A8..=0x0400_03FF => 0,
             // Palette 1KB mirrors
             0x0500_0000..=0x05FF_FFFF => self.palette.read_byte((addr - 0x0500_0000) & 0x3FF),
             // 修正(004): VRAMミラー (0x20000で折り返し、0x18000-0x1FFFFは0x10000-0x17FFFへ)
@@ -249,6 +253,11 @@ impl BusAccessor for CpuBus {
             0x0400_0100..=0x0400_010F => {
                 let lo = self.read_byte(addr) as u16;
                 let hi = self.read_byte(addr + 1) as u16;
+                (hi << 8) | lo
+            }
+            0x0400_0060..=0x0400_00A7 => {
+                let lo = self.apu.read_register(addr) as u16;
+                let hi = self.apu.read_register(addr + 1) as u16;
                 (hi << 8) | lo
             }
             0x0400_0060..=0x0400_03FF => {
@@ -325,6 +334,13 @@ impl BusAccessor for CpuBus {
             // 修正(006): OAM 1KB ミラー（32bit 読み）
             0x0700_0000..=0x07FF_FFFF => self.oam.read_word((addr - 0x0700_0000) & 0x3FF),
             0x0400_0000..=0x0400_005F => self.lcdc.read_word(addr - 0x0400_0000),
+            0x0400_0060..=0x0400_00A7 => {
+                let b0 = self.apu.read_register(addr) as u32;
+                let b1 = self.apu.read_register(addr + 1) as u32;
+                let b2 = self.apu.read_register(addr + 2) as u32;
+                let b3 = self.apu.read_register(addr + 3) as u32;
+                b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
+            }
             0x0400_0060..=0x0400_03FF => {
                 match addr {
                     // DMAxSAD (source)
@@ -413,10 +429,8 @@ impl BusAccessor for CpuBus {
             0x0400_0060..=0x0400_03FF => {
                 // TODO: Implement DMA, Timer, and other I/O registers
                 match addr {
-                    // Sound FIFO A/B (accept data; no-op sink for now)
-                    0x0400_00A0 | 0x0400_00A4 => {
-                        let _ = data;
-                    }
+                    // Sound registers + FIFO (byte access)
+                    0x0400_0060..=0x0400_00A7 => self.apu.write_register(addr, data),
                     _ if (addr >= 0x0400_00B0 && addr <= 0x0400_00DE) => {
                         let _ = data;
                     }
@@ -500,9 +514,10 @@ impl BusAccessor for CpuBus {
             }
             0x0400_0060..=0x0400_03FF => {
                 match addr {
-                    // Sound FIFO A/B (accept data; no-op sink for now)
-                    0x0400_00A0 | 0x0400_00A4 => {
-                        let _ = data;
+                    // Sound registers + FIFO (16-bit access -> two bytes)
+                    0x0400_0060..=0x0400_00A7 => {
+                        self.apu.write_register(addr, (data & 0xFF) as u8);
+                        self.apu.write_register(addr + 1, ((data >> 8) & 0xFF) as u8);
                     }
                     // SIOCNT - Serial Communication Control
                     0x0400_0128 => {
@@ -635,6 +650,15 @@ impl BusAccessor for CpuBus {
             0x0400_0060..=0x0400_03FF => {
                 // DMA and other I/O registers
                 match addr {
+                    // Sound FIFO (32-bit feed) and other sound registers.
+                    0x0400_00A0 => self.apu.push_fifo_a(data),
+                    0x0400_00A4 => self.apu.push_fifo_b(data),
+                    0x0400_0060..=0x0400_00A7 => {
+                        self.apu.write_register(addr, (data & 0xFF) as u8);
+                        self.apu.write_register(addr + 1, ((data >> 8) & 0xFF) as u8);
+                        self.apu.write_register(addr + 2, ((data >> 16) & 0xFF) as u8);
+                        self.apu.write_register(addr + 3, ((data >> 24) & 0xFF) as u8);
+                    }
                     // DMA0 registers
                     0x0400_00B0 => self.dma.write_source(0, data),
                     0x0400_00B4 => self.dma.write_destination(0, data),
@@ -772,6 +796,7 @@ impl CpuBus {
             sio_irq_latch: false,
             interrupt_controller: std::cell::RefCell::new(crate::interrupt::InterruptController::new()),
             timers: crate::gba::timer::Timers::default(),
+            apu: Apu::new(),
             clock: 0,
             frame_ready: false,
             waitcnt: 0,
@@ -1016,6 +1041,48 @@ impl CpuBus {
     }
 
     /// Advance the shared master clock by `cycles` and drive every timed
+    /// Drain queued audio samples (interleaved L/R `i16`) for host playback.
+    pub(crate) fn take_audio(&mut self) -> Vec<i16> {
+        self.apu.take_samples()
+    }
+
+    /// Top up a DirectSound FIFO with one 4-word burst from the DMA channel
+    /// (1 or 2) programmed to feed `fifo_addr` with special (FIFO) timing.
+    fn fifo_dma_refill(&mut self, fifo_addr: u32) {
+        for c in 1..=2usize {
+            let (enabled, timing, dest, src_ctrl, mut src) = {
+                let ch = &self.dma.channels[c];
+                (ch.enabled, ch.get_timing(), ch.destination, ch.get_source_control(), ch.next_source)
+            };
+            if !(enabled && timing == 3 && (dest & 0x0FFF_FFFF) == fifo_addr) {
+                continue;
+            }
+            for _ in 0..4 {
+                let word = self.read_word_internal(src & !3);
+                if fifo_addr == 0x0400_00A0 {
+                    self.apu.push_fifo_a(word);
+                } else {
+                    self.apu.push_fifo_b(word);
+                }
+                match src_ctrl {
+                    1 => src = src.wrapping_sub(4), // decrement
+                    2 => {}                          // fixed
+                    _ => src = src.wrapping_add(4), // increment / reload
+                }
+            }
+            self.dma.channels[c].next_source = src;
+            if self.dma.channels[c].handle_irq() {
+                let kind = if c == 1 {
+                    crate::interrupt::InterruptType::DMA1
+                } else {
+                    crate::interrupt::InterruptType::DMA2
+                };
+                self.interrupt_controller.borrow_mut().request_interrupt(kind);
+            }
+            return;
+        }
+    }
+
     /// component (timers and the LCD) by the same delta. This is the single
     /// entry point through which time passes, so DMA (which calls it per
     /// transfer) keeps the timers/LCD in lockstep with the CPU.
@@ -1024,10 +1091,24 @@ impl CpuBus {
             return;
         }
         self.clock = self.clock.wrapping_add(cycles as u64);
-        {
+        let overflows = {
             let irq = &mut *self.interrupt_controller.borrow_mut();
-            self.timers.tick(self.clock, irq);
+            self.timers.tick(self.clock, irq)
+        };
+        // DirectSound: timer 0/1 overflows clock the FIFOs; when a FIFO drops
+        // below half, top it up from its associated DMA channel.
+        for t in 0..2 {
+            if overflows[t] > 0 {
+                let req = self.apu.on_timer_overflow(t, overflows[t]);
+                if req.fifo_a {
+                    self.fifo_dma_refill(0x0400_00A0);
+                }
+                if req.fifo_b {
+                    self.fifo_dma_refill(0x0400_00A4);
+                }
+            }
         }
+        self.apu.tick(cycles as u32);
         let (ready, vblank_irq) = self.lcdc.run(cycles);
         // Render any visible scanlines the LCD just entered, using the current
         // register/memory state (scanline-accurate raster).
@@ -1323,7 +1404,8 @@ impl CpuBus {
 
     fn write_word_internal(&mut self, addr: Word, data: Word) {
         match addr {
-            0x0400_00A0 | 0x0400_00A4 => {}
+            0x0400_00A0 => self.apu.push_fifo_a(data),
+            0x0400_00A4 => self.apu.push_fifo_b(data),
             // GamePak ROM/EEPROM area: writes are typically ignored by ROM,
             // and EEPROM uses serial protocol (not modeled here yet).
             0x0800_0000..=0x0DFF_FFFF => {
@@ -1352,7 +1434,8 @@ impl CpuBus {
 
     fn write_halfword_internal(&mut self, addr: Word, data: HalfWord) {
         match addr {
-            0x0400_00A0 | 0x0400_00A4 => {}
+            0x0400_00A0 => self.apu.push_fifo_a(data as u32),
+            0x0400_00A4 => self.apu.push_fifo_b(data as u32),
             // GamePak ROM/EEPROM area: treat as no-op for now.
             0x0800_0000..=0x0DFF_FFFF => {
                 let _ = data;
@@ -1421,6 +1504,24 @@ mod tests {
 
     fn if_flags(bus: &CpuBus) -> u16 {
         bus.interrupt_controller.borrow().read_if()
+    }
+
+    #[test]
+    fn apu_emits_audio_through_bus() {
+        // Drive a square channel entirely through the bus register interface,
+        // then advance the clock and confirm the bus->APU path yields audio.
+        let mut bus = new_bus();
+        bus.write_byte(0x0400_0084, 0x80); // SOUNDCNT_X: master enable
+        bus.write_byte(0x0400_0080, 0x77); // SOUNDCNT_L: full L/R master volume
+        bus.write_byte(0x0400_0081, 0x11); // ch1 enabled on both sides
+        bus.write_byte(0x0400_0062, 0x80); // ch1 duty
+        bus.write_byte(0x0400_0063, 0xF0); // ch1 envelope: volume 15, DAC on
+        bus.write_byte(0x0400_0064, 0x00); // ch1 frequency low
+        bus.write_byte(0x0400_0065, 0x87); // ch1 frequency high + trigger
+        bus.advance_clock(300_000);
+        let audio = bus.take_audio();
+        assert!(!audio.is_empty(), "no samples produced");
+        assert!(audio.iter().any(|&s| s != 0), "bus -> APU produced only silence");
     }
 
     #[test]

@@ -11,6 +11,7 @@ mod lcd;
 mod memory;
 mod types;
 
+use sdl2::audio::{AudioQueue, AudioSpecDesired};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
@@ -30,6 +31,21 @@ fn main() {
     let video_subsystem = sdl_context.video().unwrap();
     let window = video_subsystem.window("arm", WIDTH, HEIGHT).position_centered().build().unwrap();
     let mut canvas = window.into_canvas().build().unwrap();
+
+    // Audio: a stereo i16 queue clocked at the APU's output rate. If the audio
+    // device can't be opened (e.g. headless), run without sound.
+    let audio_queue: Option<AudioQueue<i16>> = sdl_context.audio().ok().and_then(|audio| {
+        let desired = AudioSpecDesired {
+            freq: Some(gba::GBA::AUDIO_SAMPLE_RATE as i32),
+            channels: Some(2),
+            samples: Some(1024),
+        };
+        audio.open_queue::<i16, _>(None, &desired).ok()
+    });
+    if let Some(q) = &audio_queue {
+        q.resume();
+    }
+
     let mut prev_time = SystemTime::now();
     let mut gba = gba::GBA::new();
     let mut key = io::Key::new();
@@ -79,6 +95,15 @@ fn main() {
         gba.update_key(key);
 
         let buf = gba.frame(false);
+
+        // Push this frame's audio. Drop samples if the queue is backing up (the
+        // emulator ran ahead) to keep latency bounded.
+        let samples = gba.take_audio();
+        if let Some(q) = &audio_queue {
+            if q.size() < (gba::GBA::AUDIO_SAMPLE_RATE * 2 * 2) / 4 {
+                let _ = q.queue(&samples);
+            }
+        }
 
         for i in 0..HEIGHT {
             for j in 0..WIDTH {
