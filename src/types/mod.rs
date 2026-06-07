@@ -10,7 +10,7 @@ pub enum AccessType {
     Seq(AccessWidth),
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 pub enum AccessWidth {
     Byte,
     HalfWord,

@@ -6,7 +6,7 @@ use sdl2::video::Window;
 const WIDTH: u32 = 240;
 const HEIGHT: u32 = 160;
 
-pub(crate) struct Renderer {
+pub struct Renderer {
     canvas: Canvas<Window>,
 }
 

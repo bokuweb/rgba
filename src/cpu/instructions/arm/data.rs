@@ -92,13 +92,12 @@ where
                 // (and re-bank registers). No flag update in this case.
                 cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
-                cpsr.set_N_from(value as u32);
-                cpsr.set_Z_from(value as u32);
+                cpsr.set_N_from(value);
+                cpsr.set_Z_from(value);
                 cpsr.set_C(c);
             }
         }
-        if gpr[15] >= 134224832 && gpr[15] <= 134224892 {
-        }
+        
         gpr[rd] = value;
 
         // Critical debug: detect m_exit 5 execution
@@ -130,8 +129,8 @@ where
                 // (and re-bank registers). No flag update in this case.
                 cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
-                cpsr.set_N_from(d as u32);
-                cpsr.set_Z_from(d as u32);
+                cpsr.set_N_from(d);
+                cpsr.set_Z_from(d);
                 cpsr.set_C(c);
             }
         }
@@ -201,8 +200,8 @@ where
             if rd == PC && cpsr.get_mode() != Mode::User {
                 cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
-                cpsr.set_N_from(d as u32);
-                cpsr.set_Z_from(d as u32);
+                cpsr.set_N_from(d);
+                cpsr.set_Z_from(d);
                 cpsr.set_C(rn_value >= value);
                 let (_, v) = (rn_value as i32).overflowing_sub(value as i32);
                 cpsr.set_V(v);
@@ -239,8 +238,8 @@ where
                 // (and re-bank registers). No flag update in this case.
                 cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
-                cpsr.set_N_from(d as u32);
-                cpsr.set_Z_from(d as u32);
+                cpsr.set_N_from(d);
+                cpsr.set_Z_from(d);
                 cpsr.set_C(value >= rn_value);
                 let (_, v) = (value as i32).overflowing_sub(rn_value as i32);
                 cpsr.set_V(v);
@@ -254,7 +253,7 @@ where
     })
 }
 
-fn get_operand(gpr: &[Word; 16], reg: u32, I: bool, R: bool) -> u32 {
+const fn get_operand(gpr: &[Word; 16], reg: u32, I: bool, R: bool) -> u32 {
     // When using R15 as operand (Rm or Rn)]
     // the returned value depends on the instruction: PC+12 if I=0,R=1 (shift by register)
     // otherwise PC+8 (shift by immediate).
@@ -280,7 +279,8 @@ where
     let rd = dec.get_Rd() as usize;
     // Rn はその時点のレジスタ値を使用（PC は既にパイプライン相当オフセット込み）
     let op1 = get_operand(&*gpr, dec.get_Rn(), dec.get_I(), dec.get_bit4());
-    let result = exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
+    
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let d = op1 as u64 + value as u64;
         if s {
             if rd == PC && cpsr.get_mode() != Mode::User {
@@ -296,8 +296,7 @@ where
             }
         }
         gpr[rd] = d as u32;
-    });
-    result
+    })
 }
 
 pub fn exec_arm_adc<T>(
@@ -316,8 +315,9 @@ where
     let rd = dec.get_Rd() as usize;
     let c_flag = cpsr.get_C();
     let rn_value = get_operand(&*gpr, dec.get_Rn(), dec.get_I(), dec.get_bit4());
-    let result = exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
-        let c = if c_flag { 1 } else { 0 } as u32;
+    
+    exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
+        let c = i32::from(c_flag) as u32;
         let d = rn_value as u64 + value as u64 + c as u64;
         if s {
             if rd == PC && cpsr.get_mode() != Mode::User {
@@ -331,7 +331,7 @@ where
                 // V: (~(op1 ^ (op2 + Cin)) & (op1 ^ result)) の MSB
                 let op1 = rn_value as i32;
                 let op2 = value as i32;
-                let cin = if c_flag { 1i32 } else { 0i32 };
+                let cin = i32::from(c_flag);
                 let result = op1.wrapping_add(op2).wrapping_add(cin);
                 let op2c = op2.wrapping_add(cin);
                 let v = (((!(op1 ^ op2c)) & (op1 ^ result)) as u32 & 0x8000_0000) != 0;
@@ -339,8 +339,7 @@ where
             }
         }
         gpr[rd] = d as u32;
-    });
-    result
+    })
 }
 
 pub fn exec_arm_sbc<T>(
@@ -360,7 +359,7 @@ where
     let cin = cpsr.get_C();
     let rn_value = get_operand(&*gpr, dec.get_Rn(), dec.get_I(), dec.get_bit4());
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
-        let borrow_in = if cin { 0u32 } else { 1u32 };
+        let borrow_in = u32::from(!cin);
         let d = rn_value.wrapping_sub(value).wrapping_sub(borrow_in);
         if s {
             if rd == PC && cpsr.get_mode() != Mode::User {
@@ -381,7 +380,7 @@ where
                 cpsr.set_V(v);
             }
         }
-        gpr[rd] = d
+        gpr[rd] = d;
     })
 }
 
