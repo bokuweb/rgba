@@ -33,6 +33,7 @@ fn main() {
     let mut prev_time = SystemTime::now();
     let mut gba = gba::GBA::new();
     let mut key = io::Key::new();
+    let mut frames: u64 = 0;
 
     'running: loop {
         for event in event_pump.poll_iter() {
@@ -91,6 +92,13 @@ fn main() {
         }
         canvas.present();
 
+        // Persist battery-backed save memory roughly once a second (no-op unless
+        // the game wrote to it). A final flush happens on exit below.
+        frames = frames.wrapping_add(1);
+        if frames % 60 == 0 {
+            gba.flush_save_if_dirty();
+        }
+
         let elapsed_time = SystemTime::now().duration_since(prev_time).expect("Time went backwards").as_nanos();
         let wait = if elapsed_time < 1_000_000_000u128 / 60 {
             1_000_000_000u32 / 60 - (elapsed_time as u32)
@@ -101,4 +109,7 @@ fn main() {
         prev_time = SystemTime::now();
         // panic!("")
     }
+
+    // Flush any pending save before exiting.
+    gba.flush_save_if_dirty();
 }
