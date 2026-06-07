@@ -7,7 +7,7 @@ use crate::cpu::registers::Mode;
 // - 9-10:  r13_abt & r14_abt
 // - 11-12: r13_irq & r14_irq
 // - 13-14: r13_und & r14_und
-#[derive(Debug, PartialEq, Default)]
+#[derive(Debug, PartialEq, Eq, Default)]
 pub struct BankGpr {
     r8_fiq: u32,
     r9_fiq: u32,
@@ -41,11 +41,11 @@ pub struct BankGpr {
 }
 
 impl BankGpr {
-    pub(crate) fn is_glitch_active_or_armed(&self) -> bool {
+    pub(crate) const fn is_glitch_active_or_armed(&self) -> bool {
         self.glitch_state == 1 || self.glitch_state == 2
     }
 
-    pub(crate) fn get_glitch_backup(&self, index: usize) -> u32 {
+    pub(crate) const fn get_glitch_backup(&self, index: usize) -> u32 {
         self.glitch_backup[index]
     }
 
@@ -164,7 +164,7 @@ impl BankGpr {
             }
         }
         // Store overlay values
-        for (idx, val) in overlays.iter() {
+        for (idx, val) in overlays {
             self.glitch_values[*idx] = *val;
         }
         // Mark as Armed so it will be applied after current instruction retires
@@ -217,7 +217,7 @@ impl BankGpr {
     }
 
     // Returns Some(backup) only if the index is covered by current glitch mask
-    pub(crate) fn glitch_backup_if_masked(&self, index: usize) -> Option<u32> {
+    pub(crate) const fn glitch_backup_if_masked(&self, index: usize) -> Option<u32> {
         if (self.glitch_mask & (1 << index)) != 0 {
             Some(self.glitch_backup[index])
         } else {

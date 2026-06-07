@@ -24,27 +24,27 @@ pub enum SaveKind {
 
 impl SaveKind {
     /// Size in bytes of the backing store for this kind.
-    pub fn size(self) -> usize {
+    pub const fn size(self) -> usize {
         match self {
-            SaveKind::Sram => 0x8000,      // 32 KiB
-            SaveKind::Flash512 => 0x1_0000, // 64 KiB
-            SaveKind::Flash1M => 0x2_0000,  // 128 KiB
+            Self::Sram => 0x8000,      // 32 KiB
+            Self::Flash512 => 0x1_0000, // 64 KiB
+            Self::Flash1M => 0x2_0000,  // 128 KiB
         }
     }
 
     /// Detect the backup kind from ASCII markers placed in the ROM image by the
     /// official SDK (e.g. `FLASH512_V`, `FLASH1M_V`, `SRAM_V`, `EEPROM_V`).
     /// Defaults to [`SaveKind::Sram`] when nothing matches.
-    pub fn detect(rom: &[u8]) -> SaveKind {
+    pub fn detect(rom: &[u8]) -> Self {
         // Order matters: check the more specific markers first.
         if contains(rom, b"FLASH1M_V") {
-            SaveKind::Flash1M
+            Self::Flash1M
         } else if contains(rom, b"FLASH512_V") || contains(rom, b"FLASH_V") {
-            SaveKind::Flash512
+            Self::Flash512
         } else {
             // SRAM_V / SRAM_F_V / EEPROM_V (EEPROM not modeled here) all fall
             // back to plain SRAM, which is also the safe default.
-            SaveKind::Sram
+            Self::Sram
         }
     }
 }
@@ -98,7 +98,7 @@ impl Backup {
         let mut data = vec![fill; size];
         let n = initial.len().min(size);
         data[..n].copy_from_slice(&initial[..n]);
-        Backup {
+        Self {
             kind,
             data,
             prefix: 0,
@@ -111,7 +111,7 @@ impl Backup {
         }
     }
 
-    pub fn kind(&self) -> SaveKind {
+    pub const fn kind(&self) -> SaveKind {
         self.kind
     }
 
@@ -121,19 +121,19 @@ impl Backup {
     }
 
     /// Whether the contents have changed since the last [`Backup::clear_dirty`].
-    pub fn is_dirty(&self) -> bool {
+    pub const fn is_dirty(&self) -> bool {
         self.dirty
     }
 
-    pub fn clear_dirty(&mut self) {
+    pub const fn clear_dirty(&mut self) {
         self.dirty = false;
     }
 
-    fn is_flash(&self) -> bool {
+    const fn is_flash(&self) -> bool {
         matches!(self.kind, SaveKind::Flash512 | SaveKind::Flash1M)
     }
 
-    fn id_bytes(&self) -> (u8, u8) {
+    const fn id_bytes(&self) -> (u8, u8) {
         match self.kind {
             SaveKind::Flash1M => (FLASH1M_MANUFACTURER, FLASH1M_DEVICE),
             _ => (FLASH512_MANUFACTURER, FLASH512_DEVICE),
@@ -219,7 +219,7 @@ impl Backup {
             0x80 => self.erase_armed = true,        // erase command coming
             0x10 if self.erase_armed => {
                 // Chip erase.
-                for b in self.data.iter_mut() {
+                for b in &mut self.data {
                     *b = 0xFF;
                 }
                 self.erase_armed = false;

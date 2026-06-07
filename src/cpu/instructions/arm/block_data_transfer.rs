@@ -33,7 +33,7 @@ where
 {
     let mut cycle: Cycle = 0;
     let mut is_n_cycle = true;
-    let mut register_list = dec.get_register_list();
+    let register_list = dec.get_register_list();
     let mut immediate = 0;
     let mut offset = 0;
     if dec.get_U() {
@@ -213,11 +213,9 @@ pub fn exec_arm_stm<T>(
 where
     T: BusAccessor,
 {
-    let mut base: i64 = gpr[dec.get_Rn() as usize] as i64;
+    let _base: i64 = gpr[dec.get_Rn() as usize] as i64;
     let mut cycle: Cycle = 0;
     let mut is_n_cycle = true;
-    let mut is_first_entry = true;
-    let mut is_rn_skipped = false;
 
     // t511, t512 など: Sビット処理（ユーザレジスタアクセス）
     //  - 特権モードで S=1 の STM/ LDM は、転送対象レジスタはユーザモードのバンクを参照する。
@@ -337,7 +335,7 @@ where
 
     if dec.get_S() {
         // 元のモードに復帰
-        cpsr.switch_mode(current_mode, gpr, spsr, bank_gpr, bank_spsr)
+        cpsr.switch_mode(current_mode, gpr, spsr, bank_gpr, bank_spsr);
     }
 
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));

@@ -1,26 +1,20 @@
 use crate::cpu::bus;
-use crate::cpu::types;
 use crate::io;
 use crate::lcd;
 use crate::types::*;
 
-pub(crate) use bus::accessor::*;
+pub use bus::accessor::*;
 
 use crate::memory::ram::Ram;
 use crate::memory::readable::*;
 use crate::memory::rom::Rom;
 use crate::memory::writable::*;
-use crate::memory::Raw;
 
-use std::env;
-use std::fs::File;
 use std::io::Read;
-use std::path::Path;
 use std::cell::Cell;
 
-use types::*;
 use super::apu::Apu;
-use super::backup::{Backup, SaveKind};
+use super::backup::Backup;
 use super::dma::DMAController;
 
 pub const BIOS_ADDR: u32 = 0x0000_0000;
@@ -61,8 +55,8 @@ struct CycleLUT {
 }
 
 impl Default for CycleLUT {
-    fn default() -> CycleLUT {
-        let mut table = CycleLUT {
+    fn default() -> Self {
+        let mut table = Self {
             n32: [1; 0x10],
             s32: [1; 0x10],
             n16: [1; 0x10],
@@ -209,9 +203,9 @@ impl BusAccessor for CpuBus {
             0x0400_0132 => (self.keycnt & 0x00FF) as u8,
             0x0400_0133 => ((self.keycnt >> 8) & 0x00FF) as u8,
             0x0400_0100..=0x0400_010F => {
-                let ofs = (addr - 0x0400_0100) as u32;
-                let v = self.timers.read(ofs);
-                v
+                let ofs = addr - 0x0400_0100 ;
+                
+                self.timers.read(ofs)
             }
             0x0400_0060..=0x0400_00A7 => self.apu.read_register(addr),
             0x0400_00A8..=0x0400_03FF => 0,
@@ -260,7 +254,8 @@ impl BusAccessor for CpuBus {
                 let hi = self.apu.read_register(addr + 1) as u16;
                 (hi << 8) | lo
             }
-            0x0400_0060..=0x0400_03FF => {
+            // 0x60..=0xA7 is handled by the APU arm above; this covers the rest.
+            0x0400_00A8..=0x0400_03FF => {
                 match addr {
                     // DMAxCNT_H reads
                     0x0400_00BA => self.dma.channels[0].control,
@@ -284,7 +279,7 @@ impl BusAccessor for CpuBus {
             0x0700_0000..=0x07FF_FFFF => self.oam.read_halfword((addr - 0x0700_0000) & 0x3FF),
             0x0800_0000..=0x0DFF_FFFF => self.gamepak_read_halfword(addr),
             0x0E00_0000..=0x0E00_FFFF => {
-                println!("⚠️  WARNING: Invalid halfword access to SRAM at 0x{:08x} (SRAM is byte-access only) - returning 0xFFFF", addr);
+                println!("⚠️  WARNING: Invalid halfword access to SRAM at 0x{addr:08x} (SRAM is byte-access only) - returning 0xFFFF");
                 0xFFFF
             }
             _ => {
@@ -306,8 +301,8 @@ impl BusAccessor for CpuBus {
             }
             0x0400_0100..=0x0400_010F => {
                 // 組み合わせて32bit値を返す（TMxCNT_L/CNT_H）
-                let base = (addr - 0x0400_0100) as u32;
-                let b0 = self.timers.read(base + 0) as u32;
+                let base = addr - 0x0400_0100 ;
+                let b0 = self.timers.read(base) as u32;
                 let b1 = self.timers.read(base + 1) as u32;
                 let b2 = self.timers.read(base + 2) as u32;
                 let b3 = self.timers.read(base + 3) as u32;
@@ -341,7 +336,8 @@ impl BusAccessor for CpuBus {
                 let b3 = self.apu.read_register(addr + 3) as u32;
                 b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
             }
-            0x0400_0060..=0x0400_03FF => {
+            // 0x60..=0xA7 is handled by the APU arm above; this covers the rest.
+            0x0400_00A8..=0x0400_03FF => {
                 match addr {
                     // DMAxSAD (source)
                     0x0400_00B0 => self.dma.channels[0].source,
@@ -364,8 +360,8 @@ impl BusAccessor for CpuBus {
             0x0500_0000..=0x05FF_FFFF => self.palette.read_word((addr - 0x0500_0000) & 0x3FF),
             0x0800_0000..=0x0DFF_FFFF => self.gamepak_read_word(addr),
             0x0E00_0000..=0x0E00_FFFF => {
-                println!("⚠️  WARNING: Invalid word access to SRAM at 0x{:08x} (SRAM is byte-access only) - returning 0xFFFFFFFF", addr);
-                0xFFFFFFFF
+                println!("⚠️  WARNING: Invalid word access to SRAM at 0x{addr:08x} (SRAM is byte-access only) - returning 0xFFFFFFFF");
+                0xFFFF_FFFF
             }
             _ => {
                 self.read_open_bus_word()
@@ -396,7 +392,7 @@ impl BusAccessor for CpuBus {
                 self.wram.write_byte((addr - 0x0300_0000) & 0x7FFF, data);
             }
             0x0300_0000..=0x03FF_FFFF => {
-                if addr == 0x03007dd9 {
+                if addr == 0x0300_7dd9 {
                     // dbg!("write to 0x03007dd9", data);
                 }
                 self.wram.write_byte((addr - 0x0300_0000) & 0x7FFF, data);
@@ -423,7 +419,7 @@ impl BusAccessor for CpuBus {
                 self.check_keypad_interrupt();
             }
             0x0400_0100..=0x0400_010F => {
-                let ofs = (addr - 0x0400_0100) as u32;
+                let ofs = addr - 0x0400_0100 ;
                 self.timers.write(ofs, data);
             }
             0x0400_0060..=0x0400_03FF => {
@@ -431,7 +427,7 @@ impl BusAccessor for CpuBus {
                 match addr {
                     // Sound registers + FIFO (byte access)
                     0x0400_0060..=0x0400_00A7 => self.apu.write_register(addr, data),
-                    _ if (addr >= 0x0400_00B0 && addr <= 0x0400_00DE) => {
+                    _ if (0x0400_00B0..=0x0400_00DE).contains(&addr) => {
                         let _ = data;
                     }
                     _ => {}
@@ -440,7 +436,7 @@ impl BusAccessor for CpuBus {
             // Palette: byte store behaves as halfword store replicated (0xVV -> 0xVVVV)
             0x0500_0000..=0x05FF_FFFF => {
                 let off = ((addr - 0x0500_0000) & 0x3FF) & !1; // align to halfword
-                let hw = (data as HalfWord as u16) | (((data as HalfWord) as u16) << 8);
+                let hw = data as HalfWord | ((data as HalfWord) << 8);
                 self.palette.write_halfword(off, hw as HalfWord);
             }
             // VRAM: in bitmap modes (3/4/5), byte store behaves as halfword replicate; in tiled modes (0/1/2), ignore
@@ -451,7 +447,7 @@ impl BusAccessor for CpuBus {
                     crate::lcd::BgMode::Mode4 |
                     crate::lcd::BgMode::Mode5 => {
                         let vram_addr = Self::map_vram_offset(addr) & !1; // align to halfword
-                        let hw = (data as HalfWord as u16) | (((data as HalfWord) as u16) << 8);
+                        let hw = data as HalfWord | ((data as HalfWord) << 8);
                         self.vram.write_halfword(vram_addr, hw as HalfWord);
                     }
                     _ => {
@@ -468,9 +464,9 @@ impl BusAccessor for CpuBus {
                 self.backup.write(addr, data);
             }
             _ => {
-                println!("⚠️  WARNING: Invalid write_byte to 0x{:08x} = 0x{:02x} (ignored)", addr, data);
+                println!("⚠️  WARNING: Invalid write_byte to 0x{addr:08x} = 0x{data:02x} (ignored)");
             }
-        };
+        }
     }
 
     fn write_halfword(&mut self, addr: u32, data: HalfWord) {
@@ -508,7 +504,7 @@ impl BusAccessor for CpuBus {
             0x0400_0100..=0x0400_010F => {
                 let lo = (data & 0x00FF) as u8;
                 let hi = ((data >> 8) & 0x00FF) as u8;
-                let base = (addr - 0x0400_0100) as u32;
+                let base = addr - 0x0400_0100 ;
                 self.timers.write(base, lo);
                 self.timers.write(base + 1, hi);
             }
@@ -531,8 +527,7 @@ impl BusAccessor for CpuBus {
                             let ch = self.dma.channels[channel];
                             if self.trace_dma {
                                 println!(
-                                    "DMA reg16 write ch={} reg=0x{:02x} addr=0x{:08x} data=0x{:04x}",
-                                    channel, reg, addr, data
+                                    "DMA reg16 write ch={channel} reg=0x{reg:02x} addr=0x{addr:08x} data=0x{data:04x}"
                                 );
                             }
                             match reg {
@@ -583,12 +578,12 @@ impl BusAccessor for CpuBus {
             // 修正(006): OAM 1KB ミラー（16bit 書き）
             0x0700_0000..=0x07FF_FFFF => self.oam.write_halfword((addr - 0x0700_0000) & 0x3FF, data),
             0x0E00_0000..=0x0E00_FFFF => {
-                println!("⚠️  WARNING: Invalid halfword write to SRAM at 0x{:08x} = 0x{:04x} (SRAM is byte-access only, ignored)", addr, data);
+                println!("⚠️  WARNING: Invalid halfword write to SRAM at 0x{addr:08x} = 0x{data:04x} (SRAM is byte-access only, ignored)");
             }
             _ => {
-                println!("⚠️  WARNING: Invalid write_halfword to 0x{:08x} = 0x{:04x} (ignored)", addr, data);
+                println!("⚠️  WARNING: Invalid write_halfword to 0x{addr:08x} = 0x{data:04x} (ignored)");
             }
-        };
+        }
     }
 
     fn write_word(&mut self, addr: u32, data: Word) {
@@ -617,16 +612,16 @@ impl BusAccessor for CpuBus {
             }
             // Unused
             0x0300_8000..=0x03FF_FFFF => {
-                println!("⚠️  WARNING: Write to unused area 0x{:08x} = 0x{:08x} (ignored)", addr, data);
+                println!("⚠️  WARNING: Write to unused area 0x{addr:08x} = 0x{data:08x} (ignored)");
             }
             0x0400_0000..=0x0400_005F => self.lcdc.write_word(addr - 0x0400_0000, data),
             0x0400_0100..=0x0400_010F => {
                 // Split into 4 byte writes
-                let base = (addr - 0x0400_0100) as u32;
-                self.timers.write(base + 0, (data & 0x000000FF) as u8);
-                self.timers.write(base + 1, ((data >> 8) & 0x000000FF) as u8);
-                self.timers.write(base + 2, ((data >> 16) & 0x000000FF) as u8);
-                self.timers.write(base + 3, ((data >> 24) & 0x000000FF) as u8);
+                let base = addr - 0x0400_0100 ;
+                self.timers.write(base, (data & 0x0000_00FF) as u8);
+                self.timers.write(base + 1, ((data >> 8) & 0x0000_00FF) as u8);
+                self.timers.write(base + 2, ((data >> 16) & 0x0000_00FF) as u8);
+                self.timers.write(base + 3, ((data >> 24) & 0x0000_00FF) as u8);
             }
             0x0400_0130 => {
                 // KEYINPUT (RO) low half ignored; KEYCNT is high halfword on word writes
@@ -728,7 +723,7 @@ impl BusAccessor for CpuBus {
                     
                     _ => {
                         // Other I/O registers (Timer, etc.)
-                        if addr >= 0x0400_00B0 && addr <= 0x0400_00DE {
+                        if (0x0400_00B0..=0x0400_00DE).contains(&addr) {
                             let _ = data;
                         }
                     }
@@ -743,12 +738,12 @@ impl BusAccessor for CpuBus {
             // 修正(006): OAM 1KB ミラー（32bit 書き）
             0x0700_0000..=0x07FF_FFFF => self.oam.write_word((addr - 0x0700_0000) & 0x3FF, data),
             0x0E00_0000..=0x0E00_FFFF => {
-                println!("⚠️  WARNING: Invalid word write to SRAM at 0x{:08x} = 0x{:08x} (SRAM is byte-access only, ignored)", addr, data);
+                println!("⚠️  WARNING: Invalid word write to SRAM at 0x{addr:08x} = 0x{data:08x} (SRAM is byte-access only, ignored)");
             }
             _ => {
-                println!("⚠️  WARNING: Invalid write_word to 0x{:08x} = 0x{:08x} (ignored)", addr, data);
+                println!("⚠️  WARNING: Invalid write_word to 0x{addr:08x} = 0x{data:08x} (ignored)");
             }
-        };
+        }
     }
 
     fn compute_cycle(&self, addr: Word, access_type: AccessType) -> Cycle {
@@ -757,9 +752,9 @@ impl BusAccessor for CpuBus {
             return 1;
         }
         match access_type {
-            AccessType::NonSeq(AccessWidth::Byte) | AccessType::NonSeq(AccessWidth::HalfWord) => self.cycleLUT.n16[page],
+            AccessType::NonSeq(AccessWidth::Byte | AccessWidth::HalfWord) => self.cycleLUT.n16[page],
             AccessType::NonSeq(AccessWidth::Word) => self.cycleLUT.n32[page],
-            AccessType::Seq(AccessWidth::Byte) | AccessType::Seq(AccessWidth::HalfWord) => self.cycleLUT.s16[page],
+            AccessType::Seq(AccessWidth::Byte | AccessWidth::HalfWord) => self.cycleLUT.s16[page],
             AccessType::Seq(AccessWidth::Word) => self.cycleLUT.s32[page],
         }
     }
@@ -777,8 +772,8 @@ impl CpuBus {
         oam: Ram,
         backup: Backup, // SRAM / Flash save memory
         key: io::Key,
-    ) -> CpuBus {
-        CpuBus {
+    ) -> Self {
+        Self {
             cycleLUT: CycleLUT::new(),
             lcdc,
             dma: DMAController::new(),
@@ -822,11 +817,11 @@ impl CpuBus {
     }
 
     /// Whether the backup memory changed since the last `backup_clear_dirty`.
-    pub(crate) fn backup_is_dirty(&self) -> bool {
+    pub(crate) const fn backup_is_dirty(&self) -> bool {
         self.backup.is_dirty()
     }
 
-    pub(crate) fn backup_clear_dirty(&mut self) {
+    pub(crate) const fn backup_clear_dirty(&mut self) {
         self.backup.clear_dirty();
     }
 
@@ -861,7 +856,7 @@ impl CpuBus {
     /// eventually complete and (if enabled) raise the SIO interrupt. The
     /// start/busy bit (bit 7) stays set until the transfer "completes" on the
     /// next servicing point, matching software that polls it.
-    fn write_siocnt(&mut self, data: HalfWord) {
+    const fn write_siocnt(&mut self, data: HalfWord) {
         let starting = (data & 0x0080) != 0 && (self.siocnt & 0x0080) == 0;
         self.siocnt = data;
         // Internal shift clock (bit 0) drives the transfer on this side.
@@ -966,8 +961,7 @@ impl CpuBus {
             if self.trace_dma && has_timed_enabled {
                 let vcount = self.lcdc.read_halfword(0x0006);
                 println!(
-                    "DMA timing edge vblank_rising={} hblank_rising={} vcount={}",
-                    vblank_rising, hblank_rising, vcount
+                    "DMA timing edge vblank_rising={vblank_rising} hblank_rising={hblank_rising} vcount={vcount}"
                 );
             }
             for channel in 0..4 {
@@ -990,7 +984,7 @@ impl CpuBus {
                     // Video-capture DMA (DMA3 "special" timing): fires each HBlank
                     // for lines 2..=161, then stops at line 162.
                     3 if channel == 3 && hblank_rising && (2..162).contains(&(vcount as usize)) => {
-                        self.dma.trigger_timing_event(channel)
+                        self.dma.trigger_timing_event(channel);
                     }
                     _ => {}
                 }
@@ -1029,7 +1023,7 @@ impl CpuBus {
             if request_irq {
                 self.dma_irq_latch[channel] = true;
                 if self.trace_dma {
-                    println!("DMA irq latched ch={}", channel);
+                    println!("DMA irq latched ch={channel}");
                 }
             }
         }
@@ -1130,7 +1124,7 @@ impl CpuBus {
     }
 
     /// Returns and clears the "LCD finished a frame" flag.
-    pub(crate) fn take_frame_ready(&mut self) -> bool {
+    pub(crate) const fn take_frame_ready(&mut self) -> bool {
         let r = self.frame_ready;
         self.frame_ready = false;
         r
@@ -1140,7 +1134,7 @@ impl CpuBus {
     // GBA VRAM is 96KB (0x18000) within a 128KB window (0x20000).
     // 0x06000000-0x06FFFFFF should wrap every 0x20000, and offsets >= 0x18000
     // mirror the last 32KB (map to 0x10000-0x17FFF).
-    fn map_vram_offset(addr: u32) -> u32 {
+    const fn map_vram_offset(addr: u32) -> u32 {
         // 128KB window wrap first (0x20000-1 = 0x1_FFFF)
         let off_20000 = (addr - 0x0600_0000) & 0x1_FFFF;
         if off_20000 >= 0x18000 { off_20000 - 0x8000 } else { off_20000 }
@@ -1427,7 +1421,7 @@ impl CpuBus {
             // silently dropping them.
             0x0400_0000..=0x0400_03FF => self.write_word(addr, data),
             _ => {
-                println!("⚠️  DMA write_word to unsupported address: 0x{:08x} = 0x{:08x}", addr, data);
+                println!("⚠️  DMA write_word to unsupported address: 0x{addr:08x} = 0x{data:08x}");
             }
         }
     }
@@ -1457,28 +1451,28 @@ impl CpuBus {
             // silently dropping them.
             0x0400_0000..=0x0400_03FF => self.write_halfword(addr, data),
             _ => {
-                println!("⚠️  DMA write_halfword to unsupported address: 0x{:08x} = 0x{:04x}", addr, data);
+                println!("⚠️  DMA write_halfword to unsupported address: 0x{addr:08x} = 0x{data:04x}");
             }
         }
     }
 
-    pub(crate) fn borrow_mut_lcdc(&mut self) -> &mut lcd::LCDController {
+    pub(crate) const fn borrow_mut_lcdc(&mut self) -> &mut lcd::LCDController {
         &mut self.lcdc
     }
 
-    pub(crate) fn borrow_lcdc(&self) -> &lcd::LCDController {
+    pub(crate) const fn borrow_lcdc(&self) -> &lcd::LCDController {
         &self.lcdc
     }
 
-    pub(crate) fn borrow_vram(&self) -> &Ram {
+    pub(crate) const fn borrow_vram(&self) -> &Ram {
         &self.vram
     }
 
-    pub(crate) fn borrow_palette(&self) -> &Ram {
+    pub(crate) const fn borrow_palette(&self) -> &Ram {
         &self.palette
     }
 
-    pub(crate) fn borrow_oam(&self) -> &Ram {
+    pub(crate) const fn borrow_oam(&self) -> &Ram {
         &self.oam
     }
 }
@@ -1486,11 +1480,12 @@ impl CpuBus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::gba::SaveKind;
     use crate::interrupt::InterruptType;
 
     fn new_bus() -> CpuBus {
         let bios = Rom::new(0x4000, &[0u8; 0x4000][..]);
-        let rom = Rom::new(0x80000, &[0u8; 0x80000][..]);
+        let rom = Rom::new(0x80000, &vec![0u8; 0x80000]);
         let wram = Ram::new(vec![0; 0x8000]);
         let eram = Ram::new(vec![0; 0x4_0000]);
         let vram = Ram::new(vec![0; 0x1_8000]);
@@ -1685,8 +1680,7 @@ mod tests {
             assert_eq!(
                 vals[i + 1].wrapping_sub(vals[i]),
                 delta,
-                "constant per-transfer delta expected: {:?}",
-                vals
+                "constant per-transfer delta expected: {vals:?}"
             );
         }
     }
@@ -1735,7 +1729,7 @@ mod tests {
         assert_eq!(hw, ((addr >> 1) & 0xFFFF) as u16);
         // Byte reads select the appropriate half of (addr/2).
         assert_eq!(bus.read_byte(addr), ((addr >> 1) & 0xFF) as u8);
-        assert_eq!(bus.read_byte(addr + 1), (((addr + 1) >> 1) >> 8) as u8 & 0xFF);
+        assert_eq!(bus.read_byte(addr + 1), ((((addr + 1) >> 1) >> 8) as u8));
         // Word reads combine two consecutive open-bus halfwords.
         let lo = (addr >> 1) & 0xFFFF;
         let hi = ((addr + 2) >> 1) & 0xFFFF;
