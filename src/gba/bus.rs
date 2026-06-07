@@ -17,6 +17,7 @@ use super::apu::Apu;
 use super::backup::Backup;
 use super::dma::DMAController;
 use super::eeprom::Eeprom;
+use super::rtc::Rtc;
 
 pub const BIOS_ADDR: u32 = 0x0000_0000;
 pub const EWRAM_ADDR: u32 = 0x0200_0000;
@@ -142,6 +143,7 @@ pub struct CpuBus {
     oam: Ram,
     backup: Backup, // SRAM / Flash save memory (0x0E000000-0x0E00FFFF)
     eeprom: Option<Eeprom>, // serial EEPROM save (0x0D000000 region), when present
+    rtc: Rtc, // GamePak GPIO + real-time clock (0x080000C4-C8)
     key: io::Key,
     keycnt: HalfWord,
     siocnt: HalfWord,
@@ -279,6 +281,9 @@ impl BusAccessor for CpuBus {
             0x0600_0000..=0x06FF_FFFF => self.vram.read_halfword(Self::map_vram_offset(addr)),
             // 修正(006): OAM 1KB ミラー（16bit 読み）
             0x0700_0000..=0x07FF_FFFF => self.oam.read_halfword((addr - 0x0700_0000) & 0x3FF),
+            // GamePak GPIO / RTC registers (only readable once the game enables
+            // GPIO reads; otherwise these addresses read ROM).
+            0x0800_00C4 | 0x0800_00C6 | 0x0800_00C8 if self.rtc.read_enabled() => self.rtc.read(addr),
             // Direct CPU reads of EEPROM only see the ready flag; real games
             // clock data out via DMA (see `perform_dma_transfer`).
             0x0D00_0000..=0x0DFF_FFFF if self.eeprom.is_some() => 1,
@@ -582,6 +587,8 @@ impl BusAccessor for CpuBus {
             }
             // 修正(006): OAM 1KB ミラー（16bit 書き）
             0x0700_0000..=0x07FF_FFFF => self.oam.write_halfword((addr - 0x0700_0000) & 0x3FF, data),
+            // GamePak GPIO / RTC registers.
+            0x0800_00C4 | 0x0800_00C6 | 0x0800_00C8 => self.rtc.write(addr, data),
             // Direct CPU writes to EEPROM clock in one command bit (real games
             // use DMA, but handle this for completeness).
             0x0D00_0000..=0x0DFF_FFFF if self.eeprom.is_some() => {
@@ -798,6 +805,7 @@ impl CpuBus {
             oam,
             backup,
             eeprom: None,
+            rtc: Rtc::new(),
             key,
             keycnt: 0,
             siocnt: 0,

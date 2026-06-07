@@ -3,6 +3,7 @@ mod backup;
 mod bus;
 mod dma;
 mod eeprom;
+mod rtc;
 mod timer;
 
 use backup::{Backup, SaveKind};
