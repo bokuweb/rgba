@@ -30,7 +30,7 @@ pub fn exec_thumb_add2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     cpsr.set_N_from(d as u32);
     cpsr.set_Z_from(d as u32);
     cpsr.set_C_from(d);
-    let v = gpr[rn_rd] >> 31 == 0 && (gpr[rn_rd] as u32 ^ d as u32) >> 31 != 0 && (imm ^ d as u32) >> 31 != 0;
+    let v = gpr[rn_rd] >> 31 == 0 && (gpr[rn_rd] ^ d as u32) >> 31 != 0 && (imm ^ d as u32) >> 31 != 0;
     // cpsr.set_V_from(gpr[rn_rd], d as u32);
     cpsr.set_V(v);
     gpr[rn_rd] = d as u32;
@@ -52,7 +52,7 @@ pub fn exec_thumb_add3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     (s, PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_add_hi_register<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+pub fn exec_thumb_add_hi_register<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], _cpsr: &mut PSR) -> ExecuteResult {
     let rs = usize::from(dec.get_Rs6_3());
     let rd = usize::from(dec.get_Rd_7_2_0());
     gpr[rd] = gpr[rd].wrapping_add(gpr[rs]);
@@ -69,19 +69,19 @@ pub fn exec_thumb_add_relative_address<T: BusAccessor>(
     bus: &T,
     dec: DataProcessing,
     gpr: &mut [Word; 16],
-    cpsr: &mut PSR,
+    _cpsr: &mut PSR,
 ) -> ExecuteResult {
     let imm = dec.get_imm8();
     let imm = (imm as u32).wrapping_shl(2);
     let rd = dec.get_Rd10_8();
     let data = if dec.get_bit11() { gpr[SP] } else { gpr[PC] & 0xFFFF_FFFC };
-    let data = data + imm as u32;
+    let data = data + imm;
     gpr[rd as usize] = data;
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
 }
 
-pub fn exec_thumb_add7<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+pub fn exec_thumb_add7<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], _cpsr: &mut PSR) -> ExecuteResult {
     let imm = dec.get_imm7() as i8;
     let imm = if dec.get_A() { -imm } else { imm };
     // dbg!(imm);
@@ -145,8 +145,8 @@ pub fn exec_thumb_sub3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
 pub fn exec_thumb_and<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let d = gpr[dec.get_Rd2_0() as usize] & gpr[dec.get_Rm5_3() as usize];
     gpr[dec.get_Rd2_0() as usize] = d;
-    cpsr.set_N_from(d as u32);
-    cpsr.set_Z_from(d as u32);
+    cpsr.set_N_from(d);
+    cpsr.set_Z_from(d);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
 }
@@ -154,8 +154,8 @@ pub fn exec_thumb_and<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
 pub fn exec_thumb_eor<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let d = gpr[dec.get_Rd2_0() as usize] ^ gpr[dec.get_Rm5_3() as usize];
     gpr[dec.get_Rd2_0() as usize] = d;
-    cpsr.set_N_from(d as u32);
-    cpsr.set_Z_from(d as u32);
+    cpsr.set_N_from(d);
+    cpsr.set_Z_from(d);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
 }
@@ -224,7 +224,7 @@ pub fn exec_thumb4_asr<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
             cpsr.set_C(gpr[rd] & (1 << (sh - 1)) != 0);
             gpr[rd] = gpr[rd].wrapping_shr(sh)
                 | if gpr[rd] & 0x8000_0000 != 0 {
-                    ((0xFFFF_FFFF as u32).wrapping_shl(32 - sh))
+                    0xFFFF_FFFF_u32.wrapping_shl(32 - sh) 
                 } else {
                     0
                 };
@@ -280,7 +280,7 @@ pub fn exec_thumb_sbc<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
     let rd = dec.get_Rd2_0() as usize;
     let rm = dec.get_Rm5_3() as usize;
 
-    let c = if cpsr.get_C() { 0 } else { 1 };
+    let c = u64::from(!cpsr.get_C());
     let m = gpr[rm] as u64 + c;
     let d = (gpr[rd] as u64).wrapping_sub(m);
     cpsr.set_N_from(d as u32);
@@ -295,7 +295,7 @@ pub fn exec_thumb_sbc<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
 }
 
 pub fn exec_thumb4_ror<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
-    if gpr[15] == 134234196 {
+    if gpr[15] == 134_234_196 {
         // panic!()
     }
     let rd = dec.get_Rd2_0() as usize;
@@ -306,7 +306,7 @@ pub fn exec_thumb4_ror<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
             cpsr.set_C((gpr[rd] & (1 << (r - 1))) != 0);
             gpr[rd] = gpr[rd].rotate_right(r);
         } else {
-            cpsr.set_C(gpr[rd] >> 31 != 0)
+            cpsr.set_C(gpr[rd] >> 31 != 0);
         }
     }
     // cpsr.set_C(is_carry_over(Shift::ROR, gpr[rd], sh, cpsr.get_C(), true));
@@ -332,7 +332,7 @@ pub fn exec_thumb_neg<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
     cpsr.set_Z_from(d as u32);
     cpsr.set_N_from(d as u32);
     cpsr.set_C(d <= 0);
-    cpsr.set_V((0 as i32).overflowing_sub(s as i32).1);
+    cpsr.set_V(0_i32.overflowing_sub(s).1);
     gpr[dec.get_Rd2_0() as usize] = d as u32;
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
@@ -446,8 +446,8 @@ pub fn exec_thumb_mvn<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
 pub fn exec_thumb_bic<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let d = gpr[dec.get_Rd2_0() as usize] & !gpr[dec.get_Rm5_3() as usize];
     gpr[dec.get_Rd2_0() as usize] = d;
-    cpsr.set_N_from(d as u32);
-    cpsr.set_Z_from(d as u32);
+    cpsr.set_N_from(d);
+    cpsr.set_Z_from(d);
     // dbg!("bic", &gpr);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
@@ -506,7 +506,7 @@ pub fn exec_thumb_mov1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
 }
 
 // Format 5 Hi register operations
-pub fn exec_thumb_mov3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
+pub fn exec_thumb_mov3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], _cpsr: &mut PSR) -> ExecuteResult {
     let rs = dec.get_Rs6_3() as usize;
     let rd = usize::from(if dec.get_msbd() { dec.get_Rd2_0() | 0x8 } else { dec.get_Rd2_0() });
     // let rd = dec.get_Rd_7_2_0() as usize;
@@ -515,7 +515,7 @@ pub fn exec_thumb_mov3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     // dbg!("MOV3", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
 
     if rd == PC {
-        gpr[PC] = gpr[PC] & 0xFFFF_FFFE;
+        gpr[PC] &= 0xFFFF_FFFE;
         (0, PipelineStatus::Flush)
     } else {
         let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));

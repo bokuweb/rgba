@@ -1,5 +1,5 @@
 bitfield! {
-    #[derive(Debug, PartialEq, Clone)]
+    #[derive(Debug, PartialEq, Eq, Clone)]
     pub struct Branch(u32);
     pub get_cond, _: 31, 28;
     #[allow(non_snake_case)]

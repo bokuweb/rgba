@@ -12,7 +12,7 @@ pub use data_processing::*;
 pub use single_data_transfer::*;
 pub use swi::*;
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Instruction {
     LDR1(SingleDataTransfer),
     LDRB(SingleDataTransfer),
