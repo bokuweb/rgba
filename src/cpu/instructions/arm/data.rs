@@ -71,7 +71,15 @@ where
     }
 }
 
-pub fn exec_arm_mov<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_mov<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -79,8 +87,10 @@ where
     let rd = dec.get_Rd() as usize;
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, c, cpsr| {
         if s {
-            if rd == PC {
-                unimplemented!("data processing Rd = PC with S flag.");
+            if rd == PC && cpsr.get_mode() != Mode::User {
+                // S-flag with Rd=PC: exception return — restore CPSR from SPSR
+                // (and re-bank registers). No flag update in this case.
+                cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
                 cpsr.set_N_from(value as u32);
                 cpsr.set_Z_from(value as u32);
@@ -97,7 +107,15 @@ where
     })
 }
 
-pub fn exec_arm_and<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_and<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -107,8 +125,10 @@ where
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, c, cpsr| {
         let d = rn_value & value;
         if s {
-            if rd == PC {
-                unimplemented!("data processing Rd = PC with S flag.");
+            if rd == PC && cpsr.get_mode() != Mode::User {
+                // S-flag with Rd=PC: exception return — restore CPSR from SPSR
+                // (and re-bank registers). No flag update in this case.
+                cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
@@ -123,7 +143,15 @@ where
     })
 }
 
-pub fn exec_arm_eor<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_eor<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -133,8 +161,10 @@ where
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry, cpsr| {
         let d = rn_value ^ value;
         if s {
-            if rd == PC {
-                unimplemented!("data processing Rd = PC with S flag.");
+            if rd == PC && cpsr.get_mode() != Mode::User {
+                // S-flag with Rd=PC: exception return — restore CPSR from SPSR
+                // (and re-bank registers). No flag update in this case.
+                cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
                 // dbg!("EOR", carry, rd);
                 cpsr.set_N_from(d);
@@ -186,7 +216,15 @@ where
     })
 }
 
-pub fn exec_arm_rsb<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_rsb<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -196,8 +234,10 @@ where
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let d = value.wrapping_sub(rn_value);
         if s {
-            if rd == PC {
-                unimplemented!("data processing Rd = PC with S flag.");
+            if rd == PC && cpsr.get_mode() != Mode::User {
+                // S-flag with Rd=PC: exception return — restore CPSR from SPSR
+                // (and re-bank registers). No flag update in this case.
+                cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
@@ -224,7 +264,15 @@ fn get_operand(gpr: &[Word; 16], reg: u32, I: bool, R: bool) -> u32 {
     gpr[reg as usize]
 }
 
-pub fn exec_arm_add<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_add<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -235,8 +283,10 @@ where
     let result = exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
         let d = op1 as u64 + value as u64;
         if s {
-            if rd == PC {
-                unimplemented!("data processing Rd = PC with S flag.");
+            if rd == PC && cpsr.get_mode() != Mode::User {
+                // S-flag with Rd=PC: exception return — restore CPSR from SPSR
+                // (and re-bank registers). No flag update in this case.
+                cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
@@ -250,7 +300,15 @@ where
     result
 }
 
-pub fn exec_arm_adc<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_adc<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -262,8 +320,10 @@ where
         let c = if c_flag { 1 } else { 0 } as u32;
         let d = rn_value as u64 + value as u64 + c as u64;
         if s {
-            if rd == PC {
-                unimplemented!("data processing Rd = PC with S flag.");
+            if rd == PC && cpsr.get_mode() != Mode::User {
+                // S-flag with Rd=PC: exception return — restore CPSR from SPSR
+                // (and re-bank registers). No flag update in this case.
+                cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
@@ -283,7 +343,15 @@ where
     result
 }
 
-pub fn exec_arm_sbc<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_sbc<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -295,8 +363,10 @@ where
         let borrow_in = if cin { 0u32 } else { 1u32 };
         let d = rn_value.wrapping_sub(value).wrapping_sub(borrow_in);
         if s {
-            if rd == PC {
-                unimplemented!("data processing Rd = PC with S flag.");
+            if rd == PC && cpsr.get_mode() != Mode::User {
+                // S-flag with Rd=PC: exception return — restore CPSR from SPSR
+                // (and re-bank registers). No flag update in this case.
+                cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
                 cpsr.set_N_from(d);
                 cpsr.set_Z_from(d);
@@ -315,7 +385,15 @@ where
     })
 }
 
-pub fn exec_arm_rsc<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_rsc<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -328,8 +406,10 @@ where
         let d = value.wrapping_sub(rn_value.wrapping_add(borrow_in));
 
         if s {
-            if rd == PC {
-                unimplemented!("data processing Rd = PC with S flag.");
+            if rd == PC && cpsr.get_mode() != Mode::User {
+                // S-flag with Rd=PC: exception return — restore CPSR from SPSR
+                // (and re-bank registers). No flag update in this case.
+                cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
                 cpsr.set_N_from(d);
                 cpsr.set_Z_from(d);
@@ -464,7 +544,15 @@ where
     })
 }
 
-pub fn exec_arm_orr<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_orr<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -474,8 +562,10 @@ where
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry, cpsr| {
         let d = rn_value | value;
         if s {
-            if rd == PC {
-                unimplemented!("data processing Rd = PC with S flag.");
+            if rd == PC && cpsr.get_mode() != Mode::User {
+                // S-flag with Rd=PC: exception return — restore CPSR from SPSR
+                // (and re-bank registers). No flag update in this case.
+                cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
                 cpsr.set_N_from(d);
                 cpsr.set_Z_from(d);
@@ -490,7 +580,15 @@ where
     })
 }
 
-pub fn exec_arm_shift<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_shift<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -498,8 +596,10 @@ where
     let rd = dec.get_Rd() as usize;
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry, cpsr| {
         if s {
-            if rd == PC {
-                unimplemented!("data processing Rd = PC with S flag.");
+            if rd == PC && cpsr.get_mode() != Mode::User {
+                // S-flag with Rd=PC: exception return — restore CPSR from SPSR
+                // (and re-bank registers). No flag update in this case.
+                cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
                 cpsr.set_N_from(value);
                 cpsr.set_Z_from(value);
@@ -514,7 +614,15 @@ where
     })
 }
 
-pub fn exec_arm_bic<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_bic<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -524,8 +632,10 @@ where
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry, cpsr| {
         let d = rn_value & !value;
         if s {
-            if rd == PC {
-                unimplemented!("data processing Rd = PC with S flag.");
+            if rd == PC && cpsr.get_mode() != Mode::User {
+                // S-flag with Rd=PC: exception return — restore CPSR from SPSR
+                // (and re-bank registers). No flag update in this case.
+                cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
                 cpsr.set_N_from(d);
                 cpsr.set_Z_from(d);
@@ -540,7 +650,15 @@ where
     })
 }
 
-pub fn exec_arm_mvn<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_mvn<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -549,8 +667,10 @@ where
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry, cpsr| {
         let d = !value;
         if s {
-            if rd == PC {
-                unimplemented!("data processing Rd = PC with S flag.");
+            if rd == PC && cpsr.get_mode() != Mode::User {
+                // S-flag with Rd=PC: exception return — restore CPSR from SPSR
+                // (and re-bank registers). No flag update in this case.
+                cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
                 cpsr.set_N_from(d);
                 cpsr.set_Z_from(d);
@@ -565,7 +685,15 @@ where
     })
 }
 
-pub fn exec_arm_rrx<T>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> Result<ExecuteResult, ()>
+pub fn exec_arm_rrx<T>(
+    bus: &T,
+    dec: DataProcessing,
+    gpr: &mut [Word; 16],
+    cpsr: &mut PSR,
+    spsr: &mut PSR,
+    bank_gpr: &mut BankGpr,
+    bank_spsr: &mut BankSpsr,
+) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
 {
@@ -573,9 +701,14 @@ where
     let rd = dec.get_Rd() as usize;
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, carry: bool, cpsr| {
         if s {
-            cpsr.set_N_from(value);
-            cpsr.set_Z_from(value);
-            cpsr.set_C(carry);
+            if rd == PC && cpsr.get_mode() != Mode::User {
+                // S-flag with Rd=PC: exception return — restore CPSR from SPSR.
+                cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
+            } else {
+                cpsr.set_N_from(value);
+                cpsr.set_Z_from(value);
+                cpsr.set_C(carry);
+            }
         }
         gpr[rd] = value;
 
