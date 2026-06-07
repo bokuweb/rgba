@@ -1,3 +1,4 @@
+mod apu;
 mod backup;
 mod bus;
 mod dma;
@@ -148,6 +149,14 @@ impl GBA {
     pub fn update_key(&mut self, key: io::Key) {
         // dbg!("update_key", key);
         self.bus.update_key(key)
+    }
+
+    /// Output sample rate of the audio stream returned by [`GBA::take_audio`].
+    pub const AUDIO_SAMPLE_RATE: u32 = apu::SAMPLE_RATE;
+
+    /// Drain queued interleaved L/R audio samples produced since the last call.
+    pub fn take_audio(&mut self) -> Vec<i16> {
+        self.bus.take_audio()
     }
 }
 
