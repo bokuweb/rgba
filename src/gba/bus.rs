@@ -886,6 +886,15 @@ impl CpuBus {
             }
         }
 
+        self.poll_timed_dma_triggers();
+
+        // Check for pending DMA transfers and execute them
+        for channel in 0..4 {
+            self.run_dma_channel(channel);
+        }
+    }
+
+    fn poll_timed_dma_triggers(&mut self) {
         // Trigger timed DMAs on blanking edge transitions.
         let dispstat = self.lcdc.read_halfword(0x0004);
         let vcount = self.lcdc.read_halfword(0x0006);
@@ -958,30 +967,29 @@ impl CpuBus {
         self.prev_vblank = vblank;
         self.prev_hblank = hblank;
         self.prev_vcounter = vcounter;
+    }
 
-        // Check for pending DMA transfers and execute them
-        for channel in 0..4 {
-            let request_irq = self.dma.channels[channel].handle_irq();
-            if let Some((source, dest, count, transfer_size)) = self.dma.get_pending_transfer(channel) {
+    fn run_dma_channel(&mut self, channel: usize) {
+        let request_irq = self.dma.channels[channel].handle_irq();
+        if let Some((source, dest, count, transfer_size)) = self.dma.get_pending_transfer(channel) {
+            if self.trace_dma {
+                println!(
+                    "DMA start ch={} timing={} src={:08x} dst={:08x} count={} size={} ctrl={:04x}",
+                    channel,
+                    self.dma.channels[channel].get_timing(),
+                    source,
+                    dest,
+                    count,
+                    transfer_size,
+                    self.dma.channels[channel].control
+                );
+            }
+            self.perform_dma_transfer(channel, source, dest, count, transfer_size);
+            self.dma.complete_transfer(channel);
+            if request_irq {
+                self.dma_irq_latch[channel] = true;
                 if self.trace_dma {
-                    println!(
-                        "DMA start ch={} timing={} src={:08x} dst={:08x} count={} size={} ctrl={:04x}",
-                        channel,
-                        self.dma.channels[channel].get_timing(),
-                        source,
-                        dest,
-                        count,
-                        transfer_size,
-                        self.dma.channels[channel].control
-                    );
-                }
-                self.perform_dma_transfer(channel, source, dest, count, transfer_size);
-                self.dma.complete_transfer(channel);
-                if request_irq {
-                    self.dma_irq_latch[channel] = true;
-                    if self.trace_dma {
-                        println!("DMA irq latched ch={}", channel);
-                    }
+                    println!("DMA irq latched ch={}", channel);
                 }
             }
         }
@@ -1174,6 +1182,16 @@ impl CpuBus {
 
         let width = if transfer_size == 4 { AccessWidth::Word } else { AccessWidth::HalfWord };
         let unit = transfer_size as u32;
+
+        // This transfer can be preempted by a higher-priority channel (lower
+        // index) only if such a channel is enabled with an HBlank trigger — the
+        // case real software relies on to interleave a short repeating HBlank
+        // DMA with a long transfer. Restricting to HBlank keeps the common case
+        // (and FIFO/VBlank/special-timed channels) on the original exact path.
+        let preemptible = (0..channel).any(|c| {
+            self.dma.channels[c].enabled && self.dma.channels[c].get_timing() == 2
+        });
+
         for i in 0..count {
             let source_addr = src_region | ((src_off as u32) & 0x00FF_FFFF);
             let dest_addr = dst_region | ((dst_off as u32) & 0x00FF_FFFF);
@@ -1231,6 +1249,17 @@ impl CpuBus {
                 2 => {} // Fixed
                 3 => dst_off = dst_off.wrapping_add(step), // Increment/Reload
                 _ => {}
+            }
+
+            // DMA priority/preemption (checked at unit boundaries): time has
+            // passed, so a higher-priority channel (lower index) may now be
+            // pending via its HBlank/VBlank trigger. Run it to completion before
+            // continuing this transfer, matching hardware bus arbitration.
+            if preemptible {
+                self.poll_timed_dma_triggers();
+                for higher in 0..channel {
+                    self.run_dma_channel(higher);
+                }
             }
         }
 
@@ -1534,6 +1563,40 @@ mod tests {
                 vals
             );
         }
+    }
+
+    #[test]
+    fn hblank_dma_preempts_a_long_lower_priority_transfer() {
+        // A higher-priority HBlank DMA (ch0) must interleave into a long
+        // immediate DMA running on a lower-priority channel (ch1). (AGS DMA
+        // priority test.)
+        let mut bus = new_bus();
+        bus.write_halfword(0x0400_0100, 0); // TM0 reload = 0
+        bus.write_halfword(0x0400_0102, 0x0080); // TM0 enable, /1
+
+        // ch0: src=TM0 (fixed), dst=0x02010000, 16-bit, HBlank timing, 8 units.
+        bus.write_halfword(0x0400_00B0, 0x0100);
+        bus.write_halfword(0x0400_00B2, 0x0400);
+        bus.write_halfword(0x0400_00B4, 0x0000);
+        bus.write_halfword(0x0400_00B6, 0x0201);
+        bus.write_halfword(0x0400_00B8, 8);
+        // enable | HBlank timing (bits 12-13 = 10) | source fixed (bits 7-8 = 10)
+        bus.write_halfword(0x0400_00BA, 0x8000 | 0x2000 | 0x0100);
+
+        // ch1: src=TM0 (fixed), dst=0x02000000, 16-bit, immediate, 512 units
+        // (long enough to span an HBlank so ch0 preempts).
+        bus.write_halfword(0x0400_00BC, 0x0100);
+        bus.write_halfword(0x0400_00BE, 0x0400);
+        bus.write_halfword(0x0400_00C0, 0x0000);
+        bus.write_halfword(0x0400_00C2, 0x0200);
+        bus.write_halfword(0x0400_00C4, 512);
+        bus.write_halfword(0x0400_00C6, 0x8000 | 0x0100); // triggers the long DMA
+
+        // ch0 must have run during ch1: its destination holds captured timer
+        // values (non-zero and increasing).
+        let hi: Vec<u16> = (0..8).map(|i| bus.read_halfword(0x0201_0000 + i * 2)).collect();
+        assert!(hi[0] != 0, "HBlank DMA did not preempt the long transfer: {:?}", hi);
+        assert!(hi[7] > hi[0], "preempted DMA values should increase: {:?}", hi);
     }
 
     #[test]
