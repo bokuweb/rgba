@@ -261,7 +261,8 @@ impl LCDController {
             0x0050 => self.bldcnt as Word,   // BLDCNT - Color Special Effects Selection
             0x0052 => self.bldalpha as Word, // BLDALPHA - Alpha Blending Coefficients
             0x0054 => 0,                     // BLDY - Brightness Coefficient (Write Only, reads as 0)
-            _ => todo!(),
+            // Unhandled / unused LCD register: read as 0 instead of panicking.
+            _ => 0,
         }
     }
 
@@ -580,7 +581,9 @@ impl LCDController {
                 // println!("BLDY write: 0x{:04x} (EVY:{}/{})", data, evy, evy_clamped);
             }
             _ => {
-                todo!("Unhandled LCD register write: addr=0x{:04x}, data=0x{:04x}", addr, data);
+                // Unhandled / unused LCD register: ignore the write instead of
+                // panicking (e.g. unused gaps, or sound-adjacent addresses).
+                let _ = (addr, data);
             }
         }
     }
@@ -773,7 +776,9 @@ impl LCDController {
                 self.bldy = data;
             }
             _ => {
-                todo!("Unhandled LCD register word write: addr=0x{:04x}, data=0x{:08x}", addr, data);
+                // Unhandled / unused LCD register: ignore the write instead of
+                // panicking.
+                let _ = (addr, data);
             }
         }
     }
