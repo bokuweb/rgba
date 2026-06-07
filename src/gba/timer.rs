@@ -87,15 +87,20 @@ impl Timers {
         }
     }
 
-    pub fn tick(&mut self, cycles: u64, irq: &mut crate::interrupt::InterruptController) {
+    /// Advance all timers to `cycles`, returning the per-channel overflow
+    /// counts (used to clock the DirectSound FIFOs).
+    pub fn tick(&mut self, cycles: u64, irq: &mut crate::interrupt::InterruptController) -> [u64; 4] {
         let elapsed = cycles - self.prev_cycle;
         self.prev_cycle = cycles;
 
+        let mut overflows = [0u64; 4];
         let mut prev_overflow: u64 = 0;
         for ch in 0..4 {
             let overflow = self.timer_process(ch, elapsed, prev_overflow, irq);
+            overflows[ch] = overflow;
             prev_overflow = overflow;
         }
+        overflows
     }
 
     fn timer_process(
