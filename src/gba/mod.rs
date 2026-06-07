@@ -106,11 +106,8 @@ impl GBA {
             }
         }
 
-        let lcdc = self.bus.borrow_lcdc();
-        let vram = self.bus.borrow_vram();
-        let palette = self.bus.borrow_palette();
-        let oam = self.bus.borrow_oam();
-        lcdc.render(vram, palette, oam)
+        // The framebuffer was filled scanline-by-scanline during the frame.
+        self.bus.framebuffer().to_vec()
     }
 
     pub fn update_key(&mut self, key: io::Key) {
