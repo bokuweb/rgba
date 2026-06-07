@@ -126,7 +126,9 @@ fn decode_multiple(raw: Word) -> Instruction {
         0b0101 => Instruction::UMLAL(Multiple(raw)),
         0b0110 => Instruction::SMULL(Multiple(raw)),
         0b0111 => Instruction::SMLAL(Multiple(raw)),
-        _ => unimplemented!(),
+        // Unknown multiply encoding: fall through to the undefined-instruction
+        // exception instead of aborting the emulator.
+        _ => Instruction::Undefined,
     }
 }
 
@@ -163,7 +165,7 @@ fn decode_extra_memory(raw: Word) -> Instruction {
         0b01 if l => Instruction::LDRH(dec),
         0b10 if l => Instruction::LDRSB(dec),
         0b11 if l => Instruction::LDRSH(dec),
-        _ => panic!("undefined instruction detected"),
+        _ => Instruction::Undefined,
     }
 }
 
@@ -197,7 +199,7 @@ fn decode_data_processing(raw: Word) -> Instruction {
         0b1101 if !I && sh == 0b11 && instr != 0 => Instruction::ROR(DataProcessing(raw)),
         0b1110 => Instruction::BIC(DataProcessing(raw)),
         0b1111 => Instruction::MVN(DataProcessing(raw)),
-        _ => panic!("unsupported instruction"),
+        _ => Instruction::Undefined,
     }
 }
 
@@ -246,7 +248,8 @@ pub fn decode(raw: Word) -> Instruction {
         v if (v & 0x0E00_0000) == 0x0C00_0000 => InstructionType::Undefined,
         v if (v & 0x0C00_0000) == 0x0400_0000 => InstructionType::Memory,
         v if (v & 0x0C00_0000) == 0x0000_0000 => InstructionType::DataProcessing,
-        _ => panic!("Unsupported instruction"),
+        // Unclassifiable encoding: treat as undefined rather than aborting.
+        _ => InstructionType::Undefined,
     };
 
     match instruction_type {
@@ -261,7 +264,6 @@ pub fn decode(raw: Word) -> Instruction {
         InstructionType::BranchAndExchange => Instruction::BX(BranchAndExchange(raw)),
         InstructionType::BlockDataTransfer => decode_block_data_transfer(raw),
         InstructionType::Swi => Instruction::SWI(decode_swi(raw)),
-        _ => panic!("unsupported instruction"),
     }
 
     // debug!("opcode = {:?}", opcode);
@@ -271,4 +273,25 @@ pub fn decode(raw: Word) -> Instruction {
     //     InstructionType::ExtraMemory => Box::new(ExtraMemoryDecoder(dec)),
     //     _ => Box::new(dec),
     // }
+}
+
+#[cfg(test)]
+mod harden_tests {
+    use super::*;
+
+    #[test]
+    fn coprocessor_and_undefined_encodings_decode_to_undefined() {
+        // These previously aborted the emulator via `panic!`/`unimplemented!`.
+        // On ARM7TDMI they are undefined, so they must decode to `Undefined`
+        // (which the executor turns into the undefined-instruction exception).
+        let cases = [
+            0xEE00_0000u32, // CDP   (coprocessor data operation)
+            0xEE10_0010u32, // MRC   (coprocessor register read)
+            0xEC00_0000u32, // LDC   (coprocessor load)
+            0x0600_0010u32, // undefined-instruction encoding slot
+        ];
+        for raw in cases {
+            assert_eq!(decode(raw), Instruction::Undefined, "raw=0x{:08X}", raw);
+        }
+    }
 }
