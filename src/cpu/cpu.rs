@@ -516,8 +516,9 @@ impl ARM {
                 arm::Instruction::SWP(dec) => exec_arm_swp(bus, dec, &mut self.gpr)?,
                 arm::Instruction::SWPB(dec) => exec_arm_swpb(bus, dec, &mut self.gpr)?,
                 arm::Instruction::SWI(dec) => exec_arm_swi(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr)?,
-                // ArmOpcode::Unknown => self.execute_unknown(dec),
-                _ => unimplemented!(),
+                // Unknown ARM encodings decode to `Instruction::Undefined`
+                // (handled above as the undefined-instruction exception), so the
+                // match is exhaustive and needs no catch-all.
             }
         };
         match pipeline_status {
@@ -627,10 +628,9 @@ impl ARM {
                     let (c, ps) = exec_thumb_swi(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr);
                     (c, ps)
                 }
-                _ => {
-                    // dbg!(&instruction, &self.gpr);
-                    unimplemented!();
-                }
+                // Unknown/undefined Thumb encoding (decoded as `Undefined`) and
+                // any unhandled variant: treat as a NOP rather than aborting.
+                _ => (1, PipelineStatus::Continue),
             }
         };
 

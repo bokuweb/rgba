@@ -73,6 +73,8 @@ pub enum Instruction {
     POP(BlockDataTransfer),
     PUSH(BlockDataTransfer),
     SWI(ThumbSoftwareInterrupt),
+    /// Unknown/undefined Thumb encoding (treated as a no-op by the executor).
+    Undefined,
 }
 
 pub fn decode(raw: HalfWord) -> Instruction {
@@ -235,6 +237,8 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 Instruction::PUSH(dec)
             }
         }
-        _ => panic!(format!("Unsupported instruction {:x}", raw)),
+        // Unknown Thumb encoding: decode as Undefined (no-op) instead of
+        // aborting the emulator.
+        _ => Instruction::Undefined,
     }
 }
