@@ -1006,12 +1006,23 @@ impl CpuBus {
             self.timers.tick(self.clock, irq);
         }
         let (ready, vblank_irq) = self.lcdc.run(cycles);
+        // Render any visible scanlines the LCD just entered, using the current
+        // register/memory state (scanline-accurate raster).
+        let pending = self.lcdc.take_pending_scanlines();
+        for y in pending {
+            self.lcdc.render_scanline(y, &self.vram, &self.palette, &self.oam);
+        }
         if vblank_irq {
             self.request_vblank_interrupt();
         }
         if ready {
             self.frame_ready = true;
         }
+    }
+
+    /// Borrow the LCD framebuffer (scanline-accumulated RGBA8).
+    pub(crate) fn framebuffer(&self) -> &[u8] {
+        self.lcdc.framebuffer()
     }
 
     /// Returns and clears the "LCD finished a frame" flag.
