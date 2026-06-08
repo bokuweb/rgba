@@ -96,12 +96,34 @@ impl LCDController {
         std::env::var("AGB_TRACE_LCD").ok().as_deref() == Some("1")
     }
 
+    /// Per-scanline scroll-write diagnostic. Set `AGB_TRACE_SCROLL=1` to log
+    /// BG?HOFS / BG?VOFS writes that land on a VISIBLE line (0..=159) together
+    /// with the scanline and cycle. Writes during VBlank (lines 160..=227) — the
+    /// normal once-per-frame scroll setup — are intentionally skipped so the log
+    /// is SILENT on static screens/menus and only speaks when a real per-scanline
+    /// raster effect runs (e.g. Mother 3's shaking-shout text), which shows up as
+    /// a burst of writes across L0..159 cycling through a wave of values.
+    #[inline]
+    fn trace_scroll() -> bool {
+        std::env::var("AGB_TRACE_SCROLL").ok().as_deref() == Some("1")
+    }
+
+    #[inline]
+    fn log_scroll_write(&self, name: &str, value: HalfWord) {
+        if self.lines < 160 && Self::trace_scroll() {
+            println!("📜 L{:3} c{:4} {name}=0x{value:03x}", self.lines, self.cycles);
+        }
+    }
+
     pub fn new() -> Self {
         Self {
             cycles: 0,
             lines: 0,
             framebuffer: vec![0; 240 * 160 * 4],
-            // Line 0 of the first frame is entered at startup (no wrap occurs).
+            // Line 0 is queued up-front so it renders at the very start of the
+            // first frame; every later line is queued as the LCD enters it, and
+            // line 0 of subsequent frames is queued on the scanline wrap (see
+            // `run`).
             pending_scanlines: vec![0],
             dispcnt: DISPCNT::new(),
             dispstat: DISPSTAT::new(),
@@ -176,10 +198,12 @@ impl LCDController {
             if self.lines >= LINES_PER_FRAME {
                 self.lines -= LINES_PER_FRAME;
             }
-            // Entering a visible line: schedule it for rendering with the current
-            // register/memory state. This pushes lines 1..=159 and, on the
-            // 227->0 wrap, line 0 of the next frame (line 0 of the first frame is
-            // queued at construction).
+            // Entering a visible line: schedule it for rendering at its START,
+            // with the current register/memory state. The GBA latches BG scroll
+            // at the beginning of each scanline, so a write partway through a line
+            // affects the *next* line — sampling here reproduces that. Pushes
+            // lines 1..=159 and, on the 227->0 wrap, line 0 of the next frame
+            // (line 0 of the first frame is queued at construction).
             if self.lines < 160 {
                 self.pending_scanlines.push(self.lines);
             }
@@ -360,36 +384,42 @@ impl LCDController {
             0x0010 => {
                 // BG0HOFS - BG0 X-Offset (Write Only)
                 self.bg0hofs = data & 0x01FF; // 9-bit mask
-                                              // println!("BG0HOFS write: 0x{:04x}", self.bg0hofs);
+                self.log_scroll_write("BG0HOFS", self.bg0hofs);
             }
             0x0012 => {
                 // BG0VOFS - BG0 Y-Offset (Write Only)
                 self.bg0vofs = data & 0x01FF; // 9-bit mask
-                                              // println!("BG0VOFS write: 0x{:04x}", self.bg0vofs);
+                self.log_scroll_write("BG0VOFS", self.bg0vofs);
             }
             0x0014 => {
                 // BG1HOFS - BG1 X-Offset (Write Only)
                 self.bg1hofs = data & 0x01FF;
+                self.log_scroll_write("BG1HOFS", self.bg1hofs);
             }
             0x0016 => {
                 // BG1VOFS - BG1 Y-Offset (Write Only)
                 self.bg1vofs = data & 0x01FF;
+                self.log_scroll_write("BG1VOFS", self.bg1vofs);
             }
             0x0018 => {
                 // BG2HOFS - BG2 X-Offset (Write Only)
                 self.bg2hofs = data & 0x01FF;
+                self.log_scroll_write("BG2HOFS", self.bg2hofs);
             }
             0x001A => {
                 // BG2VOFS - BG2 Y-Offset (Write Only)
                 self.bg2vofs = data & 0x01FF;
+                self.log_scroll_write("BG2VOFS", self.bg2vofs);
             }
             0x001C => {
                 // BG3HOFS - BG3 X-Offset (Write Only)
                 self.bg3hofs = data & 0x01FF;
+                self.log_scroll_write("BG3HOFS", self.bg3hofs);
             }
             0x001E => {
                 // BG3VOFS - BG3 Y-Offset (Write Only)
                 self.bg3vofs = data & 0x01FF;
+                self.log_scroll_write("BG3VOFS", self.bg3vofs);
             }
             0x0020 => {
                 // BG2PA - BG2 Rotation/Scaling Parameter A (dx) (Write Only)
@@ -594,198 +624,16 @@ impl LCDController {
 
     #[allow(clippy::no_effect_underscore_binding)] // register field-decode documentation, see write_halfword
     pub fn write_word(&mut self, addr: Word, data: Word) {
-        let data = data as HalfWord;
-        match addr {
-            0x0000 => self.dispcnt.write(data),
-            0x0004 => {
-                // DISPSTAT - General LCD Status (Read/Write)
-                self.dispstat.write(data);
-                if Self::trace_lcd() {
-                    println!("🔧 DISPSTAT word write: 0x{:04x} -> masked: 0x{:04x}", data, self.dispstat.0 & 0x0038);
-                }
-            }
-            0x0008 => self.bg0cnt.write(data),
-            0x000A => self.bg1cnt.write(data),
-            0x000C => self.bg2cnt.write(data),
-            0x000E => self.bg3cnt.write(data),
-            0x0010 => {
-                // BG0HOFS - BG0 X-Offset (Write Only)
-                self.bg0hofs = data & 0x01FF;
-            }
-            0x0012 => {
-                // BG0VOFS - BG0 Y-Offset (Write Only)
-                self.bg0vofs = data & 0x01FF;
-            }
-            0x0014 => {
-                // BG1HOFS - BG1 X-Offset (Write Only)
-                self.bg1hofs = data & 0x01FF;
-            }
-            0x0016 => {
-                // BG1VOFS - BG1 Y-Offset (Write Only)
-                self.bg1vofs = data & 0x01FF;
-            }
-            0x0018 => {
-                // BG2HOFS - BG2 X-Offset (Write Only)
-                self.bg2hofs = data & 0x01FF;
-            }
-            0x001A => {
-                // BG2VOFS - BG2 Y-Offset (Write Only)
-                self.bg2vofs = data & 0x01FF;
-            }
-            0x001C => {
-                // BG3HOFS - BG3 X-Offset (Write Only)
-                self.bg3hofs = data & 0x01FF;
-            }
-            0x001E => {
-                // BG3VOFS - BG3 Y-Offset (Write Only)
-                self.bg3vofs = data & 0x01FF;
-            }
-            0x0020 => {
-                // BG2PA - BG2 Rotation/Scaling Parameter A (dx) (Write Only)
-                self.bg2pa = data;
-            }
-            0x0022 => {
-                // BG2PB - BG2 Rotation/Scaling Parameter B (dmx) (Write Only)
-                self.bg2pb = data;
-            }
-            0x0024 => {
-                // BG2PC - BG2 Rotation/Scaling Parameter C (dy) (Write Only)
-                self.bg2pc = data;
-            }
-            0x0026 => {
-                // BG2PD - BG2 Rotation/Scaling Parameter D (dmy) (Write Only)
-                self.bg2pd = data;
-            }
-            0x0028 => {
-                // BG2X_L - BG2 Reference Point X-Coordinate, lower 16 bit (Write Only)
-                self.bg2x = (self.bg2x & 0xFFFF_0000) | (data as Word);
-            }
-            0x002A => {
-                // BG2X_H - BG2 Reference Point X-Coordinate, upper 12 bit (Write Only)
-                self.bg2x = (self.bg2x & 0x0000_FFFF) | ((data as Word & 0x0FFF) << 16);
-                // Sign extend if bit 27 is set (28-bit signed value)
-                if (self.bg2x & 0x0800_0000) != 0 {
-                    self.bg2x |= 0xF000_0000;
-                }
-            }
-            0x002C => {
-                // BG2Y_L - BG2 Reference Point Y-Coordinate, lower 16 bit (Write Only)
-                self.bg2y = (self.bg2y & 0xFFFF_0000) | (data as Word);
-            }
-            0x002E => {
-                // BG2Y_H - BG2 Reference Point Y-Coordinate, upper 12 bit (Write Only)
-                self.bg2y = (self.bg2y & 0x0000_FFFF) | ((data as Word & 0x0FFF) << 16);
-                // Sign extend if bit 27 is set (28-bit signed value)
-                if (self.bg2y & 0x0800_0000) != 0 {
-                    self.bg2y |= 0xF000_0000;
-                }
-            }
-            0x0030 => {
-                // BG3PA - BG3 Rotation/Scaling Parameter A (dx) (Write Only)
-                self.bg3pa = data;
-            }
-            0x0032 => {
-                // BG3PB - BG3 Rotation/Scaling Parameter B (dmx) (Write Only)
-                self.bg3pb = data;
-            }
-            0x0034 => {
-                // BG3PC - BG3 Rotation/Scaling Parameter C (dy) (Write Only)
-                self.bg3pc = data;
-            }
-            0x0036 => {
-                // BG3PD - BG3 Rotation/Scaling Parameter D (dmy) (Write Only)
-                self.bg3pd = data;
-            }
-            0x0038 => {
-                // BG3X_L - BG3 Reference Point X-Coordinate, lower 16 bit (Write Only)
-                self.bg3x = (self.bg3x & 0xFFFF_0000) | (data as Word);
-            }
-            0x003A => {
-                // BG3X_H - BG3 Reference Point X-Coordinate, upper 12 bit (Write Only)
-                self.bg3x = (self.bg3x & 0x0000_FFFF) | ((data as Word & 0x0FFF) << 16);
-                // Sign extend if bit 27 is set (28-bit signed value)
-                if (self.bg3x & 0x0800_0000) != 0 {
-                    self.bg3x |= 0xF000_0000;
-                }
-            }
-            0x003C => {
-                // BG3Y_L - BG3 Reference Point Y-Coordinate, lower 16 bit (Write Only)
-                self.bg3y = (self.bg3y & 0xFFFF_0000) | (data as Word);
-            }
-            0x003E => {
-                // BG3Y_H - BG3 Reference Point Y-Coordinate, upper 12 bit (Write Only)
-                self.bg3y = (self.bg3y & 0x0000_FFFF) | ((data as Word & 0x0FFF) << 16);
-                // Sign extend if bit 27 is set (28-bit signed value)
-                if (self.bg3y & 0x0800_0000) != 0 {
-                    self.bg3y |= 0xF000_0000;
-                }
-            }
-            0x0040 => {
-                // WIN0H - Window 0 Horizontal Dimensions (Write Only)
-                self.win0h = data;
-                let _x1 = (data >> 8) & 0xFF; // Bit 8-15: X1, Leftmost coordinate
-                let _x2 = data & 0xFF; // Bit 0-7: X2, Rightmost coordinate + 1
-            }
-            0x0042 => {
-                // WIN1H - Window 1 Horizontal Dimensions (Write Only)
-                self.win1h = data;
-                let _x1 = (data >> 8) & 0xFF; // Bit 8-15: X1, Leftmost coordinate
-                let _x2 = data & 0xFF; // Bit 0-7: X2, Rightmost coordinate + 1
-            }
-            0x0044 => {
-                // WIN0V - Window 0 Vertical Dimensions (Write Only)
-                self.win0v = data;
-                let _y1 = (data >> 8) & 0xFF; // Bit 8-15: Y1, Top-most coordinate
-                let _y2 = data & 0xFF; // Bit 0-7: Y2, Bottom-most coordinate + 1
-            }
-            0x0046 => {
-                // WIN1V - Window 1 Vertical Dimensions (Write Only)
-                self.win1v = data;
-                let _y1 = (data >> 8) & 0xFF; // Bit 8-15: Y1, Top-most coordinate
-                let _y2 = data & 0xFF; // Bit 0-7: Y2, Bottom-most coordinate + 1
-            }
-            0x0048 => {
-                // WININ - Control of Inside of Window(s) (Read/Write)
-                self.winin = data;
-            }
-            0x004A => {
-                // WINOUT - Control of Outside of Windows & Inside of OBJ Window (Read/Write)
-                self.winout = data;
-            }
-            0x004C => {
-                // MOSAIC - Mosaic Size (Write Only)
-                self.mosaic = data;
-                let bg_h_size = data & 0x000F;
-                let bg_v_size = (data & 0x00F0) >> 4;
-                let obj_h_size = (data & 0x0F00) >> 8;
-                let obj_v_size = (data & 0xF000) >> 12;
-                println!(
-                    "MOSAIC word write: 0x{:04x} (BG H:{} V:{}, OBJ H:{} V:{})",
-                    data,
-                    bg_h_size + 1,
-                    bg_v_size + 1,
-                    obj_h_size + 1,
-                    obj_v_size + 1
-                );
-            }
-            0x0050 => {
-                // BLDCNT - Color Special Effects Selection (Read/Write)
-                self.bldcnt = data;
-            }
-            0x0052 => {
-                // BLDALPHA - Alpha Blending Coefficients (Read/Write)
-                self.bldalpha = data;
-            }
-            0x0054 => {
-                // BLDY - Brightness (Fade-In/Out) Coefficient (Write Only)
-                self.bldy = data;
-            }
-            _ => {
-                // Unhandled / unused LCD register: ignore the write instead of
-                // panicking.
-                let _ = (addr, data);
-            }
-        }
+        // A 32-bit write to LCD I/O is two independent 16-bit register writes,
+        // to `addr` and `addr + 2`, exactly as on hardware. Games (and the
+        // compiler) routinely set an adjacent register pair with one store —
+        // e.g. BG0HOFS+BG0VOFS via a single word write to 0x0400_0010, the two
+        // window-bound or blend registers, or the two halves of a 32-bit BG
+        // reference point. Truncating to the low halfword (the previous
+        // behaviour) silently dropped the high register and corrupted
+        // scroll/window/blend/affine state.
+        self.write_halfword(addr, (data & 0xFFFF) as HalfWord);
+        self.write_halfword(addr.wrapping_add(2), ((data >> 16) & 0xFFFF) as HalfWord);
     }
 
     // Helper function to check if a pixel is inside a window
@@ -1563,6 +1411,47 @@ mod tests {
         let l1 = 240 * 4;
         assert_eq!(fb[l1] & 0xF8, 0, "line 1 has no red");
         assert_eq!(fb[l1 + 1] & 0xF8, 0xF8, "line 1 backdrop is green");
+    }
+
+    #[test]
+    fn line_is_sampled_at_line_start() {
+        // The GBA latches BG scroll at the START of each scanline, so a line must
+        // be sampled for rendering as it is entered — before any mid-line writes
+        // for it land — not partway through. Verify `run` queues each line at its
+        // entry point: line 0 up-front, then line N exactly when its 1232-cycle
+        // predecessor completes.
+        let mut lcdc = LCDController::new();
+
+        // Line 0 is queued from construction, to render at frame start.
+        assert_eq!(lcdc.take_pending_scanlines(), vec![0], "line 0 queued up-front");
+
+        // Anywhere within line 0 (before it completes) queues nothing new — a
+        // mid-line register write must NOT retroactively affect line 0.
+        lcdc.run(super::CYCLES_PER_LINE - 1);
+        assert!(lcdc.take_pending_scanlines().is_empty(), "nothing queued mid-line-0");
+
+        // Completing line 0 enters line 1 and queues it at its start.
+        lcdc.run(1);
+        assert_eq!(lcdc.take_pending_scanlines(), vec![1], "line 1 queued at its entry");
+    }
+
+    #[test]
+    fn word_write_sets_both_registers_of_a_pair() {
+        // A 32-bit write to an LCD register pair must update both halves — the
+        // low halfword at `addr`, the high halfword at `addr + 2`. Regression
+        // guard for the bug where the high register (e.g. BG?VOFS written
+        // alongside BG?HOFS, or WIN1H alongside WIN0H) was silently dropped.
+        let mut lcdc = LCDController::new();
+
+        // WIN0H (0x40) / WIN1H (0x42): both are read-back-able.
+        lcdc.write_word(0x0040, 0xBBBB_AAAA);
+        assert_eq!(lcdc.read_halfword(0x0040), 0xAAAA, "WIN0H = low halfword of the word");
+        assert_eq!(lcdc.read_halfword(0x0042), 0xBBBB, "WIN1H = high halfword of the word");
+
+        // A 32-bit BG2 reference point (0x28 low / 0x2A high) must merge into the
+        // single 28-bit value rather than keeping only the low half.
+        lcdc.write_word(0x0028, 0x0123_4567);
+        assert_eq!(lcdc.read_word(0x0028) & 0x0FFF_FFFF, 0x0123_4567, "BG2X merges both halves");
     }
 
     /// Simulate the AGS `run_vblank_status_test` polling loop directly against
