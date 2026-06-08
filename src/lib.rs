@@ -18,7 +18,7 @@
 #![cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
 
 #[macro_use]
-extern crate bitfield;
+mod macros;
 
 // These modules are crate-internal: the only public surface of this library is
 // the wasm-bindgen API in [`wasm`]. Keeping them private (rather than `pub`)
