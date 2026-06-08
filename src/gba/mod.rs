@@ -45,6 +45,8 @@ pub struct GBA {
     pub bus: CpuBus,
     /// `<rom>.sav` path used to persist backup memory (None for embedded ROMs).
     save_path: Option<PathBuf>,
+    /// Instruction addresses the debugger should halt on before executing.
+    breakpoints: std::collections::HashSet<u32>,
 }
 
 impl GBA {
@@ -79,7 +81,146 @@ impl GBA {
 
         arm.reset();
 
-        Self { cycles: 0, arm, bus, save_path: Some(save_path) }
+        Self { cycles: 0, arm, bus, save_path: Some(save_path), breakpoints: std::collections::HashSet::new() }
+    }
+
+    /// Build a GBA directly from ROM bytes, with no filesystem or process
+    /// arguments. This is the entry point used by non-native frontends (the
+    /// WASM debugger), where there is no `.sav` file to read or write.
+    ///
+    /// Backup memory starts empty; persistence is the frontend's job (e.g.
+    /// export [`GBA::backup_snapshot`] to IndexedDB).
+    pub fn from_rom(bin: &[u8]) -> Self {
+        let bios = Rom::new(0x4000, &include_bytes!("../../bios/bios.bin")[..]);
+        let rom = Rom::new(0x80000, bin);
+        let wram = Ram::new(vec![0; 0x8000]);
+        let eram = Ram::new(vec![0; 0x4_0000]);
+        let vram = Ram::new(vec![0; 0x1_8000]);
+        let palette = Ram::new(vec![0; 0x0400]);
+        let oam = Ram::new(vec![0; 0x0400]);
+
+        let kind = SaveKind::detect(bin);
+        let backup = Backup::new(kind, &[]);
+
+        let lcdc = lcd::LCDController::new();
+        let key = io::Key::new();
+        let bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, backup, key);
+        let mut arm = cpu::ARM::new();
+        arm.reset();
+
+        Self { cycles: 0, arm, bus, save_path: None, breakpoints: std::collections::HashSet::new() }
+    }
+
+    // ---- Breakpoints ------------------------------------------------------
+
+    pub fn add_breakpoint(&mut self, addr: u32) {
+        self.breakpoints.insert(addr);
+    }
+
+    pub fn remove_breakpoint(&mut self, addr: u32) {
+        self.breakpoints.remove(&addr);
+    }
+
+    pub fn clear_breakpoints(&mut self) {
+        self.breakpoints.clear();
+    }
+
+    pub fn breakpoint_list(&self) -> Vec<u32> {
+        let mut v: Vec<u32> = self.breakpoints.iter().copied().collect();
+        v.sort_unstable();
+        v
+    }
+
+    /// Run until a full video frame completes OR the PC reaches a breakpoint.
+    /// Returns `true` when stopped at a breakpoint, `false` on frame end.
+    ///
+    /// The instruction currently at the PC is always executed first, so this is
+    /// safe to call repeatedly when already parked on a breakpoint (it makes
+    /// progress instead of re-triggering the same one immediately).
+    pub fn run_frame_or_break(&mut self) -> bool {
+        let mut first = true;
+        loop {
+            if !first && !self.breakpoints.is_empty() && self.breakpoints.contains(&self.arm.gpr[15]) {
+                return true;
+            }
+            first = false;
+
+            let cycles = self.arm.step(&mut self.bus, false).unwrap();
+            self.cycles = self.cycles.wrapping_add(cycles as usize);
+            self.bus.advance_clock(cycles);
+            self.bus.execute_dma_transfers();
+            if self.bus.should_service_interrupt() {
+                self.arm.request_irq();
+            }
+            if self.bus.take_frame_ready() {
+                return false;
+            }
+        }
+    }
+
+    // ---- Debugger surface -------------------------------------------------
+    //
+    // These let a frontend single-step and inspect state, which `frame()`
+    // (which runs a whole frame at once) does not expose.
+
+    /// Execute exactly one CPU instruction, advancing timers / DMA / IRQ the
+    /// same way [`GBA::frame`] does for one loop iteration. Returns the cycle
+    /// cost of the instruction. The returned `bool` is `true` when this step
+    /// completed a video frame (so the frontend knows to repaint).
+    pub fn step_instruction(&mut self) -> bool {
+        let cycles = self.arm.step(&mut self.bus, false).unwrap();
+        self.cycles = self.cycles.wrapping_add(cycles as usize);
+        self.bus.advance_clock(cycles);
+        self.bus.execute_dma_transfers();
+        if self.bus.should_service_interrupt() {
+            self.arm.request_irq();
+        }
+        self.bus.take_frame_ready()
+    }
+
+    /// Snapshot of the 16 general-purpose registers (r0–r15; r15 is PC).
+    pub fn registers(&self) -> [u32; 16] {
+        self.arm.gpr
+    }
+
+    /// Raw CPSR bits (flags in the high nibble, mode/T/I in the low byte).
+    pub fn cpsr_bits(&self) -> u32 {
+        self.arm.get_cpsr().get()
+    }
+
+    /// `true` when the CPU is currently in THUMB state (16-bit instructions).
+    pub fn is_thumb(&self) -> bool {
+        use crate::cpu::registers::psr::CpuState;
+        self.arm.get_cpsr().get_cpu_state() == CpuState::Thumb
+    }
+
+    /// Read `len` bytes of bus-visible memory starting at `addr`. Goes through
+    /// the normal bus, so it sees ROM, WRAM, VRAM, I/O mirrors, etc.
+    pub fn read_memory(&self, addr: u32, len: u32) -> Vec<u8> {
+        use crate::cpu::bus::accessor::BusAccessor;
+        (0..len).map(|i| self.bus.read_byte(addr.wrapping_add(i))).collect()
+    }
+
+    /// Write a single byte to bus-visible memory (used by the assembler pane to
+    /// patch instructions into RAM).
+    pub fn write_memory_byte(&mut self, addr: u32, value: u8) {
+        use crate::cpu::bus::accessor::BusAccessor;
+        self.bus.write_byte(addr, value);
+    }
+
+    /// Set the program counter (r15). Used to jump execution to assembled code.
+    pub fn set_pc(&mut self, addr: u32) {
+        self.arm.gpr[15] = addr;
+    }
+
+    /// Current backup (save) memory contents, for the frontend to persist.
+    pub fn backup_snapshot(&self) -> Vec<u8> {
+        self.bus.backup_bytes().to_vec()
+    }
+
+    /// Current framebuffer (RGBA, 240×160) without advancing emulation.
+    pub fn read_framebuffer(&self) -> Vec<u8> {
+        self.bus.framebuffer().to_vec()
     }
 
     /// Persist backup memory to the `.sav` file if it changed since the last
@@ -147,6 +288,96 @@ impl GBA {
     /// Drain queued interleaved L/R audio samples produced since the last call.
     pub fn take_audio(&mut self) -> Vec<i16> {
         self.bus.take_audio()
+    }
+}
+
+#[cfg(test)]
+mod repro {
+    use super::*;
+    use crate::io::{Key, KeyStatus};
+    use std::io::Write;
+
+    fn write_bmp(path: &str, rgba: &[u8]) {
+        let (w, h) = (240usize, 160usize);
+        let row_padded = (w * 3 + 3) & !3;
+        let data_size = row_padded * h;
+        let file_size = 54 + data_size;
+        let mut f = std::fs::File::create(path).unwrap();
+        let mut hdr = Vec::new();
+        hdr.extend_from_slice(b"BM");
+        hdr.extend_from_slice(&(file_size as u32).to_le_bytes());
+        hdr.extend_from_slice(&0u32.to_le_bytes());
+        hdr.extend_from_slice(&54u32.to_le_bytes());
+        hdr.extend_from_slice(&40u32.to_le_bytes());
+        hdr.extend_from_slice(&(w as i32).to_le_bytes());
+        hdr.extend_from_slice(&(h as i32).to_le_bytes());
+        hdr.extend_from_slice(&1u16.to_le_bytes());
+        hdr.extend_from_slice(&24u16.to_le_bytes());
+        hdr.extend_from_slice(&0u32.to_le_bytes());
+        hdr.extend_from_slice(&(data_size as u32).to_le_bytes());
+        hdr.extend_from_slice(&2835i32.to_le_bytes());
+        hdr.extend_from_slice(&2835i32.to_le_bytes());
+        hdr.extend_from_slice(&0u32.to_le_bytes());
+        hdr.extend_from_slice(&0u32.to_le_bytes());
+        f.write_all(&hdr).unwrap();
+        let mut row = vec![0u8; row_padded];
+        for y in (0..h).rev() {
+            for x in 0..w {
+                let i = (y * w + x) * 4;
+                row[x * 3] = rgba[i + 2];
+                row[x * 3 + 1] = rgba[i + 1];
+                row[x * 3 + 2] = rgba[i];
+            }
+            f.write_all(&row).unwrap();
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn capture_m3() {
+        let bin = std::fs::read("fixtures/m3/m3.gba").expect("rom");
+        let mut gba = GBA::from_rom(&bin);
+        let total: usize = std::env::var("FRAMES").ok().and_then(|s| s.parse().ok()).unwrap_or(2000);
+        let dump_every: usize = std::env::var("EVERY").ok().and_then(|s| s.parse().ok()).unwrap_or(30);
+        let dump_from: usize = std::env::var("FROM").ok().and_then(|s| s.parse().ok()).unwrap_or(0);
+        let name_until: usize = std::env::var("NAME_UNTIL").ok().and_then(|s| s.parse().ok()).unwrap_or(5000);
+        let _ = std::fs::create_dir_all("target/m3");
+        for fr in 0..total {
+            let mut key = Key::new();
+            if fr >= name_until {
+                // Past name entry: only advance dialogue with A so dpad presses
+                // don't perturb the cinematic / walking.
+                if fr % 12 < 3 {
+                    key.set_A(KeyStatus::ON);
+                }
+                gba.update_key(key);
+                let buf = gba.frame(false);
+                if fr % dump_every == 0 && fr >= dump_from {
+                    write_bmp(&format!("target/m3/f{fr:05}.bmp"), &buf);
+                }
+                continue;
+            }
+            // Name-entry macro (period 100): hold DOWN to drop the cursor onto the
+            // left-most bottom-menu cell "おまかせ" (random name), confirm, then
+            // hold RIGHT to reach "おわり" (done) and confirm the よろしいですか dialog.
+            // Cursor starts in the left column and typing doesn't move it, so a
+            // straight DOWN lands on おまかせ. Looping this clears every name screen.
+            let f = fr % 100;
+            if f < 16 {
+                key.set_DOWN(KeyStatus::ON);
+            } else if f == 24 || f == 25 {
+                key.set_A(KeyStatus::ON); // select おまかせ
+            } else if (32..48).contains(&f) {
+                key.set_RIGHT(KeyStatus::ON); // move to おわり
+            } else if matches!(f, 54 | 55 | 64 | 65 | 74 | 75 | 84 | 85) {
+                key.set_A(KeyStatus::ON); // おわり + よろしいですか/dialogue advance
+            }
+            gba.update_key(key);
+            let buf = gba.frame(false);
+            if fr % dump_every == 0 {
+                write_bmp(&format!("target/m3/f{fr:05}.bmp"), &buf);
+            }
+        }
     }
 }
 
