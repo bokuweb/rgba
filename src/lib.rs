@@ -9,6 +9,14 @@
 //! which keeps the existing `pub(crate)` visibility working without any
 //! refactor.
 
+// On non-wasm targets this library has no entry point: its only public surface,
+// the `wasm` module, is `#[cfg(target_arch = "wasm32")]`, so the whole emulator
+// core looks "dead" to the native lib build even though the native binary and
+// the wasm frontend both exercise it. Silence dead-code analysis for that one
+// configuration; genuine dead code is still caught by the `rusty-gba` binary
+// build (which has a real `main`) and by the wasm build.
+#![cfg_attr(not(target_arch = "wasm32"), allow(dead_code))]
+
 #[macro_use]
 extern crate bitfield;
 
