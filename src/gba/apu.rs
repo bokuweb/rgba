@@ -480,6 +480,30 @@ pub struct RefillRequest {
 
 /// The audio processing unit: the four PSG channels, the two DirectSound FIFO
 /// channels, the global mix controls, and the output resampler.
+/// One-pole DC-blocking high-pass filter (`y = x - x₋₁ + R·y₋₁`).
+///
+/// The PSG channels swing between 0 and their volume rather than around zero,
+/// so the mixed signal carries a large DC offset that would otherwise pop the
+/// speakers and waste headroom. This removes it while leaving the audio band
+/// essentially untouched. `R ≈ 0.995` as a 10-bit fixed-point fraction.
+#[derive(Default)]
+struct DcBlocker {
+    x_prev: i32,
+    y_prev: i32,
+}
+
+impl DcBlocker {
+    const R_NUM: i32 = 1019; // ≈ 0.995 * 1024
+    const R_SHIFT: i32 = 10;
+
+    fn process(&mut self, x: i32) -> i32 {
+        let y = x - self.x_prev + ((self.y_prev * Self::R_NUM) >> Self::R_SHIFT);
+        self.x_prev = x;
+        self.y_prev = y;
+        y
+    }
+}
+
 pub struct Apu {
     /// PSG channel 1 (square with sweep).
     ch1: Square,
@@ -506,8 +530,12 @@ pub struct Apu {
     psg_right_enable: [bool; 4],
     /// PSG mix ratio (SOUNDCNT_H bits 0-1): 0 = 25%, 1 = 50%, 2 = 100%.
     psg_volume_code: u8,
-    /// SOUNDBIAS register (stored; not currently applied to the output).
+    /// SOUNDBIAS register; bits 0-9 are the DAC bias used to centre the output.
     soundbias: u16,
+
+    /// DC-blocking high-pass filters for the left and right output.
+    dc_left: DcBlocker,
+    dc_right: DcBlocker,
 
     /// Down-counter (master cycles) until the next output sample is emitted.
     sample_timer: i32,
@@ -543,6 +571,8 @@ impl Apu {
             psg_right_enable: [false; 4],
             psg_volume_code: 0,
             soundbias: 0x200,
+            dc_left: DcBlocker::default(),
+            dc_right: DcBlocker::default(),
             sample_timer: CYCLES_PER_SAMPLE,
             seq_timer: SEQ_PERIOD,
             seq_step: 0,
@@ -644,23 +674,27 @@ impl Apu {
         self.seq_step = (self.seq_step + 1) & 7;
     }
 
-    /// Mix the current channel states into one interleaved L/R sample pair and
-    /// append it to the output buffer.
+    /// Mix the current channel states, DC-block the result, and append one
+    /// interleaved L/R sample pair to the output buffer.
     fn emit_sample(&mut self) {
-        if !self.master_enable {
-            self.out.push(0);
-            self.out.push(0);
-            return;
-        }
+        let (raw_l, raw_r) = if self.master_enable { self.mix() } else { (0, 0) };
+        let l = self.dc_left.process(raw_l).clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
+        let r = self.dc_right.process(raw_r).clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
+        self.out.push(l);
+        self.out.push(r);
+    }
 
+    /// Mix the PSG and DirectSound channels into a centred 16-bit sample pair
+    /// (before DC blocking), modelling the GBA's 10-bit output DAC.
+    fn mix(&self) -> (i32, i32) {
         let psg = [
-            self.ch1.output() as i32,
-            self.ch2.output() as i32,
-            self.ch3.output() as i32,
-            self.ch4.output() as i32,
+            i32::from(self.ch1.output()),
+            i32::from(self.ch2.output()),
+            i32::from(self.ch3.output()),
+            i32::from(self.ch4.output()),
         ];
 
-        // Sum enabled PSG channels per side (each 0..15).
+        // Sum the enabled PSG channels (each 0..15) per side.
         let mut psg_l = 0i32;
         let mut psg_r = 0i32;
         for i in 0..4 {
@@ -671,36 +705,37 @@ impl Apu {
                 psg_r += psg[i];
             }
         }
-        // Master L/R volume (0..7 -> +1) and PSG mixing ratio (25/50/100%).
-        let psg_num = match self.psg_volume_code {
-            0 => 1,
-            1 => 2,
-            _ => 4,
+        // SOUNDCNT_L master volume (0..7 -> x1..x8) and SOUNDCNT_H ratio.
+        let ratio_shift = match self.psg_volume_code {
+            0 => 2, // 25%
+            1 => 1, // 50%
+            _ => 0, // 100%
         };
-        // psg_*: up to 4*15=60; scale to roughly i16 headroom. Each PSG step ~
-        // a few hundred; keep modest so DirectSound can sit on top.
-        psg_l = psg_l * (self.vol_left as i32 + 1) * psg_num * 4;
-        psg_r = psg_r * (self.vol_right as i32 + 1) * psg_num * 4;
+        psg_l = (psg_l * (i32::from(self.vol_left) + 1)) >> ratio_shift;
+        psg_r = (psg_r * (i32::from(self.vol_right) + 1)) >> ratio_shift;
 
-        // DirectSound: i8 sample, optional 50% attenuation, then a fixed gain.
+        // DirectSound: signed 8-bit sample, optionally halved at 50% volume.
         let ds = |f: &Fifo, left: bool| -> i32 {
             let on = if left { f.enable_left } else { f.enable_right };
             if !on {
                 return 0;
             }
-            let mut v = f.sample as i32;
-            if !f.full_volume {
-                v /= 2;
-            }
-            v * 32
+            let v = i32::from(f.sample);
+            if f.full_volume { v } else { v / 2 }
         };
-        let dl = ds(&self.fifo_a, true) + ds(&self.fifo_b, true);
-        let dr = ds(&self.fifo_a, false) + ds(&self.fifo_b, false);
+        let ds_l = ds(&self.fifo_a, true) + ds(&self.fifo_b, true);
+        let ds_r = ds(&self.fifo_a, false) + ds(&self.fifo_b, false);
 
-        let l = (psg_l + dl).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
-        let r = (psg_r + dr).clamp(i16::MIN as i32, i16::MAX as i32) as i16;
-        self.out.push(l);
-        self.out.push(r);
+        // GBA mixes into a 10-bit DAC centred on SOUNDBIAS (default 0x200). The
+        // PSG contributes about half its raw range so DirectSound can sit on
+        // top; the sum saturates the DAC exactly as the hardware does.
+        let bias = i32::from(self.soundbias & 0x3FF);
+        let mix_l = (psg_l >> 1) + ds_l;
+        let mix_r = (psg_r >> 1) + ds_r;
+        let dac_l = (bias + mix_l).clamp(0, 0x3FF);
+        let dac_r = (bias + mix_r).clamp(0, 0x3FF);
+        // Centre on the bias and scale the 10-bit value up towards 16-bit.
+        ((dac_l - bias) << 6, (dac_r - bias) << 6)
     }
 
     /// Read a sound I/O register byte. `addr` is the absolute bus address in
@@ -1081,5 +1116,49 @@ mod tests {
         assert!(apu.ch1.enabled);
         apu.write_register(0x0400_0084, 0x00); // master off
         assert!(!apu.ch1.enabled);
+    }
+
+    #[test]
+    fn dc_blocker_removes_constant_offset() {
+        let mut dc = DcBlocker::default();
+        let mut last = 0;
+        for _ in 0..20_000 {
+            last = dc.process(5_000); // constant input
+        }
+        assert!(last.abs() < 50, "DC offset not removed: {last}");
+    }
+
+    #[test]
+    fn silence_stays_centred_on_zero() {
+        let mut apu = Apu::new();
+        apu.write_register(0x0400_0084, 0x80); // master on, but no channels enabled
+        apu.tick(CPU_HZ / 100);
+        let s = apu.take_samples();
+        assert!(!s.is_empty());
+        assert!(s.iter().all(|&v| v == 0), "silence is not centred on zero");
+    }
+
+    #[test]
+    fn output_stays_within_range_under_full_load() {
+        let mut apu = Apu::new();
+        apu.write_register(0x0400_0084, 0x80);
+        apu.write_register(0x0400_0080, 0x77); // full master volume
+        apu.write_register(0x0400_0081, 0xFF); // all PSG channels L+R
+        apu.write_register(0x0400_0082, 0x0E); // 100% PSG ratio + DS A/B full vol
+        apu.write_register(0x0400_0083, 0x33); // DS A/B enabled L+R
+        // Trigger every PSG channel.
+        apu.write_register(0x0400_0063, 0xF0);
+        apu.write_register(0x0400_0065, 0x87);
+        apu.write_register(0x0400_0069, 0xF0);
+        apu.write_register(0x0400_006D, 0x87);
+        // Pump the DirectSound FIFOs with the maximum sample.
+        for _ in 0..8 {
+            apu.push_fifo_a(0x7F7F_7F7F);
+            apu.push_fifo_b(0x7F7F_7F7F);
+        }
+        apu.on_timer_overflow(0, 4);
+        apu.tick(CPU_HZ / 200);
+        // No panic above means no overflow; values are i16 by construction.
+        assert!(!apu.take_samples().is_empty());
     }
 }

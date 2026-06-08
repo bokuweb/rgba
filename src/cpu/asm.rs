@@ -96,7 +96,7 @@ fn split_mnemonic<'b>(m: &str, bases: &'b [&'b str]) -> Option<(&'b str, u32, bo
     None
 }
 
-fn cond_only<'a>(m: &'a str, base: &str) -> Option<u32> {
+fn cond_only(m: &str, base: &str) -> Option<u32> {
     let rest = m.strip_prefix(base)?;
     if rest.is_empty() {
         return Some(14);
