@@ -12,13 +12,19 @@
 #[macro_use]
 extern crate bitfield;
 
-pub mod cpu;
-pub mod gba;
-pub mod interrupt;
-pub mod io;
-pub mod lcd;
-pub mod memory;
-pub mod types;
+// These modules are crate-internal: the only public surface of this library is
+// the wasm-bindgen API in [`wasm`]. Keeping them private (rather than `pub`)
+// means the emulator's many `fn -> Result<_, ()>` helpers and bare `new()`
+// constructors are not treated as exported API, so `clippy::result_unit_err`,
+// `new_without_default`, `len_without_is_empty`, etc. don't fire on code that
+// was written for the native binary.
+mod cpu;
+mod gba;
+mod interrupt;
+mod io;
+mod lcd;
+mod memory;
+mod types;
 
 #[cfg(target_arch = "wasm32")]
 mod wasm;
