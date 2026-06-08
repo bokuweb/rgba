@@ -1,3 +1,12 @@
+// The native binary is a thin SDL2 frontend. It shares the whole `src/**` module
+// tree with the library crate, but only drives the run-the-frame path — the
+// debugger / assembler / disassembler API and various register accessors exist
+// for the wasm frontend (and the test suite), so they read as "dead" here even
+// though they are genuinely used elsewhere. Silence dead-code analysis for the
+// binary rather than scatter per-item allows; the wasm build still exercises
+// that surface.
+#![allow(dead_code)]
+
 #[macro_use]
 extern crate bitfield;
 
