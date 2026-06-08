@@ -165,6 +165,9 @@ fn decode_extra_memory(raw: Word) -> Instruction {
     }
 }
 
+// `S` and `I` are the ARM data-processing instruction's set-flags / immediate
+// bits; the upper-case names mirror the encoding tables.
+#[allow(non_snake_case)]
 fn decode_data_processing(raw: Word) -> Instruction {
     let dec = DataProcessing(raw);
     let cmd = dec.get_opcode();

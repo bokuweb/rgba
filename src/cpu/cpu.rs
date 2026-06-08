@@ -580,7 +580,7 @@ impl ARM {
                 thumb::Instruction::LDSBThumb8(dec) => exec_thumb8_ldsb(bus, dec, &mut self.gpr),
                 thumb::Instruction::LDSHThumb8(dec) => exec_thumb8_ldsh(bus, dec, &mut self.gpr),
                 thumb::Instruction::STRH(dec) => exec_thumb_strh(bus, dec, &mut self.gpr),
-                thumb::Instruction::STRB_IMM_OFFET(dec) => exec_thumb_strb_imm_offset(bus, dec, &mut self.gpr),
+                thumb::Instruction::StrbImmOffset(dec) => exec_thumb_strb_imm_offset(bus, dec, &mut self.gpr),
                 thumb::Instruction::STRRegOffset(dec) => exec_thumb_str_reg_offset(bus, dec, &mut self.gpr),
                 thumb::Instruction::STRBRegOffset(dec) => exec_thumb_strb_reg_offset(bus, dec, &mut self.gpr),
                 thumb::Instruction::STRHRegOffset(dec) => exec_thumb_strh_reg_offset(bus, dec, &mut self.gpr),
@@ -742,7 +742,7 @@ mod test {
             T: BusAccessor,
         {
             for _ in 0..=INITIAL_PIPELINE_WAIT {
-                self.step(bus, false);
+                let _ = self.step(bus, false);
             }
         }
     }

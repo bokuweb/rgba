@@ -401,7 +401,7 @@ pub fn thumb(raw: u16, pc: u32) -> String {
         I::STR3(_) => format!("str\t{}, [sp, #0x{:x}]", reg(rd10_8), ((raw & 0xFF) as u32) << 2),
 
         // Load/store with immediate offset
-        I::LDR1(_) | I::STR1(_) | I::LDRB(_) | I::STRB_IMM_OFFET(_) => {
+        I::LDR1(_) | I::STR1(_) | I::LDRB(_) | I::StrbImmOffset(_) => {
             let (m, scale) = match &ins {
                 I::LDR1(_) => ("ldr", 2),
                 I::STR1(_) => ("str", 2),
