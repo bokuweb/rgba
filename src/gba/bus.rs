@@ -171,6 +171,9 @@ pub struct CpuBus {
     open_bus_pc: Cell<Word>,
     open_bus_instruction_width: Cell<Word>,
     cpu_halted: Cell<bool>,
+    /// Interrupt mask the CPU is blocked on via BIOS IntrWait/VBlankIntrWait
+    /// (None when not waiting). Drives the re-check loop in the SWI dispatcher.
+    intr_wait_mask: Cell<Option<HalfWord>>,
     prev_vblank: bool,
     prev_hblank: bool,
     prev_vcounter: bool,
@@ -191,6 +194,21 @@ impl BusAccessor for CpuBus {
     }
     fn has_pending_interrupt_flags(&self) -> bool {
         self.interrupt_controller.borrow().read_if() != 0
+    }
+    fn read_bios_if(&self) -> HalfWord {
+        self.interrupt_controller.borrow().read_bios_if_work()
+    }
+    fn clear_bios_if(&mut self, mask: HalfWord) {
+        self.interrupt_controller.borrow_mut().clear_bios_if_work(mask);
+    }
+    fn set_intr_wait(&mut self, mask: HalfWord) {
+        self.intr_wait_mask.set(Some(mask));
+    }
+    fn clear_intr_wait(&mut self) {
+        self.intr_wait_mask.set(None);
+    }
+    fn intr_wait_mask(&self) -> Option<HalfWord> {
+        self.intr_wait_mask.get()
     }
 
     fn read_byte(&self, addr: u32) -> Byte {
@@ -828,6 +846,7 @@ impl CpuBus {
             open_bus_pc: Cell::new(0),
             open_bus_instruction_width: Cell::new(4),
             cpu_halted: Cell::new(false),
+            intr_wait_mask: Cell::new(None),
             prev_vblank: false,
             prev_hblank: false,
             prev_vcounter: false,
