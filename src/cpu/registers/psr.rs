@@ -1,3 +1,7 @@
+// CPSR/SPSR fields use the ARM mnemonics (N, Z, C, V, I, F, T) and accessors
+// like `set_N_from`; those upper-case names are intentional and match GBATek.
+#![allow(non_snake_case)]
+
 use crate::cpu::constants::*;
 use crate::cpu::registers::{BankGpr, BankSpsr};
 use crate::cpu::types::*;

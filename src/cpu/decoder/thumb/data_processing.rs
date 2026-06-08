@@ -33,6 +33,8 @@ bitfield! {
 }
 
 impl DataProcessing {
+    // `Rd` is the THUMB destination-register field; the name matches the encoding.
+    #[allow(non_snake_case)]
     pub fn get_Rd_7_2_0(&self) -> u16 {
         let rd = self.get_Rd2_0();
         if self.get_msbd() {
