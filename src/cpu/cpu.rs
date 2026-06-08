@@ -793,6 +793,76 @@ mod test {
         assert_eq!(arm.get_gpr(PC), 0x0000_000C);
     }
 
+    // --- ARM instruction cycle-count validation (vs GBATEK) ---
+    //
+    // `MockBus` reports every memory access as 1 cycle, so an instruction's
+    // measured steady-state cost here equals its GBATEK N/S/I cycle count with
+    // each of N, S and I counted as 1. These tests pin the cycle *formula* of
+    // each instruction class so a future change to wait-state / prefetch timing
+    // (the cycle *values*) can't silently corrupt the underlying structure.
+
+    /// Run `insn` repeatedly from PC=0 in flat 1-cycle memory and return the
+    /// steady-state per-instruction cycle count (after the pipeline has filled).
+    fn steady(insn: u32) -> Cycle {
+        steady_with(insn, |_| {})
+    }
+
+    /// As [`steady`], but `setup` is applied to the CPU before each step so
+    /// operand-dependent timing (e.g. MUL) can be measured with fixed operands.
+    fn steady_with(insn: u32, setup: impl Fn(&mut ARM)) -> Cycle {
+        let mut bus = MockBus::new();
+        for i in 0..16 {
+            bus.set((i * 4) as u32, insn);
+        }
+        let mut arm = ARM::new();
+        arm.reset();
+        arm.set_gpr(PC, 0);
+        let mut last = 0;
+        for _ in 0..12 {
+            setup(&mut arm);
+            last = arm.step(&mut bus, false).unwrap();
+        }
+        last
+    }
+
+    #[test]
+    fn arm_cycle_counts_match_gbatek() {
+        // Data processing: 1S; with a register-specified shift: +1I.
+        assert_eq!(steady(0xE1A0_0000), 1, "MOV r0,r0 (DP) = 1S");
+        assert_eq!(steady(0xE080_0000), 1, "ADD r0,r0,r0 (DP reg) = 1S");
+        assert_eq!(steady(0xE080_0110), 2, "ADD r0,r0,r0 LSL r1 (DP reg-shift) = 1S+1I");
+
+        // Single data transfer.
+        assert_eq!(steady(0xE592_1000), 3, "LDR r1,[r2] = 1S+1N+1I");
+        assert_eq!(steady(0xE582_1000), 2, "STR r1,[r2] = 2N");
+
+        // Block data transfer: LDM = nS+1N+1I, STM = (n-1)S+2N.
+        assert_eq!(steady(0xE890_0002), 3, "LDM {{r1}} = 1S+1N+1I");
+        assert_eq!(steady(0xE880_0002), 2, "STM {{r1}} = 2N");
+        assert_eq!(steady(0xE890_000E), 5, "LDM {{r1-r3}} = 3S+1N+1I");
+        assert_eq!(steady(0xE880_000E), 4, "STM {{r1-r3}} = 2S+2N");
+
+        // Taken branch: 2S+1N.
+        assert_eq!(steady(0xEAFF_FFFE), 3, "B . (taken) = 2S+1N");
+    }
+
+    #[test]
+    fn arm_mul_cycle_count_is_operand_dependent() {
+        // MUL r3,r1,r2 = 1S + mI, where m (1..=4) depends on the multiplier Rs
+        // (=r2): m grows as more of the top bits of Rs are neither all-0 nor
+        // all-1. GBATEK: m=1 if bits[31:8] are all 0/1, m=2 if bits[31:16],
+        // m=3 if bits[31:24], else m=4.
+        const MUL_R3_R1_R2: u32 = 0xE003_0291;
+        let with_rs = |rs: u32| steady_with(MUL_R3_R1_R2, move |arm| {
+            arm.set_gpr(1, 0x1234_5678);
+            arm.set_gpr(2, rs);
+        });
+        assert_eq!(with_rs(0x0000_0001), 2, "m=1 -> 1S+1I");
+        assert_eq!(with_rs(0x0000_0100), 3, "m=2 -> 1S+2I");
+        assert_eq!(with_rs(0x0001_0000), 4, "m=3 -> 1S+3I");
+        assert_eq!(with_rs(0x0100_0000), 5, "m=4 -> 1S+4I");
+    }
+
     #[test]
     // mov r0, #1
     fn mov_r0_imm1() {
