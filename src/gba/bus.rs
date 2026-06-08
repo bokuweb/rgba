@@ -108,15 +108,24 @@ impl CycleLUT {
         let ws2_second = ((waitcnt >> 10) & 0x1) as usize;
         let prefetch = ((waitcnt >> 14) & 1) != 0;
 
+        // With the GamePak prefetch unit enabled (WAITCNT bit 14), a *sequential*
+        // opcode fetch from ROM is served from the prefetch buffer in a single
+        // cycle — "as fast as internal RAM" (GBATEK) — regardless of the
+        // configured second-access waitstate. A *non-sequential* access (the N
+        // path, e.g. the fetch right after a branch flushes the buffer, or any
+        // data access) still pays the full first-access waitstate. Modelling the
+        // sequential cost as a flat 1 (rather than the previous `1 + 1`) removes a
+        // 2x over-count on every sequential ROM fetch, which otherwise inflates
+        // ROM-resident code by ~2x and desyncs cycle-timed raster effects.
         for i in 0..2 {
             self.n16[PAGE_GAMEPAK_WS0 + i] = 1 + S_GAMEPAK_NSEQ_CYCLES[ws0_first];
-            self.s16[PAGE_GAMEPAK_WS0 + i] = 1 + if prefetch { 1 } else { S_GAMEPAK_WS0_SEQ_CYCLES[ws0_second] };
+            self.s16[PAGE_GAMEPAK_WS0 + i] = if prefetch { 1 } else { 1 + S_GAMEPAK_WS0_SEQ_CYCLES[ws0_second] };
 
             self.n16[PAGE_GAMEPAK_WS1 + i] = 1 + S_GAMEPAK_NSEQ_CYCLES[ws1_first];
-            self.s16[PAGE_GAMEPAK_WS1 + i] = 1 + if prefetch { 1 } else { S_GAMEPAK_WS1_SEQ_CYCLES[ws1_second] };
+            self.s16[PAGE_GAMEPAK_WS1 + i] = if prefetch { 1 } else { 1 + S_GAMEPAK_WS1_SEQ_CYCLES[ws1_second] };
 
             self.n16[PAGE_GAMEPAK_WS2 + i] = 1 + S_GAMEPAK_NSEQ_CYCLES[ws2_first];
-            self.s16[PAGE_GAMEPAK_WS2 + i] = 1 + if prefetch { 1 } else { S_GAMEPAK_WS2_SEQ_CYCLES[ws2_second] };
+            self.s16[PAGE_GAMEPAK_WS2 + i] = if prefetch { 1 } else { 1 + S_GAMEPAK_WS2_SEQ_CYCLES[ws2_second] };
 
             // 32bit ROM access = 1N + 1S
             self.n32[PAGE_GAMEPAK_WS0 + i] = self.n16[PAGE_GAMEPAK_WS0 + i] + self.s16[PAGE_GAMEPAK_WS0 + i];
@@ -1564,6 +1573,54 @@ mod tests {
 
     fn if_flags(bus: &CpuBus) -> u16 {
         bus.interrupt_controller.borrow().read_if()
+    }
+
+    /// Build a bus whose GamePak ROM is filled with `insn`, run an ARM core from
+    /// 0x0800_0000 with the given WAITCNT, and return the steady-state cycle cost
+    /// of one instruction. A DP instruction does no data access, so this measures
+    /// the 32-bit sequential ROM *fetch* cost (s32) under that WAITCNT.
+    fn rom_fetch_cycles(insn: u32, waitcnt: u16) -> crate::types::Cycle {
+        let mut prog = vec![0u8; 0x1_0000];
+        for i in (0..prog.len()).step_by(4) {
+            prog[i..i + 4].copy_from_slice(&insn.to_le_bytes());
+        }
+        let bios = Rom::new(0x4000, &[0u8; 0x4000][..]);
+        let rom = Rom::new(prog.len(), &prog);
+        let wram = Ram::new(vec![0; 0x8000]);
+        let eram = Ram::new(vec![0; 0x4_0000]);
+        let vram = Ram::new(vec![0; 0x1_8000]);
+        let palette = Ram::new(vec![0; 0x0400]);
+        let oam = Ram::new(vec![0; 0x0400]);
+        let backup = Backup::new(SaveKind::Sram, &[]);
+        let lcdc = lcd::LCDController::new();
+        let key = io::Key::new();
+        let mut bus = CpuBus::new(bios, lcdc, rom, wram, eram, vram, palette, oam, backup, key);
+        bus.write_halfword(0x0400_0204, waitcnt);
+        let mut arm = crate::cpu::cpu::ARM::new();
+        arm.reset();
+        arm.set_gpr(15, 0x0800_0000);
+        let mut last = 0;
+        for _ in 0..16 {
+            last = arm.step(&mut bus, false).unwrap();
+        }
+        last
+    }
+
+    #[test]
+    fn rom_sequential_fetch_honours_prefetch() {
+        // Steady-state cost of a DP instruction fetched sequentially from GamePak
+        // ROM (no data access), i.e. the 32-bit sequential ROM fetch cost (s32).
+        const MOV_R0_R0: u32 = 0xE1A0_0000;
+
+        // Prefetch ON (WAITCNT bit 14): GBATEK — sequential ROM reads are served
+        // by the prefetch buffer at 1 cycle/halfword, so a 32-bit fetch = 2.
+        // (Regression guard: this was 4 — a 2x over-count — which inflated all
+        // ROM-resident code and desynced Mother 3's cycle-timed raster effects.)
+        assert_eq!(rom_fetch_cycles(MOV_R0_R0, 0x4000), 2, "prefetch on: s32 = 1 cycle/halfword");
+
+        // Prefetch OFF, WS0 defaults (second-access = 2 waitstates): s16 = 1+2,
+        // so a 32-bit sequential fetch = 2*(1+2) = 6.
+        assert_eq!(rom_fetch_cycles(MOV_R0_R0, 0x0000), 6, "prefetch off: s32 = 2*(1+S)");
     }
 
     #[test]
