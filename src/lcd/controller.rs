@@ -1544,10 +1544,15 @@ mod tests {
         // which must mask everything (empty), not reveal the whole line. The old
         // code wrongly treated X2<=X1 as a wrap-around range.
         let mut lcdc = LCDController::new();
-        lcdc.write_halfword(0x0044, 160); // WIN0V y1=0 y2=160 (full height)
+        // Pack a window register from its (low, high) coordinates: WIN?H = X1<<8 |
+        // X2, WIN?V = Y1<<8 | Y2. Using variables keeps the bitwise OR free of
+        // decimal literals (clippy::decimal_literal_representation).
+        let win = |c1: HalfWord, c2: HalfWord| (c1 << 8) | c2;
+
+        lcdc.write_halfword(0x0044, win(0, 160)); // WIN0V full height [0,160)
 
         // Normal window [10,20).
-        lcdc.write_halfword(0x0040, (10 << 8) | 20);
+        lcdc.write_halfword(0x0040, win(10, 20));
         let (h, v) = (lcdc.win0h, lcdc.win0v);
         assert!(lcdc.is_pixel_in_window(10, 80, h, v));
         assert!(lcdc.is_pixel_in_window(19, 80, h, v));
@@ -1555,14 +1560,14 @@ mod tests {
         assert!(!lcdc.is_pixel_in_window(9, 80, h, v));
 
         // Empty window: X1 == X2 -> nothing inside (iris poles).
-        lcdc.write_halfword(0x0040, (15 << 8) | 15);
+        lcdc.write_halfword(0x0040, win(15, 15));
         let (h, v) = (lcdc.win0h, lcdc.win0v);
         for x in 0..240u32 {
             assert!(!lcdc.is_pixel_in_window(x, 80, h, v), "X1==X2 must be empty, x={}", x);
         }
 
         // X1 > X2 -> interpreted as X2=240, i.e. [X1, 240); NOT a wrap to the left.
-        lcdc.write_halfword(0x0040, (200 << 8) | 50);
+        lcdc.write_halfword(0x0040, win(200, 50));
         let (h, v) = (lcdc.win0h, lcdc.win0v);
         assert!(lcdc.is_pixel_in_window(200, 80, h, v));
         assert!(lcdc.is_pixel_in_window(239, 80, h, v));
@@ -1570,8 +1575,8 @@ mod tests {
         assert!(!lcdc.is_pixel_in_window(0, 80, h, v), "no wrap-around to the left");
 
         // Vertical degenerate cases mirror the horizontal ones.
-        lcdc.write_halfword(0x0040, 240); // WIN0H x1=0 x2=240 (full width)
-        lcdc.write_halfword(0x0044, (80 << 8) | 80); // Y1==Y2 -> empty
+        lcdc.write_halfword(0x0040, win(0, 240)); // WIN0H full width [0,240)
+        lcdc.write_halfword(0x0044, win(80, 80)); // Y1==Y2 -> empty
         let (h, v) = (lcdc.win0h, lcdc.win0v);
         for y in 0..160u32 {
             assert!(!lcdc.is_pixel_in_window(120, y, h, v), "Y1==Y2 must be empty, y={}", y);
