@@ -19,17 +19,12 @@ name = "rusty-gba"
 path = "src/main.rs"
 
 [dependencies]
-byteorder = "1"
 bitfield = "0.13.2"
-log = "0.4"
-pretty_assertions = "0.6.1"
 
-# SDL2 and the env-logger only make sense for the native binary; they don't
-# build for wasm32. Gate them so `wasm-pack build` (which builds the lib only)
-# never pulls them in.
+# SDL2 only makes sense for the native binary; it doesn't build for wasm32. Gate
+# it so `wasm-pack build` (which builds the lib only) never pulls it in.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 sdl2 = "0.34.3"
-pretty_env_logger = "0.4"
 
 # wasm-bindgen glue for the browser debugger frontend.
 [target.'cfg(target_arch = "wasm32")'.dependencies]

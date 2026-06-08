@@ -1,5 +1,3 @@
-extern crate log;
-
 #[macro_use]
 extern crate bitfield;
 
@@ -23,8 +21,6 @@ const WIDTH: u32 = 240;
 const HEIGHT: u32 = 160;
 
 fn main() {
-    // std::env::set_var("RUST_LOG", "debug");
-    pretty_env_logger::init();
 
     let sdl_context = sdl2::init().unwrap();
     let mut event_pump = sdl_context.event_pump().unwrap();
