@@ -1,3 +1,8 @@
+// GBA buttons are named after the hardware (A, B, L, R, START, ...); the
+// bitfield-generated getters/setters keep those exact names, so snake-case
+// linting does not apply here.
+#![allow(non_snake_case)]
+
 use crate::types::*;
 
 bitfield! {
