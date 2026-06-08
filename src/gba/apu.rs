@@ -1125,7 +1125,7 @@ mod tests {
         for _ in 0..20_000 {
             last = dc.process(5_000); // constant input
         }
-        assert!(last.abs() < 50, "DC offset not removed: {last}");
+        assert!(last.abs() < 50, "DC offset not removed: {}", last);
     }
 
     #[test]
