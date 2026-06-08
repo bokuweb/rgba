@@ -33,39 +33,39 @@ impl Bios {
     ) {
         let discard_old = gpr[0] != 0;
         let interrupt_flags = (gpr[1] & 0xFFFF) as u16;
-        let trace_dma = std::env::var("AGB_TRACE_DMA").ok().as_deref() == Some("1");
-        if trace_dma {
-            println!(
-                "BIOS IntrWait enter discard_old={} mask=0x{:04x} IF=0x{:04x} IME=0x{:04x}",
-                discard_old,
-                interrupt_flags,
-                bus.read_halfword(0x0400_0202),
-                bus.read_halfword(0x0400_0208)
-            );
-        }
 
-        // Match JS behavior: ensure IME is enabled while waiting.
+        // Match BIOS behaviour: force IME=1 while waiting.
         if (bus.read_halfword(0x0400_0208) & 0x0001) == 0 {
             bus.write_halfword(0x0400_0208, 0x0001);
         }
 
-        // If caller does not request discarding old flags and target IF is already set, return immediately.
-        let current_if = bus.read_halfword(0x0400_0202);
-        if !discard_old && (current_if & interrupt_flags) != 0 {
-            if trace_dma {
-                println!("BIOS IntrWait immediate return IF=0x{current_if:04x}");
-            }
+        // IntrWait polls the BIOS interrupt-check flags at 0x03007FF8, which the
+        // game's IRQ handler ORs the dispatched IF bits into — NOT the hardware
+        // IF register. It blocks until one of the *requested* interrupts shows up
+        // there, re-halting across any other interrupt that fires meanwhile.
+        //
+        // The SWI dispatcher re-executes this SWI after each interrupt wakes the
+        // CPU (see exec_arm_swi / exec_thumb_swi), so this routine runs once per
+        // wake. `intr_wait_mask` distinguishes the very first entry (where
+        // `discard_old` must drop stale flags) from a re-check after an interrupt
+        // (where freshly-arrived flags must be kept).
+        let first_entry = bus.intr_wait_mask() != Some(interrupt_flags);
+        if first_entry && discard_old {
+            bus.clear_bios_if(interrupt_flags);
+        }
+
+        let pending = bus.read_bios_if() & interrupt_flags;
+        if pending != 0 {
+            // A requested interrupt has fired: acknowledge it and return so the
+            // SWI retires normally and execution proceeds past it.
+            bus.clear_bios_if(pending);
+            bus.clear_intr_wait();
             return;
         }
 
-        // Clear latched interrupt flags before waiting.
-        bus.write_halfword(0x0400_0202, 0xFFFF);
-        if trace_dma {
-            println!(
-                "BIOS IntrWait halt IF(after clear)=0x{:04x}",
-                bus.read_halfword(0x0400_0202)
-            );
-        }
+        // Not yet satisfied: arm the wait and halt. The dispatcher will re-run
+        // this SWI when the next interrupt wakes us.
+        bus.set_intr_wait(interrupt_flags);
         bus.set_cpu_halted(true);
     }
 
@@ -731,6 +731,106 @@ mod tests {
         gpr[0] = 0;
         Bios::sqrt(&mut bus, &mut gpr);
         assert_eq!(gpr[0], 0);
+    }
+
+    // Richer mock for IntrWait: models the BIOS IF work area (0x03007FF8), the
+    // IME register, the halted flag and the armed-wait mask.
+    struct IwBus {
+        ime: HalfWord,
+        bios_if: HalfWord,
+        halted: bool,
+        iw_mask: Option<HalfWord>,
+    }
+    impl IwBus {
+        fn new() -> Self {
+            Self { ime: 0, bios_if: 0, halted: false, iw_mask: None }
+        }
+    }
+    impl BusAccessor for IwBus {
+        fn compute_cycle(&self, _a: Word, _t: crate::types::AccessType) -> crate::types::Cycle { 1 }
+        fn read_byte(&self, _a: Word) -> Byte { 0 }
+        fn read_word(&self, _a: Word) -> Word { 0 }
+        fn read_halfword(&self, addr: Word) -> HalfWord {
+            if addr == 0x0400_0208 { self.ime } else { 0 }
+        }
+        fn write_byte(&mut self, _a: Word, _v: Byte) {}
+        fn write_word(&mut self, _a: Word, _v: Word) {}
+        fn write_halfword(&mut self, addr: Word, v: HalfWord) {
+            if addr == 0x0400_0208 { self.ime = v; }
+        }
+        fn set_cpu_halted(&mut self, h: bool) { self.halted = h; }
+        fn is_cpu_halted(&self) -> bool { self.halted }
+        fn read_bios_if(&self) -> HalfWord { self.bios_if }
+        fn clear_bios_if(&mut self, mask: HalfWord) { self.bios_if &= !mask; }
+        fn set_intr_wait(&mut self, mask: HalfWord) { self.iw_mask = Some(mask); }
+        fn clear_intr_wait(&mut self) { self.iw_mask = None; }
+        fn intr_wait_mask(&self) -> Option<HalfWord> { self.iw_mask }
+    }
+
+    const VBLANK: HalfWord = 1 << 0;
+    const VCOUNT: HalfWord = 1 << 2;
+
+    #[test]
+    fn vblank_intr_wait_blocks_until_vblank_not_other_irqs() {
+        // Regression test for the Mother 3 "double game-update / fast scroll"
+        // bug: in a scene that enables both VBlank and VCount IRQs, a
+        // VBlankIntrWait must NOT return when only VCount fires — it must keep
+        // waiting until the VBlank flag itself appears. Each `vblank_intr_wait`
+        // call here stands in for one re-execution of the SWI by the dispatcher.
+        let mut bus = IwBus::new();
+        let mut gpr = [0u32; 16];
+
+        // First call: nothing pending -> arm the wait and halt, forcing IME=1.
+        Bios::vblank_intr_wait(&mut bus, &mut gpr);
+        assert!(bus.halted, "should halt while waiting for VBlank");
+        assert_eq!(bus.iw_mask, Some(VBLANK));
+        assert_eq!(bus.ime & 1, 1, "IntrWait must force IME=1");
+
+        // A VCount interrupt arrives: its handler flags VCount in the BIOS work
+        // area and wakes the CPU; the SWI re-executes.
+        bus.halted = false;
+        bus.bios_if |= VCOUNT;
+        Bios::vblank_intr_wait(&mut bus, &mut gpr);
+        assert!(bus.halted, "VCount must not release a VBlank wait");
+        assert_eq!(bus.iw_mask, Some(VBLANK));
+        assert_eq!(bus.bios_if & VCOUNT, VCOUNT, "VCount flag must be retained");
+
+        // Now VBlank fires: the wait completes, the flag is acknowledged and the
+        // wait disarmed so the SWI retires.
+        bus.halted = false;
+        bus.bios_if |= VBLANK;
+        Bios::vblank_intr_wait(&mut bus, &mut gpr);
+        assert!(!bus.halted, "VBlank must release the wait");
+        assert_eq!(bus.iw_mask, None);
+        assert_eq!(bus.bios_if & VBLANK, 0, "VBlank flag must be acknowledged");
+    }
+
+    #[test]
+    fn intr_wait_discard_drops_stale_flags_on_entry() {
+        // With discard_old=1 (as VBlankIntrWait uses), a flag set BEFORE the call
+        // must be discarded so the routine waits for a fresh interrupt.
+        let mut bus = IwBus::new();
+        bus.bios_if = VBLANK; // stale flag from a previous frame
+        let mut gpr = [0u32; 16];
+        Bios::vblank_intr_wait(&mut bus, &mut gpr);
+        assert!(bus.halted, "stale flag must be discarded, so it still waits");
+        assert_eq!(bus.bios_if & VBLANK, 0, "stale flag cleared on entry");
+        assert_eq!(bus.iw_mask, Some(VBLANK));
+    }
+
+    #[test]
+    fn intr_wait_no_discard_returns_immediately_if_already_set() {
+        // IntrWait (SWI 04) with r0=0 returns at once if a requested flag is
+        // already set, acknowledging it and never halting.
+        let mut bus = IwBus::new();
+        bus.bios_if = VBLANK;
+        let mut gpr = [0u32; 16];
+        gpr[0] = 0; // do NOT discard
+        gpr[1] = VBLANK as u32;
+        Bios::intr_wait(&mut bus, &mut gpr);
+        assert!(!bus.halted, "should return immediately, not halt");
+        assert_eq!(bus.iw_mask, None);
+        assert_eq!(bus.bios_if & VBLANK, 0, "flag acknowledged");
     }
 
     fn put(bus: &mut MockBus, addr: Word, bytes: &[u8]) {
