@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>rusty-gba // debugger</title>
+<style>
+  :root {
+    --bg:        #070a0f;
+    --panel:     #0b0f16;
+    --line:      #18202b;
+    --line2:     #233042;
+    --fg:        #c9d6e4;
+    --dim:       #5a6b80;
+    --green:     #00ffa3;
+    --cyan:      #38bdf8;
+    --amber:     #ffb454;
+    --red:       #ff5c57;
+    --violet:    #a78bfa;
+    --mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.5;
+    background-image:
+      radial-gradient(900px 500px at 80% -10%, rgba(56,189,248,.07), transparent),
+      radial-gradient(700px 500px at -10% 110%, rgba(0,255,163,.06), transparent);
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: rgba(0,255,163,.25); }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 2px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  /* ---- toolbar ---- */
+  .toolbar {
+    display: flex; align-items: center; gap: 14px;
+    padding: 10px 16px; border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(255,255,255,.02), transparent);
+    flex-wrap: wrap;
+  }
+  .brand { font-weight: 700; letter-spacing: .5px; }
+  .brand b { color: var(--green); text-shadow: 0 0 12px rgba(0,255,163,.5); }
+  .brand .sub { color: var(--dim); font-weight: 400; }
+  .spacer { flex: 1; }
+
+  .pcbox {
+    display: flex; align-items: center; gap: 10px;
+    padding: 4px 12px; border: 1px solid var(--line2); border-radius: 2px;
+    background: rgba(56,189,248,.05);
+  }
+  .pcbox .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+  .pcbox.live .dot { background: var(--green); box-shadow: 0 0 10px var(--green); animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: .25; } }
+  .pcbox .lbl { color: var(--dim); }
+  .pcbox .val { color: var(--cyan); font-weight: 700; font-size: 14px;
+                text-shadow: 0 0 14px rgba(56,189,248,.5); letter-spacing: .5px; }
+  .pcbox .mode { color: var(--amber); font-weight: 700; }
+  .pcbox .cyc { color: var(--dim); font-size: 11px; }
+
+  button, label.file {
+    font-family: var(--mono); font-size: 12px; cursor: pointer;
+    color: var(--fg); background: transparent;
+    border: 1px solid var(--line2); border-radius: 2px; padding: 5px 11px;
+    transition: all .12s ease; user-select: none;
+  }
+  button:hover, label.file:hover { border-color: var(--green); color: var(--green);
+    box-shadow: 0 0 0 1px rgba(0,255,163,.2), 0 0 18px rgba(0,255,163,.12); }
+  button:disabled { opacity: .35; cursor: default; box-shadow: none; border-color: var(--line2); color: var(--dim); }
+  button.accent { border-color: var(--green); color: var(--green); }
+  button.danger:hover { border-color: var(--red); color: var(--red); box-shadow: 0 0 18px rgba(255,92,87,.15); }
+  button.on { background: rgba(0,255,163,.12); border-color: var(--green); color: var(--green); }
+  label.file input { display: none; }
+
+  /* ---- masonry-ish two-column layout (no vertical gaps) ---- */
+  .grid { display: flex; gap: 12px; padding: 12px; align-items: flex-start; }
+  .col { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .col.left  { flex: 1.35; }
+  .col.right { flex: 1; }
+  @media (max-width: 980px) { .grid { flex-direction: column; } .col { flex: none; } }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 2px;
+    display: flex; flex-direction: column; min-width: 0;
+    box-shadow: 0 10px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.02);
+  }
+  .panel > h2 {
+    margin: 0; padding: 8px 12px; font-size: 11px; font-weight: 700;
+    letter-spacing: 1.5px; text-transform: uppercase; color: var(--dim);
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 8px;
+    background: linear-gradient(180deg, rgba(255,255,255,.025), transparent);
+  }
+  .panel > h2::before { content: "▸"; color: var(--green); }
+  .panel > h2 .tools { margin-left: auto; display: flex; gap: 6px; align-items: center;
+                       font-weight: 400; letter-spacing: 0; text-transform: none; }
+  /* Every pane is independently resizable (drag the bottom-right grip). */
+  .body { padding: 8px 10px; overflow: auto; resize: vertical; min-height: 64px; }
+
+  input.addr {
+    font-family: var(--mono); font-size: 12px; width: 110px;
+    background: #060a10; color: var(--cyan); border: 1px solid var(--line2);
+    border-radius: 2px; padding: 3px 7px;
+  }
+  input.addr:focus { outline: none; border-color: var(--cyan); box-shadow: 0 0 0 1px rgba(56,189,248,.25); }
+
+  /* ---- disassembly ---- */
+  #disasmBody { height: 440px; }
+  .dline { position: relative; display: grid; grid-template-columns: 16px 78px 76px 1fr;
+           align-items: center; gap: 8px; padding: 1px 6px; padding-right: 22px;
+           border-radius: 2px; white-space: pre; cursor: pointer; }
+  .dline:hover { background: rgba(255,255,255,.03); }
+  .dline .gutter { text-align: center; color: transparent; }
+  .dline.bp .gutter { color: var(--red); text-shadow: 0 0 8px rgba(255,92,87,.8); }
+  .dline .addr { color: var(--dim); }
+  .dline .byt  { color: #4b7da8; }
+  .dline .txt  { color: var(--fg); }
+  .dline.pc {
+    background: linear-gradient(90deg, rgba(0,255,163,.16), rgba(0,255,163,.02));
+    box-shadow: inset 2px 0 0 var(--green);
+  }
+  .dline.pc .addr { color: var(--green); text-shadow: 0 0 10px rgba(0,255,163,.5); }
+  .dline.pc .txt  { color: #eafff6; }
+  .dline.pc::after { content: "◀"; position: absolute; right: 7px; top: 50%;
+                     transform: translateY(-50%); color: var(--green);
+                     text-shadow: 0 0 10px rgba(0,255,163,.6); }
+
+  /* ---- screen ---- */
+  #screenPane .body {
+    display: flex; align-items: center; justify-content: center; /* center both axes */
+    padding: 10px; resize: none;
+  }
+  canvas#screen {
+    image-rendering: pixelated; background: #000; border: 1px solid var(--line2);
+    border-radius: 2px; width: 100%; max-width: 420px; height: auto;
+    box-shadow: 0 0 30px rgba(56,189,248,.08);
+  }
+  /* ---- registers ---- */
+  #regs .body { resize: none; }
+  .reggrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px 18px; }
+  .reg { display: flex; justify-content: space-between; padding: 1px 4px; border-radius: 2px; }
+  .reg .rn { color: var(--dim); }
+  .reg .rv { color: var(--cyan); }
+  .reg.changed { background: rgba(255,180,84,.12); }
+  .reg.changed .rv { color: var(--amber); text-shadow: 0 0 10px rgba(255,180,84,.5); }
+
+  /* ---- cpsr ---- */
+  #cpsr .body { display: flex; flex-direction: column; gap: 8px; resize: none; }
+  .flags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .flag { padding: 2px 8px; border: 1px solid var(--line2); border-radius: 2px; color: var(--dim); font-weight: 700; }
+  .flag.on { color: var(--green); border-color: var(--green); background: rgba(0,255,163,.1);
+             box-shadow: 0 0 12px rgba(0,255,163,.18); }
+  .psr { color: var(--dim); }
+  .psr b { color: var(--violet); }
+
+  /* ---- memory ---- */
+  #memBody { height: 220px; }
+  .mrow { display: grid; grid-template-columns: 86px 1fr 150px; gap: 12px; white-space: pre; padding: 0 4px; }
+  .mrow .maddr { color: var(--dim); }
+  .mrow .mhex .byte { padding: 0 1px; border-radius: 2px; cursor: text; }
+  .mrow .mhex .byte:hover { background: rgba(56,189,248,.15); color: var(--cyan); }
+  .mrow .mhex .byte.editing { background: var(--cyan); color: #001018; outline: none; }
+  .mrow .mhex .byte.nz { color: var(--fg); }
+  .mrow .mhex .byte.zero { color: #2c3a4b; }
+  .mrow .masc { color: var(--dim); }
+
+  /* ---- assembler ---- */
+  #asm .body { display: flex; flex-direction: column; gap: 8px; height: 220px; }
+  #asmSrc {
+    flex: 1; min-height: 110px; resize: none;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
+    background: #060a10; color: var(--fg); border: 1px solid var(--line2);
+    border-radius: 2px; padding: 10px; tab-size: 2;
+  }
+  #asmSrc:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 1px rgba(0,255,163,.2); }
+  #asmOut { min-height: 1.4em; white-space: pre-wrap; }
+  .ok  { color: var(--green); }
+  .err { color: var(--red); }
+  .hint { color: var(--dim); font-size: 11px; }
+  .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <div class="brand"><b>rusty-gba</b> <span class="sub">// debugger</span></div>
+    <label class="file">load rom<input type="file" id="rom" accept=".gba,.bin" /></label>
+    <button id="run" class="accent" disabled>▶ run</button>
+    <button id="pause" disabled>⏸ pause</button>
+    <button id="step" disabled>⤵ step</button>
+    <button id="reset" class="danger" disabled>⟲ reset</button>
+    <button id="audio" disabled>🔇 audio</button>
+    <div class="spacer"></div>
+    <div class="pcbox" id="pcbox">
+      <span class="dot"></span>
+      <span class="lbl">PC ►</span><span class="val" id="pcval">--------</span>
+      <span class="mode" id="modeval">—</span>
+      <span class="cyc" id="cycval"></span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="col left">
+      <section class="panel" id="disasm">
+        <h2>disassembly <span class="tools hint">click line = toggle breakpoint</span></h2>
+        <div class="body" id="disasmBody"></div>
+      </section>
+
+      <section class="panel" id="memory">
+        <h2>memory
+          <span class="tools">
+            <span class="hint">goto</span>
+            <input class="addr" id="memAddr" value="0x03007E00" spellcheck="false" />
+            <button id="memGo">go</button>
+            <button id="memSp" title="follow stack pointer">sp</button>
+          </span>
+        </h2>
+        <div class="body" id="memBody"></div>
+      </section>
+    </div>
+
+    <div class="col right">
+      <section class="panel" id="screenPane">
+        <h2>screen</h2>
+        <div class="body">
+          <canvas id="screen" width="240" height="160"></canvas>
+        </div>
+      </section>
+
+      <section class="panel" id="regs">
+        <h2>registers</h2>
+        <div class="body">
+          <div class="reggrid" id="reggrid"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="cpsr">
+        <h2>cpsr / flags</h2>
+        <div class="body">
+          <div class="flags" id="flags"></div>
+          <div class="psr" id="psr"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="asm">
+        <h2>assembler (arm)
+          <span class="tools">
+            <span class="hint">@</span>
+            <input class="addr" id="asmAddr" value="0x02000000" spellcheck="false" />
+          </span>
+        </h2>
+        <div class="body">
+          <textarea id="asmSrc" spellcheck="false">start:
+  mov r0, #0
+  add r0, r0, #1
+  cmp r0, #5
+  blt start
+  b   start</textarea>
+          <div class="row">
+            <button id="asmBtn" class="accent">assemble → mem</button>
+            <button id="asmRun">↳ set pc &amp; run</button>
+            <span class="hint">keys: Z=A X=B ⏎=Start ␣=Sel ↕↔=D-Pad A=L S=R</span>
+          </div>
+          <div id="asmOut"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
