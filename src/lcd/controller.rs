@@ -636,32 +636,25 @@ impl LCDController {
         self.write_halfword(addr.wrapping_add(2), ((data >> 16) & 0xFFFF) as HalfWord);
     }
 
-    // Helper function to check if a pixel is inside a window
+    // Helper function to check if a pixel is inside a window.
+    //
+    // GBATEK: a pixel is inside when X1 <= x < X2 and Y1 <= y < Y2. The window
+    // bounds are NOT a wrap-around range; degenerate/garbage values follow a
+    // specific rule: "X2>240 or X1>X2 are interpreted as X2=240" (and likewise
+    // "Y2>160 or Y1>Y2 are interpreted as Y2=160"). That makes X1==X2 an EMPTY
+    // window (nothing inside), and X1>X2 a window that runs to the screen edge —
+    // exactly what raster effects rely on to draw e.g. a circular iris (each
+    // scanline sets WIN0H to the circle's span, with zero width at the poles).
     const fn is_pixel_in_window(&self, x: Word, y: Word, win_h: HalfWord, win_v: HalfWord) -> bool {
-        if win_h == 0 && win_v == 0 {
-            return false; // Window disabled if both dimensions are 0
-        }
+        let x1 = ((win_h >> 8) & 0xFF) as Word; // Left coordinate
+        let x2 = (win_h & 0xFF) as Word; // Right coordinate + 1
+        let y1 = ((win_v >> 8) & 0xFF) as Word; // Top coordinate
+        let y2 = (win_v & 0xFF) as Word; // Bottom coordinate + 1
 
-        // Extract window coordinates
-        let x1 = (win_h >> 8) & 0xFF; // Left coordinate
-        let x2 = win_h & 0xFF; // Right coordinate + 1
-        let y1 = (win_v >> 8) & 0xFF; // Top coordinate
-        let y2 = win_v & 0xFF; // Bottom coordinate + 1
+        let right = if x1 > x2 || x2 > 240 { 240 } else { x2 };
+        let bottom = if y1 > y2 || y2 > 160 { 160 } else { y2 };
 
-        // Handle coordinate wrapping
-        let x_in_range = if x2 > x1 {
-            x >= x1 as Word && x < x2 as Word
-        } else {
-            x >= x1 as Word || x < x2 as Word // Wrapped around
-        };
-
-        let y_in_range = if y2 > y1 {
-            y >= y1 as Word && y < y2 as Word
-        } else {
-            y >= y1 as Word || y < y2 as Word // Wrapped around
-        };
-
-        x_in_range && y_in_range
+        x >= x1 && x < right && y >= y1 && y < bottom
     }
 
     // Helper function to determine which layers should be rendered for a pixel
@@ -1542,6 +1535,52 @@ mod tests {
         assert!(red(0, 0), "inside the OBJ window BG0 is enabled -> red");
         assert!(red(7, 7), "OBJ window covers the 8x8 sprite");
         assert!(!red(10, 10), "outside the OBJ window BG0 is masked -> backdrop");
+    }
+
+    #[test]
+    fn window_bounds_follow_gbatek_degenerate_rules() {
+        // Regression test for the Mother 3 circular-iris scene: a per-scanline
+        // WIN0H tracing a circle sets a zero-width (X1==X2) window at the poles,
+        // which must mask everything (empty), not reveal the whole line. The old
+        // code wrongly treated X2<=X1 as a wrap-around range.
+        let mut lcdc = LCDController::new();
+        // Pack a window register from its (low, high) coordinates: WIN?H = X1<<8 |
+        // X2, WIN?V = Y1<<8 | Y2. Using variables keeps the bitwise OR free of
+        // decimal literals (clippy::decimal_literal_representation).
+        let win = |c1: HalfWord, c2: HalfWord| (c1 << 8) | c2;
+
+        lcdc.write_halfword(0x0044, win(0, 160)); // WIN0V full height [0,160)
+
+        // Normal window [10,20).
+        lcdc.write_halfword(0x0040, win(10, 20));
+        let (h, v) = (lcdc.win0h, lcdc.win0v);
+        assert!(lcdc.is_pixel_in_window(10, 80, h, v));
+        assert!(lcdc.is_pixel_in_window(19, 80, h, v));
+        assert!(!lcdc.is_pixel_in_window(20, 80, h, v));
+        assert!(!lcdc.is_pixel_in_window(9, 80, h, v));
+
+        // Empty window: X1 == X2 -> nothing inside (iris poles).
+        lcdc.write_halfword(0x0040, win(15, 15));
+        let (h, v) = (lcdc.win0h, lcdc.win0v);
+        for x in 0..240u32 {
+            assert!(!lcdc.is_pixel_in_window(x, 80, h, v), "X1==X2 must be empty, x={}", x);
+        }
+
+        // X1 > X2 -> interpreted as X2=240, i.e. [X1, 240); NOT a wrap to the left.
+        lcdc.write_halfword(0x0040, win(200, 50));
+        let (h, v) = (lcdc.win0h, lcdc.win0v);
+        assert!(lcdc.is_pixel_in_window(200, 80, h, v));
+        assert!(lcdc.is_pixel_in_window(239, 80, h, v));
+        assert!(!lcdc.is_pixel_in_window(49, 80, h, v), "no wrap-around to the left");
+        assert!(!lcdc.is_pixel_in_window(0, 80, h, v), "no wrap-around to the left");
+
+        // Vertical degenerate cases mirror the horizontal ones.
+        lcdc.write_halfword(0x0040, win(0, 240)); // WIN0H full width [0,240)
+        lcdc.write_halfword(0x0044, win(80, 80)); // Y1==Y2 -> empty
+        let (h, v) = (lcdc.win0h, lcdc.win0v);
+        for y in 0..160u32 {
+            assert!(!lcdc.is_pixel_in_window(120, y, h, v), "Y1==Y2 must be empty, y={}", y);
+        }
     }
 
     #[test]
