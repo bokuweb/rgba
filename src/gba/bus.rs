@@ -10,7 +10,6 @@ use crate::memory::readable::*;
 use crate::memory::rom::Rom;
 use crate::memory::writable::*;
 
-use std::io::Read;
 use std::cell::Cell;
 
 use super::apu::Apu;
@@ -140,7 +139,7 @@ impl CycleLUT {
 }
 
 pub struct CpuBus {
-    cycleLUT: CycleLUT,
+    cycle_lut: CycleLUT,
     lcdc: lcd::LCDController,
     dma: DMAController,
     bios: Rom,
@@ -531,7 +530,7 @@ impl BusAccessor for CpuBus {
             0x0400_0208 => self.interrupt_controller.borrow_mut().write_ime(data), // IME register
             0x0400_0204 => { // WAITCNT
                 self.waitcnt = data;
-                self.cycleLUT.update_waitcnt(data);
+                self.cycle_lut.update_waitcnt(data);
             }
             0x0400_0132 => {
                 // KEYCNT
@@ -683,7 +682,7 @@ impl BusAccessor for CpuBus {
                 // WAITCNT is 16-bit at 0x04000204; word writes may target it
                 let hw = (data & 0xFFFF) as HalfWord;
                 self.waitcnt = hw;
-                self.cycleLUT.update_waitcnt(hw);
+                self.cycle_lut.update_waitcnt(hw);
             }
             0x0400_0208 => {
                 self.interrupt_controller.borrow_mut().write_ime((data & 0xFFFF) as HalfWord);
@@ -798,10 +797,10 @@ impl BusAccessor for CpuBus {
             return 1;
         }
         match access_type {
-            AccessType::NonSeq(AccessWidth::Byte | AccessWidth::HalfWord) => self.cycleLUT.n16[page],
-            AccessType::NonSeq(AccessWidth::Word) => self.cycleLUT.n32[page],
-            AccessType::Seq(AccessWidth::Byte | AccessWidth::HalfWord) => self.cycleLUT.s16[page],
-            AccessType::Seq(AccessWidth::Word) => self.cycleLUT.s32[page],
+            AccessType::NonSeq(AccessWidth::Byte | AccessWidth::HalfWord) => self.cycle_lut.n16[page],
+            AccessType::NonSeq(AccessWidth::Word) => self.cycle_lut.n32[page],
+            AccessType::Seq(AccessWidth::Byte | AccessWidth::HalfWord) => self.cycle_lut.s16[page],
+            AccessType::Seq(AccessWidth::Word) => self.cycle_lut.s32[page],
         }
     }
 }
@@ -820,7 +819,7 @@ impl CpuBus {
         key: io::Key,
     ) -> Self {
         Self {
-            cycleLUT: CycleLUT::new(),
+            cycle_lut: CycleLUT::new(),
             lcdc,
             dma: DMAController::new(),
             bios,

@@ -27,7 +27,7 @@ pub enum Instruction {
     STR1(SingleDataTransfer),
     STR3(SingleDataTransfer),
     STRH(SingleDataTransfer),
-    STRB_IMM_OFFET(SingleDataTransfer),
+    StrbImmOffset(SingleDataTransfer),
     STRRegOffset(SingleDataTransfer),
     STRBRegOffset(SingleDataTransfer),
     STRHRegOffset(SingleDataTransfer),
@@ -116,7 +116,7 @@ pub fn decode(raw: HalfWord) -> Instruction {
                 }
             } else {
                 if dec.get_B() {
-                    Instruction::STRB_IMM_OFFET(dec)
+                    Instruction::StrbImmOffset(dec)
                 } else {
                     Instruction::STR1(dec)
                 }

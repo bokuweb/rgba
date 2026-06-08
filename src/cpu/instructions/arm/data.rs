@@ -253,6 +253,9 @@ where
     })
 }
 
+// `I` (immediate) and `R` (register-specified shift) are the ARM operand-encoding
+// bits; the names match the instruction tables.
+#[allow(non_snake_case)]
 const fn get_operand(gpr: &[Word; 16], reg: u32, I: bool, R: bool) -> u32 {
     // When using R15 as operand (Rm or Rn)]
     // the returned value depends on the instruction: PC+12 if I=0,R=1 (shift by register)
