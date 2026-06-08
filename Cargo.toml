@@ -18,8 +18,8 @@ path = "src/lib.rs"
 name = "rusty-gba"
 path = "src/main.rs"
 
-[dependencies]
-bitfield = "0.13.2"
+# (No general dependencies: the `bitfield!` macro is provided locally in
+# `src/macros.rs`.)
 
 # SDL2 only makes sense for the native binary; it doesn't build for wasm32. Gate
 # it so `wasm-pack build` (which builds the lib only) never pulls it in.
