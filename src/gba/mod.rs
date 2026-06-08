@@ -417,7 +417,6 @@ mod repro {
 mod test {
 
     use super::*;
-    use pretty_assertions::*;
 
     use crate::cpu::bus::accessor::BusAccessor; // brings `read_halfword` into scope for CpuBus
     use crate::memory::ram::Ram;
@@ -448,7 +447,7 @@ mod test {
     fn test_hello_rom() {
         let bin = include_bytes!("../../fixtures/hello/hello.gba");
         let (cpu, bus) = run_with_step(400_000, bin);
-        self::assert_eq!(
+        assert_eq!(
             cpu.gpr,
             [
                 0,
@@ -469,7 +468,7 @@ mod test {
                 0x0800_02E6
             ]
         );
-        self::assert_eq!(bus.read_halfword(0x0600_96F0), 0x001F);
+        assert_eq!(bus.read_halfword(0x0600_96F0), 0x001F);
     }
 
     #[test]
@@ -477,6 +476,6 @@ mod test {
     fn test_dot_rom() {
         let bin = include_bytes!("../../fixtures/dot_rs/dot.gba");
         let (_cpu, bus) = run_with_step(100, bin);
-        self::assert_eq!(bus.read_halfword(0x0600_96F0), 0x001F);
+        assert_eq!(bus.read_halfword(0x0600_96F0), 0x001F);
     }
 }
