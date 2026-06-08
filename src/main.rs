@@ -8,7 +8,7 @@
 #![allow(dead_code)]
 
 #[macro_use]
-extern crate bitfield;
+mod macros;
 
 mod cpu;
 mod gba;
