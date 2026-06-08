@@ -674,11 +674,7 @@ impl ARM {
 
 #[cfg(test)]
 mod test {
-    extern crate byteorder;
-    // extern crate env_logger;
-
     use super::*;
-    use byteorder::{ByteOrder, LittleEndian};
 
     trait CpuTest {
         fn run_immediately<T>(&mut self, bus: &mut T)
@@ -696,11 +692,12 @@ mod test {
         }
 
         pub fn set(&mut self, addr: Word, data: Word) {
-            LittleEndian::write_u32(&mut self.mem[(addr as usize)..], data);
+            let a = addr as usize;
+            self.mem[a..a + 4].copy_from_slice(&data.to_le_bytes());
         }
 
         pub fn get_mem(&self, addr: usize) -> u32 {
-            LittleEndian::read_u32(&self.mem[addr..])
+            u32::from_le_bytes([self.mem[addr], self.mem[addr + 1], self.mem[addr + 2], self.mem[addr + 3]])
         }
     }
 
@@ -710,11 +707,13 @@ mod test {
         }
 
         fn read_halfword(&self, addr: Word) -> HalfWord {
-            LittleEndian::read_u16(&self.mem[(addr as usize)..])
+            let a = addr as usize;
+            u16::from_le_bytes([self.mem[a], self.mem[a + 1]])
         }
 
         fn read_word(&self, addr: Word) -> Word {
-            LittleEndian::read_u32(&self.mem[(addr as usize)..])
+            let a = addr as usize;
+            u32::from_le_bytes([self.mem[a], self.mem[a + 1], self.mem[a + 2], self.mem[a + 3]])
         }
 
         fn write_byte(&mut self, addr: Word, data: Byte) {
@@ -722,11 +721,13 @@ mod test {
         }
 
         fn write_halfword(&mut self, addr: Word, data: HalfWord) {
-            LittleEndian::write_u16(&mut self.mem[(addr as usize)..], data);
+            let a = addr as usize;
+            self.mem[a..a + 2].copy_from_slice(&data.to_le_bytes());
         }
 
         fn write_word(&mut self, addr: Word, data: Word) {
-            LittleEndian::write_u32(&mut self.mem[(addr as usize)..], data);
+            let a = addr as usize;
+            self.mem[a..a + 4].copy_from_slice(&data.to_le_bytes());
         }
 
         fn compute_cycle(&self, addr: Word, access_type: AccessType) -> Cycle {
