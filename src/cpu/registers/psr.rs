@@ -160,10 +160,10 @@ impl PSR {
             return;
         }
 
-        // 1) 離脱側のバンク処理
-        // FIQ から離れる場合は、FIQ バンク r8-r12 を保存し、共有レジスタに戻す
+        // 1) Banking for the mode being left
+        // When leaving FIQ, save the FIQ-banked r8-r12 and restore the shared registers
         if current_mode == Mode::FIQ {
-            // グリッチ中は見えている値(gpr)は覆い焼きで一時的。保存はバックアップへ退避した実値を使う。
+            // During the glitch the visible values (gpr) are a temporary overlay; save the real backed-up values instead.
             let r8  = if bank_gpr.is_glitch_active_or_armed() { bank_gpr.get_glitch_backup(8) } else { gpr[8] };
             let r9  = if bank_gpr.is_glitch_active_or_armed() { bank_gpr.get_glitch_backup(9) } else { gpr[9] };
             let r10 = if bank_gpr.is_glitch_active_or_armed() { bank_gpr.get_glitch_backup(10) } else { gpr[10] };
@@ -181,7 +181,7 @@ impl PSR {
             gpr[11] = bank_gpr.pop(11);
             gpr[12] = bank_gpr.pop(12);
         }
-        // 離脱側が特権モード（User/System 以外）の場合、SP/LR/SPSR を保存し共有に戻す
+        // If the mode being left is privileged (other than User/System), save SP/LR/SPSR and restore the shared ones
         if current_mode != Mode::System && current_mode != Mode::User {
             let sp = if bank_gpr.is_glitch_active_or_armed() { bank_gpr.get_glitch_backup(SP) } else { gpr[SP] };
             let lr = if bank_gpr.is_glitch_active_or_armed() { bank_gpr.get_glitch_backup(LR) } else { gpr[LR] };
@@ -194,8 +194,8 @@ impl PSR {
             *spsr = bank_spsr.pop();
         }
 
-        // 2) 進入側のバンク処理
-        // FIQ に入る場合は、共有 r8-r12 を退避し、FIQ バンク値を見せる
+        // 2) Banking for the mode being entered
+        // When entering FIQ, stash the shared r8-r12 and expose the FIQ-banked values
         if new_mode == Mode::FIQ {
             bank_gpr.push(8, gpr[8]);
             bank_gpr.push(9, gpr[9]);
@@ -209,7 +209,7 @@ impl PSR {
             gpr[11] = bank_gpr.read(new_mode, 11);
             gpr[12] = bank_gpr.read(new_mode, 12);
         }
-        // 進入側が特権モード（User/System 以外）なら SP/LR/SPSR を切替える
+        // If the mode being entered is privileged (other than User/System), switch SP/LR/SPSR
         if new_mode != Mode::System && new_mode != Mode::User {
             bank_gpr.push(SP, gpr[SP]);
             bank_gpr.push(LR, gpr[LR]);

@@ -206,16 +206,16 @@ pub fn decode(raw: HalfWord) -> Instruction {
             }
         }
         // THUMB.17 SWI
-        // 原因: 以前は todo!("SWI") で未実装のため、Thumb SWI 呼び出しが失敗していた。
-        //       jsmolka/gba-tests の Thumb テストでも SWI は 0xDF00 形式で使用されるため、
-        //       ここでデコードを実装し実行系へ渡す。
+        // Cause: previously todo!("SWI") was unimplemented, so Thumb SWI calls failed.
+        //       jsmolka/gba-tests Thumb tests also use SWI in the 0xDF00 form,
+        //       so decode it here and hand it off to the executor.
         v if ((v & 0xFF00) == 0xDF00) => Instruction::SWI(decode_thumb_swi(v)),
         // THUMB.19
         v if ((v & 0xF000) == 0xF000) => Instruction::BL(Branch(v)),
         // THUMB.16 conditional branch
-        // 原因: 以前は todo!("conditional branch") で未実装だったため、条件分岐系テストが落ちていた。
-        //       cond は bits[11:8]、オフセットは sign-extend した 8bit << 1 を PC に加算する仕様。
-        //       仕様は gba-tests/thumb の分岐テスト（beq/bne/...）に準拠。
+        // Cause: previously todo!("conditional branch") was unimplemented, so conditional-branch tests failed.
+        //       cond is bits[11:8]; the offset is a sign-extended 8-bit value << 1 added to PC.
+        //       Conforms to the branch tests in gba-tests/thumb (beq/bne/...).
         v if ((v & 0xF000) == 0xD000) => Instruction::B(Branch(v)),
         // THUMB.18 unconditional branch
         v if ((v & 0xF800) == 0xE000) => Instruction::B2(Branch(v)),

@@ -119,7 +119,7 @@ where
     let rm = dec.get_Rm() as usize;
 
     let addr = gpr[rn].wrapping_add(gpr[rm]);
-    // 原因: アドレスが奇数のとき、LDRH は32bitにゼロ拡張した後に8bit右ローテートした値を返す必要がある。
+    // Reason: when the address is odd, LDRH must zero-extend to 32 bits and then return the value rotated right by 8 bits.
     let aligned = addr & !1;
     let raw = bus.read_halfword(aligned) as u32;
     let data32 = if (addr & 1) != 0 { raw.rotate_right(8) } else { raw };
@@ -143,8 +143,8 @@ where
     let rm = dec.get_Rm() as usize;
 
     let addr = gpr[rn].wrapping_add(gpr[rm]);
-    // 原因: アドレスが奇数のとき、LDRSH は符号付きバイトとして読み出し（LDRSB と同等）になる仕様。
-    //       これまで常に半ワード読みを行っていたため、test 212 が失敗していた。
+    // Reason: when the address is odd, LDRSH is specified to read as a signed byte (equivalent to LDRSB).
+    //         Previously it always did a halfword read, which made test 212 fail.
     let data: i32 = if (addr & 1) != 0 {
         bus.read_byte(addr) as i8 as i32
     } else {

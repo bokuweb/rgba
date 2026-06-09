@@ -85,8 +85,8 @@ where
     let rd = dec.get_Rd() as usize;
     exec_ex_memory_load(bus, gpr, dec, |gpr, base| {
         // t408: Misaligned load halfword (rotated)
-        //  - LDRH が奇数アドレスの場合、読み出し値は 32bit として 8bit ROR されたものになる（ARM7TDMI仕様）。
-        //  - 参照: fixtures/gba-tests/arm/halfword_transfer.asm t408
+        //  - For LDRH at an odd address, the loaded value is the 32-bit value ROR'd by 8 (ARM7TDMI spec).
+        //  - Ref: fixtures/gba-tests/arm/halfword_transfer.asm t408
         if (base & 1) != 0 {
             let raw = bus.read_halfword(base & 0xFFFF_FFFE) as u32;
             gpr[rd] = raw.rotate_right(8);
@@ -115,8 +115,8 @@ where
     let rd = dec.get_Rd() as usize;
     exec_ex_memory_load(bus, gpr, dec, |gpr, base| {
         // t409: Misaligned load signed halfword
-        //  - ARM7TDMI の奇数アドレス LDRSH は LDRSB 相当（対象バイトを符号拡張）として扱われることをテストが要求。
-        //  - 参照: fixtures/gba-tests/arm/halfword_transfer.asm t409
+        //  - The test requires that an ARM7TDMI LDRSH at an odd address behaves like LDRSB (sign-extending the target byte).
+        //  - Ref: fixtures/gba-tests/arm/halfword_transfer.asm t409
         if (base & 1) != 0 {
             let byte = bus.read_byte(base) as i8;
             gpr[rd] = (byte as i32) as u32;
