@@ -235,7 +235,19 @@ pub fn decode(raw: Word) -> Instruction {
         v if (v & 0x0F80_0FF0) == 0x0100_0090 => InstructionType::SingleDataSwap,
         v if (v & 0x0E00_0000) == 0x0A00_0000 => InstructionType::Branch,
         v if (v & 0x0E00_0000) == 0x0800_0000 => InstructionType::BlockDataTransfer, // LDM and STM,
-        v if (v & 0x0180_0000) == 0x0100_0000 && (v & 0x0010_0000) == 0x0 => InstructionType::PsrTransfer,
+        // MRS/MSR live in the data-processing encoding space (bits 27:26 == 00)
+        // with the "10xx" opcode slot (bits 24:23 == 10) and S=0 (bit 20 == 0).
+        // Requiring bits 27:26 == 00 is essential: without it, pre-indexed
+        // decrementing single-register stores like `STR Rd,[Rn,#-imm]!`
+        // (e.g. `PUSH {lr}` = 0xe52de004, bits 27:26 == 01) also satisfy the
+        // 24:23/20 test and get mis-decoded as MRS — corrupting the register
+        // with CPSR and skipping the store/writeback.
+        v if (v & 0x0C00_0000) == 0x0
+            && (v & 0x0180_0000) == 0x0100_0000
+            && (v & 0x0010_0000) == 0x0 =>
+        {
+            InstructionType::PsrTransfer
+        }
         v if (v & 0x0FC0_00F0) == 0x0000_0090 => InstructionType::Multiple,
         v if (v & 0x0F80_00F0) == 0x0080_0090 => InstructionType::Multiple,
         v if (v & 0x0E00_0010) == 0x0600_0010 => InstructionType::Undefined,
@@ -292,5 +304,29 @@ mod harden_tests {
         for raw in cases {
             assert_eq!(decode(raw), Instruction::Undefined, "raw=0x{raw:08X}");
         }
+    }
+
+    #[test]
+    fn predecrement_single_register_store_is_str_not_psr_transfer() {
+        // `STR Rd,[Rn,#-imm]!` (P=1, U=0, W=1, L=0) shares the bits-24:23/20
+        // pattern of MRS/MSR but lives in the load/store class (bits 27:26 == 01).
+        // It must decode as STR, not get mis-classified as a PSR transfer
+        // (which would write CPSR into Rd and skip the store + base writeback).
+        let cases = [
+            0xe52de004u32, // STR  lr, [sp, #-4]!   (`PUSH {lr}`)
+            0xe50b0008u32, // STR  r0, [r11, #-8]   (P=1, U=0, no writeback)
+            0xe54d1001u32, // STRB r1, [sp, #-1]
+        ];
+        for raw in cases {
+            assert!(
+                matches!(decode(raw), Instruction::STR(_) | Instruction::STRB(_)),
+                "raw=0x{raw:08X} decoded as {:?}",
+                decode(raw)
+            );
+        }
+        // Genuine MRS/MSR must still decode as PSR transfers.
+        assert!(matches!(decode(0xe10f0000), Instruction::MRS(_))); // MRS r0, cpsr
+        assert!(matches!(decode(0xe129f000), Instruction::MSR(_))); // MSR cpsr, r0
+        assert!(matches!(decode(0xe329f0ff), Instruction::MSR(_))); // MSR cpsr_f, #imm
     }
 }
