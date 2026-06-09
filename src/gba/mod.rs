@@ -411,6 +411,33 @@ mod repro {
             }
         }
     }
+
+    #[test]
+    #[ignore = "manual frame-capture harness; requires fixtures/beat_beast/BeatBeast_jam.gba"]
+    fn capture_beat_beast() {
+        use crate::cpu::bus::accessor::BusAccessor;
+        let path =
+            std::env::var("ROM").unwrap_or_else(|_| "fixtures/beat_beast/BeatBeast_jam.gba".into());
+        let bin = std::fs::read(&path).expect("rom");
+        let mut gba = GBA::from_rom(&bin);
+        let total: usize = std::env::var("FRAMES").ok().and_then(|s| s.parse().ok()).unwrap_or(300);
+        let _ = std::fs::create_dir_all("target/bb");
+        for fr in 0..total {
+            gba.update_key(Key::new());
+            let buf = gba.frame(false);
+            // Report whether this frame has any visible variation (not a flat color).
+            let first = &buf[0..3];
+            let varied = buf.chunks_exact(4).any(|px| px[0..3] != *first);
+            if fr % 30 == 0 || fr == total - 1 {
+                write_bmp(&format!("target/bb/f{fr:05}.bmp"), &buf);
+                let dispcnt = gba.bus.read_halfword(0x0400_0000);
+                eprintln!(
+                    "frame {fr}: varied={varied} px0={:02x}{:02x}{:02x} dispcnt={:04x}",
+                    buf[0], buf[1], buf[2], dispcnt
+                );
+            }
+        }
+    }
 }
 
 #[cfg(test)]
