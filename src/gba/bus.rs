@@ -1512,6 +1512,13 @@ impl CpuBus {
             // route these through the normal register write path instead of
             // silently dropping them.
             0x0400_0000..=0x0400_03FF => self.write_word(addr, data),
+            // BIOS / unmapped low memory (0x0-0x01FFFFFF) is read-only on
+            // hardware; a DMA targeting it (e.g. an audio engine's first-frame
+            // FIFO restart, before its source/dest pointers are programmed)
+            // is silently dropped rather than warned about.
+            0x0000_0000..=0x01FF_FFFF => {
+                let _ = data;
+            }
             _ => {
                 println!("⚠️  DMA write_word to unsupported address: 0x{addr:08x} = 0x{data:08x}");
             }
@@ -1542,6 +1549,10 @@ impl CpuBus {
             // route these through the normal register write path instead of
             // silently dropping them.
             0x0400_0000..=0x0400_03FF => self.write_halfword(addr, data),
+            // BIOS / unmapped low memory is read-only on hardware; drop silently.
+            0x0000_0000..=0x01FF_FFFF => {
+                let _ = data;
+            }
             _ => {
                 println!("⚠️  DMA write_halfword to unsupported address: 0x{addr:08x} = 0x{data:04x}");
             }
