@@ -109,8 +109,8 @@ where
     // (ie. for DECREASING addressing modes, the CPU does first calculate the lowest address,
     // and does then process rlist with increasing addresses; this detail can be important when accessing memory mapped I/O ports).
 
-    // LDM^: 特権モードで S=1 かつ L=1 かつ R15 非含有の場合、転送先は User/System バンク。
-    // ここでは一時的に User モードに切替えて読み込み、完了後に元のモードへ戻す（tgba実装に準拠）。
+    // LDM^: in a privileged mode with S=1, L=1, and R15 absent, the targets are the User/System bank.
+    // Temporarily switch to User mode for the load, then restore the original mode (follows tgba's impl).
     let do_user_load = dec.get_S() && current_mode != Mode::User;
     if do_user_load {
         cpsr.switch_mode(Mode::User, gpr, spsr, bank_gpr, bank_spsr);
@@ -147,7 +147,7 @@ where
     }
 
     if do_user_load {
-        // User バンクに読み込まれた直後のスナップショットを取得（FIQ: r8-r14, 他特権: r13-r14）
+        // Snapshot right after the load into the User bank (FIQ: r8-r14, other privileged: r13-r14)
         let mut user_snapshot: [Option<u32>; 16] = [None; 16];
         for i in 0..16 {
             let is_banked_in_fiq = (8..=14).contains(&i);
@@ -157,21 +157,21 @@ where
             }
         }
 
-        // 現在のモードへ戻す（以降、見えているのは現モードのバンク値）
+        // Restore the current mode (from here on, the visible values are the current mode's bank)
         cpsr.switch_mode(current_mode, gpr, spsr, bank_gpr, bank_spsr);
 
-        // 1命令だけ、対象レジスタに user|curr を重ねて見せる
+        // For one instruction only, overlay user|curr on the target registers
         let mut mask: u16 = 0;
         let mut overlays: [(usize, u32); 16] = [(0, 0); 16];
         let mut overlay_count: usize = 0;
         let is_fiq = matches!(current_mode, Mode::FIQ);
         for i in 0..16 {
-            // バンク対象か？
+            // Is this register banked?
             let is_banked_here = if is_fiq { (8..=14).contains(&i) } else { i == SP || i == LR };
             if !is_banked_here {
                 continue;
             }
-            // 今回の LDM^ のレジスタリストに含まれているか？
+            // Is it in this LDM^'s register list?
             if (register_list & (1 << i)) == 0 {
                 continue;
             }
@@ -217,11 +217,11 @@ where
     let mut cycle: Cycle = 0;
     let mut is_n_cycle = true;
 
-    // t511, t512 など: Sビット処理（ユーザレジスタアクセス）
-    //  - 特権モードで S=1 の STM/ LDM は、転送対象レジスタはユーザモードのバンクを参照する。
-    //  - 本実装ではストア前のベース計算/書き戻しは現モードで行い、ストア直前に一時的に System(=User) に切替えて値を取得し、
-
-    //    終了後に元のモードへ戻す。
+    // t511, t512, etc.: S-bit handling (user register access)
+    //  - For STM/LDM with S=1 in a privileged mode, the transferred registers reference the User-mode bank.
+    //  - Here the base calculation/writeback before the store is done in the current mode; just before the store
+    //    we temporarily switch to System(=User) to fetch the values,
+    //    then restore the original mode afterward.
 
     let mut register_list = dec.get_register_list();
     let mut immediate = 0;
@@ -270,8 +270,8 @@ where
     //    IB (U=1,P=1): store [Rn+4],      Rn += 0x40
     //    DA (U=0,P=0): store [Rn-0x3C],   Rn -= 0x40
     //    DB (U=0,P=1): store [Rn-0x40],   Rn -= 0x40
-    //  - PC の保存値は PC+4（本実装では gpr[PC] が+8のため +4 で実効PC+12に相当）。
-    //  - 参照: fixtures/gba-tests/arm/block_transfer.asm t515
+    //  - The stored PC value is PC+4 (here gpr[PC] is +8, so +4 corresponds to effective PC+12).
+    //  - Ref: fixtures/gba-tests/arm/block_transfer.asm t515
     if register_list == 0 {
         let rn_val = gpr[dec.get_Rn() as usize];
         let (store_addr, wb): (Word, i64) = match (dec.get_U(), dec.get_P()) {
@@ -321,12 +321,12 @@ where
             };
             cycle += bus.compute_cycle(address, access_type);
             // t508: Memory alignment (block transfer)
-            //  - ARM7TDMI のワード転送は未アラインド時に bits[1:0] を無視して 4 バイト境界へ書き込む。
-            //  - ldm 側は既に読み出し時に &0xFFFF_FFFC でアラインしており、stm も同様にアラインする必要がある。
-            //  - 参照: fixtures/gba-tests/arm/block_transfer.asm t508
+            //  - On ARM7TDMI a word transfer ignores bits[1:0] when unaligned and writes to the 4-byte boundary.
+            //  - The ldm path already aligns reads with &0xFFFF_FFFC, and stm must align the same way.
+            //  - Ref: fixtures/gba-tests/arm/block_transfer.asm t508
             // t510: Store PC + 4 in block store
-            //  - レジスタリストに PC を含む STM は PC+4 を保存する（本実装では gpr[PC] が常に+8のため +4 して実質 PC+12）。
-            //  - 参照: fixtures/gba-tests/arm/block_transfer.asm t510
+            //  - An STM whose register list includes PC stores PC+4 (here gpr[PC] is always +8, so +4 means effective PC+12).
+            //  - Ref: fixtures/gba-tests/arm/block_transfer.asm t510
             let value = if i == PC { gpr[PC].wrapping_add(4) } else { gpr[i] };
             bus.write_word(address & 0xFFFF_FFFC, value as Word);
             address = address.wrapping_add(4);
@@ -334,7 +334,7 @@ where
     }
 
     if dec.get_S() {
-        // 元のモードに復帰
+        // Restore the original mode
         cpsr.switch_mode(current_mode, gpr, spsr, bank_gpr, bank_spsr);
     }
 

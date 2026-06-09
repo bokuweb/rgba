@@ -45,7 +45,7 @@ impl Timers {
 
     pub const fn write(&mut self, ofs: u32, data: u8) {
         match ofs {
-            // TMxCNT_L (reload value). 実機準拠: 無効化中はカウンタにも即時反映。
+            // TMxCNT_L (reload value). Hardware-accurate: while disabled, also apply to the counter immediately.
             0x00 | 0x01 | 0x04 | 0x05 | 0x08 | 0x09 | 0x0C | 0x0D => {
                 let i = (ofs / 4) as usize;
                 if ofs & 1 == 0 {
@@ -53,7 +53,7 @@ impl Timers {
                 } else {
                     self.timer[i].reload = ((data as u16) << 8) | (self.timer[i].reload & 0x00FF);
                 }
-                // Disabled時はreloadを書いた時点でcounterへ反映される（読み戻しが一致）。
+                // When disabled, writing reload immediately propagates to counter (read-back matches).
                 if !self.timer[i].enable {
                     self.timer[i].counter = self.timer[i].reload;
                 }
@@ -63,24 +63,24 @@ impl Timers {
                 let i = (ofs / 4) as usize;
                 let prev_enable = self.timer[i].enable;
                 self.timer[i].prescaler = data & 0x3;
-                // Timer0 では count-up 指定(bit2)は無効（実機仕様）。
+                // On Timer0, count-up (bit2) is ignored (hardware spec).
                 self.timer[i].countup_timing = i != 0 && (data & 0x4) != 0;
                 self.timer[i].irq_enable = (data & 0x40) != 0;
                 self.timer[i].enable = (data & 0x80) != 0;
                 if !prev_enable && self.timer[i].enable {
-                    // 有効化時にリロード値をロードし、分周位相は0にクリア（実機準拠）
+                    // On enable, load the reload value and clear the prescaler phase to 0 (hardware-accurate).
                     self.timer[i].counter = self.timer[i].reload;
                     self.timer[i].fraction = 0;
                     self.timer[i].just_enabled = true;
-                    // 次のインクリメント境界を現在サイクル+分周で設定
+                    // Set the next increment edge to current cycle + prescaler.
                     let prescaler = match self.timer[i].prescaler { 0=>1,1=>64,2=>256,3=>1024,_=>1 } as u64;
-                    // 実測に合わせ、有効化直後の最初のインクリメント境界をわずかに遅延させる
+                    // Match measured hardware: slightly delay the first increment edge right after enable.
                     let enable_phase_adjust: u64 = 2; // 2 cycles delay
                     self.timer[i].next_edge = self.prev_cycle
                         .saturating_add(prescaler)
                         .saturating_add(enable_phase_adjust);
                 } else if prev_enable && !self.timer[i].enable {
-                    // Disable時はカウンタ維持
+                    // On disable, retain the counter.
                 }
             }
             _ => {}
@@ -118,7 +118,7 @@ impl Timers {
         let mut inc: u64 = if t.countup_timing {
             prev_overflow
         } else {
-            // GBA仕様に合わせた分周値（/1, /64, /256, /1024）。
+            // Prescaler divisors per GBA spec (/1, /64, /256, /1024).
             let prescaler = match t.prescaler {
                 0 => 1,
                 1 => 64,
@@ -126,7 +126,7 @@ impl Timers {
                 3 => 1024,
                 _ => 1,
             } as u64;
-            // 絶対サイクル境界でのインクリメント（次のエッジまで溜め、境界を越えた回数だけ増分）
+            // Increment on absolute cycle edges (accumulate to the next edge, increment once per crossed boundary).
             let mut produced = 0u64;
             if elapsed > 0 {
                 let mut current = self.prev_cycle - elapsed;
@@ -149,8 +149,8 @@ impl Timers {
             produced
         };
 
-        // 有効化直後も分周境界を正確に追従して加算する。
-        // 実機では有効化直後から/1なら直ちにカウントし始めるため、抑制は行わない。
+        // Even right after enable, follow the prescaler edges precisely when accumulating.
+        // On hardware, /1 starts counting immediately after enable, so do not suppress it.
         if t.just_enabled { t.just_enabled = false; }
 
         let mut overflow: u64 = 0;

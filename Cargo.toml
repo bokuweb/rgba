@@ -18,18 +18,25 @@ path = "src/lib.rs"
 name = "rusty-gba"
 path = "src/main.rs"
 
-# (No general dependencies: the `bitfield!` macro is provided locally in
-# `src/macros.rs`.)
+# Structured logging facade. Diagnostics throughout the emulator core go through
+# `tracing` macros; each frontend installs its own subscriber (see below).
+[dependencies]
+tracing = "0.1"
 
 # SDL2 only makes sense for the native binary; it doesn't build for wasm32. Gate
 # it so `wasm-pack build` (which builds the lib only) never pulls it in.
+# `tracing-subscriber` renders the `tracing` events to stderr for the native
+# frontend, honouring the `RUST_LOG` filter.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 sdl2 = "0.34.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # wasm-bindgen glue for the browser debugger frontend.
+# `tracing-wasm` forwards `tracing` events to the browser console.
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2.92"
 console_error_panic_hook = "0.1"
+tracing-wasm = "0.2"
 
 [workspace]
 
