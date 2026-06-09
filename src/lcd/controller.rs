@@ -117,7 +117,7 @@ impl LCDController {
     #[inline]
     fn log_scroll_write(&self, name: &str, value: HalfWord) {
         if self.lines < 160 && Self::trace_scroll() {
-            println!("📜 L{:3} c{:4} {name}=0x{value:03x}", self.lines, self.cycles);
+            tracing::trace!("L{:3} c{:4} {name}=0x{value:03x}", self.lines, self.cycles);
         }
     }
 
@@ -357,8 +357,8 @@ impl LCDController {
             0x0000 => {
                 self.dispcnt.write(data);
                 if Self::trace_lcd() {
-                    println!(
-                        "🔧 DISPCNT write: 0x{:04x} (Mode: {}, BG0: {}, BG1: {}, BG2: {}, BG3: {}, OBJ: {})",
+                    tracing::trace!(
+                        "DISPCNT write: 0x{:04x} (Mode: {}, BG0: {}, BG1: {}, BG2: {}, BG3: {}, OBJ: {})",
                         data,
                         self.dispcnt.mode() as u8,
                         (data & 0x0100) != 0,
@@ -373,8 +373,8 @@ impl LCDController {
                 // DISPSTAT - General LCD Status (Read/Write)
                 self.dispstat.write(data);
                 if Self::trace_lcd() {
-                    println!(
-                        "🔧 DISPSTAT write: 0x{:04x} -> masked: 0x{:04x} (VBlank IRQ: {}, HBlank IRQ: {}, VCounter IRQ: {})",
+                    tracing::trace!(
+                        "DISPSTAT write: 0x{:04x} -> masked: 0x{:04x} (VBlank IRQ: {}, HBlank IRQ: {}, VCounter IRQ: {})",
                         data,
                         self.dispstat.0 & 0x0038,
                         (data & 0x0008) != 0,
@@ -386,8 +386,8 @@ impl LCDController {
             0x0008 => {
                 self.bg0cnt.write(data);
                 if Self::trace_lcd() {
-                    println!(
-                        "🔧 BG0CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})",
+                    tracing::trace!(
+                        "BG0CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})",
                         data,
                         self.bg0cnt.bg_priority(),
                         self.bg0cnt.character_base_block(),
@@ -400,8 +400,8 @@ impl LCDController {
             0x000A => {
                 self.bg1cnt.write(data);
                 if Self::trace_lcd() {
-                    println!(
-                        "🔧 BG1CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})",
+                    tracing::trace!(
+                        "BG1CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})",
                         data,
                         self.bg1cnt.bg_priority(),
                         self.bg1cnt.character_base_block(),
@@ -414,8 +414,8 @@ impl LCDController {
             0x000C => {
                 self.bg2cnt.write(data);
                 if Self::trace_lcd() {
-                    println!(
-                        "🔧 BG2CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})",
+                    tracing::trace!(
+                        "BG2CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})",
                         data,
                         self.bg2cnt.bg_priority(),
                         self.bg2cnt.character_base_block(),
@@ -428,8 +428,8 @@ impl LCDController {
             0x000E => {
                 self.bg3cnt.write(data);
                 if Self::trace_lcd() {
-                    println!(
-                        "🔧 BG3CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})",
+                    tracing::trace!(
+                        "BG3CNT write: 0x{:04x} (Priority: {}, CharBase: {}, MapBase: {}, Colors: {}, Size: {})",
                         data,
                         self.bg3cnt.bg_priority(),
                         self.bg3cnt.character_base_block(),

@@ -48,14 +48,14 @@ impl InterruptController {
         self.ie = value;
     }
 
-    /// Read IF register - agb_checker動作保証（最終版）
+    /// Read IF register - verified against agb_checker (final version)
     pub const fn read_if(&self) -> HalfWord {
         self.if_flags
     }
 
-    /// Write IF register (acknowledge interrupts) - GBATek仕様準拠
+    /// Write IF register (acknowledge interrupts) - per GBATek spec
     pub const fn write_if(&mut self, value: HalfWord) {
-        // 対応するビットをクリア
+        // Clear the corresponding bits.
         self.if_flags &= !value;
     }
 
@@ -84,7 +84,7 @@ impl InterruptController {
                 interrupt_type,
                 InterruptType::DMA0 | InterruptType::DMA1 | InterruptType::DMA2 | InterruptType::DMA3
             ) {
-                println!(
+                tracing::trace!(
                     "IRQ request {:?} IF=0x{:04x} IE=0x{:04x} IME=0x{:04x}",
                     interrupt_type, self.if_flags, self.ie, self.ime
                 );
@@ -101,7 +101,7 @@ impl InterruptController {
         ime_enabled && interrupts_pending
     }
 
-    /// Get the highest priority interrupt that should be serviced - GBATek仕様準拠
+    /// Get the highest priority interrupt that should be serviced - per GBATek spec
     pub fn get_pending_interrupt(&self) -> Option<InterruptType> {
         if !self.should_service_interrupt() {
             return None;
@@ -109,8 +109,8 @@ impl InterruptController {
 
         let pending = self.ie & self.if_flags;
 
-        // GBATek: 優先度は IEレジスタのビット順序で決定（ビット番号が小さいほど高優先度）
-        // Bit 0: VBlank (最高優先度) → Bit 13: GamePak (最低優先度)
+        // GBATek: priority is determined by IE register bit order (lower bit number = higher priority).
+        // Bit 0: VBlank (highest priority) -> Bit 13: GamePak (lowest priority)
         for i in 0..14 {
             if (pending & (1 << i)) != 0 {
                 return match i {

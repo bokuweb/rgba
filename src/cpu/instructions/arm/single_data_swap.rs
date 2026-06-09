@@ -15,8 +15,8 @@ where
     let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word));
     let cycle = cycle + bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word));
     // t452: Misaligned swap
-    //  - 読み: LDR と同じく misaligned の場合は ROR(8*addr[1:0])（read_ldr_data 使用）
-    //  - 書き: STR と同じく bits[1:0] を無視し 4 バイト境界へ丸めて書き込む
+    //  - Read: like LDR, when misaligned apply ROR(8*addr[1:0]) (uses read_ldr_data)
+    //  - Write: like STR, ignore bits[1:0] and round down to the 4-byte boundary
     let read_val = read_ldr_data(bus, addr);
     let eff_addr = addr & 0xFFFF_FFFC;
     bus.write_word(eff_addr, gpr[rm] as Word);
