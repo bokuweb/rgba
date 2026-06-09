@@ -241,6 +241,22 @@ impl GBA {
         self.bus.framebuffer().to_vec()
     }
 
+    /// Current BG/video mode (DISPCNT mode field) as a 0..=5 index.
+    pub fn video_mode(&self) -> u8 {
+        self.bus.borrow_lcdc().bg_mode_index()
+    }
+
+    /// DISPCNT layer-enable bits: bit0..bit3 = BG0..BG3, bit4 = OBJ.
+    pub fn layer_flags(&self) -> u8 {
+        self.bus.borrow_lcdc().dispcnt_layer_flags()
+    }
+
+    /// Override the visible layer set for the debugger. `None` renders normally;
+    /// `Some(mask)` shows only the layers in `mask` (bit0..3 = BG0..3, bit4 = OBJ).
+    pub fn set_debug_layer_mask(&mut self, mask: Option<u8>) {
+        self.bus.borrow_mut_lcdc().set_debug_layer_mask(mask);
+    }
+
     /// Persist save memory (SRAM/Flash or EEPROM) to the `.sav` file if it
     /// changed since the last flush. Cheap to call every frame: it is a no-op
     /// unless the save is dirty.
