@@ -178,6 +178,12 @@ pub struct CpuBus {
     prev_vcounter: bool,
     dma_irq_latch: [bool; 4],
     trace_dma: bool,
+    /// mGBA/no$gba debug-logging interface (0x04FFF600..=0x04FFF7FF). Homebrew
+    /// (e.g. Butano with logging enabled) writes a message into the 256-byte
+    /// buffer then pokes 0x04FFF700 to flush it. Captured so these writes are
+    /// valid (not "invalid write" warnings) and the log is observable.
+    mgba_log_buffer: [u8; 256],
+    mgba_log_enabled: bool,
 }
 
 impl BusAccessor for CpuBus {
@@ -261,6 +267,9 @@ impl BusAccessor for CpuBus {
         // dbg!(format!("read half word addr = {:x}", addr));
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_halfword(addr),
+            // mGBA debug enable register: reads back 0x1DEA once enabled so the
+            // homebrew runtime detects logging support.
+            0x04FF_F780 if self.mgba_log_enabled => 0x1DEA,
             // EWRAM mirrors
             0x0200_0000..=0x02FF_FFFF => self.eram.read_halfword((addr - 0x0200_0000) & 0x3FFFF),
             // BIOS IF work area mirror (0x03007FF8, mirrored in all IWRAM aliases)
@@ -499,6 +508,9 @@ impl BusAccessor for CpuBus {
                 // SRAM / Flash save memory (byte access only)
                 self.backup.write(addr, data);
             }
+            0x04FF_F600..=0x04FF_F7FF => {
+                self.mgba_debug_write(addr, data as u32, 1);
+            }
             _ => {
                 println!("⚠️  WARNING: Invalid write_byte to 0x{addr:08x} = 0x{data:02x} (ignored)");
             }
@@ -624,6 +636,9 @@ impl BusAccessor for CpuBus {
             }
             0x0E00_0000..=0x0E00_FFFF => {
                 println!("⚠️  WARNING: Invalid halfword write to SRAM at 0x{addr:08x} = 0x{data:04x} (SRAM is byte-access only, ignored)");
+            }
+            0x04FF_F600..=0x04FF_F7FF => {
+                self.mgba_debug_write(addr, data as u32, 2);
             }
             _ => {
                 println!("⚠️  WARNING: Invalid write_halfword to 0x{addr:08x} = 0x{data:04x} (ignored)");
@@ -785,6 +800,9 @@ impl BusAccessor for CpuBus {
             0x0E00_0000..=0x0E00_FFFF => {
                 println!("⚠️  WARNING: Invalid word write to SRAM at 0x{addr:08x} = 0x{data:08x} (SRAM is byte-access only, ignored)");
             }
+            0x04FF_F600..=0x04FF_F7FF => {
+                self.mgba_debug_write(addr, data, 4);
+            }
             _ => {
                 println!("⚠️  WARNING: Invalid write_word to 0x{addr:08x} = 0x{data:08x} (ignored)");
             }
@@ -851,6 +869,47 @@ impl CpuBus {
             prev_vcounter: false,
             dma_irq_latch: [false; 4],
             trace_dma: std::env::var("AGB_TRACE_DMA").ok().as_deref() == Some("1"),
+            mgba_log_buffer: [0; 256],
+            mgba_log_enabled: false,
+        }
+    }
+
+    /// Handle a write to the mGBA/no$gba debug-logging registers
+    /// (0x04FFF600..=0x04FFF7FF). Returns `true` if the address belongs to that
+    /// region (and was consumed), `false` otherwise.
+    ///
+    /// Layout: 0x04FFF600..=0x04FFF6FF is a 256-byte message buffer; a write to
+    /// 0x04FFF700 flushes it as a log line (bits 0-2 = level); a write of 0xC0DE
+    /// to 0x04FFF780 enables the interface (reads then return 0x1DEA).
+    fn mgba_debug_write(&mut self, addr: u32, data: u32, width: u32) -> bool {
+        match addr {
+            0x04FF_F600..=0x04FF_F6FF => {
+                let base = (addr - 0x04FF_F600) as usize;
+                for i in 0..width as usize {
+                    if let Some(slot) = self.mgba_log_buffer.get_mut(base + i) {
+                        *slot = ((data >> (i * 8)) & 0xFF) as u8;
+                    }
+                }
+                true
+            }
+            0x04FF_F700 => {
+                // Flush: emit the buffer up to the first NUL as a log line.
+                if self.mgba_log_enabled {
+                    let end = self.mgba_log_buffer.iter().position(|&b| b == 0).unwrap_or(256);
+                    let msg = String::from_utf8_lossy(&self.mgba_log_buffer[..end]);
+                    let level = data & 0x7;
+                    println!("[mGBA log {level}] {msg}");
+                }
+                self.mgba_log_buffer = [0; 256];
+                true
+            }
+            0x04FF_F780 => {
+                // Enable register: 0xC0DE turns the interface on.
+                self.mgba_log_enabled = (data & 0xFFFF) == 0xC0DE;
+                true
+            }
+            0x04FF_F701..=0x04FF_F7FF => true, // reserved control bytes; accept silently
+            _ => false,
         }
     }
 
