@@ -242,9 +242,20 @@ pub fn decode(raw: Word) -> Instruction {
         // (e.g. `PUSH {lr}` = 0xe52de004, bits 27:26 == 01) also satisfy the
         // 24:23/20 test and get mis-decoded as MRS — corrupting the register
         // with CPSR and skipping the store/writeback.
+        //
+        // Also exclude the "extra" instruction encodings (multiply, swap, and
+        // halfword/signed loads & stores) which share bits 27:26 == 00 but are
+        // identified by bit 7 == 1 && bit 4 == 1 with a register operand
+        // (bit 25 == 0). Without this, a *decrementing* (U=0) halfword store such
+        // as `STRH Rd,[Rn,#-imm]` (e.g. the libugba IRQ handler's BIOS-IF write
+        // `strh r1,[r0,#-8]` = 0xe14010b8) has bits 24:23 == 10 / bit 20 == 0 and
+        // gets mis-decoded as MRS — silently dropping the store, so the BIOS
+        // interrupt-acknowledge flags at 0x03007FF8 never update and
+        // VBlankIntrWait spins forever.
         v if (v & 0x0C00_0000) == 0x0
             && (v & 0x0180_0000) == 0x0100_0000
-            && (v & 0x0010_0000) == 0x0 =>
+            && (v & 0x0010_0000) == 0x0
+            && !((v & 0x0200_0000) == 0 && (v & 0x0000_0090) == 0x0000_0090) =>
         {
             InstructionType::PsrTransfer
         }
@@ -328,5 +339,32 @@ mod harden_tests {
         assert!(matches!(decode(0xe10f_0000), Instruction::MRS(_))); // MRS r0, cpsr
         assert!(matches!(decode(0xe129_f000), Instruction::MSR(_))); // MSR cpsr, r0
         assert!(matches!(decode(0xe329_f0ff), Instruction::MSR(_))); // MSR cpsr_f, #imm
+    }
+
+    #[test]
+    fn decrementing_halfword_transfer_is_extra_memory_not_psr_transfer() {
+        // Halfword / signed loads & stores with a *decrementing* (U=0) offset have
+        // bits 27:26 == 00, bits 24:23 == 10 and bit 20 == 0 — the same slot as
+        // MRS/MSR — but are "extra" instructions, marked by bit 7 == 1 && bit 4 == 1
+        // with a register operand (bit 25 == 0). They must decode as STRH/LDRH/etc.
+        //
+        // Regression: the libugba IRQ handler acknowledges interrupts to the BIOS
+        // flags at 0x03007FF8 with `strh r1,[r0,#-8]` (0xe14010b8). Mis-decoding it
+        // as MRS silently dropped the store, so VBlankIntrWait never observed the
+        // VBlank flag and the game (afska's Beat Beast) hung on a white screen.
+        assert!(
+            matches!(decode(0xe140_10b8), Instruction::STRH(_)),
+            "strh r1,[r0,#-8] decoded as {:?}",
+            decode(0xe140_10b8)
+        );
+        assert!(matches!(decode(0xe150_10b8), Instruction::LDRH(_))); // ldrh r1,[r0,#-8]
+        assert!(matches!(decode(0xe150_10d8), Instruction::LDRSB(_))); // ldrsb r1,[r0,#-8]
+        assert!(matches!(decode(0xe150_10f8), Instruction::LDRSH(_))); // ldrsh r1,[r0,#-8]
+        // Register-offset decrementing halfword store is also "extra", not PSR.
+        assert!(matches!(decode(0xe101_00b2), Instruction::STRH(_))); // strh r0,[r1,-r2]
+
+        // MRS/MSR are unaffected (bits 7:4 == 0000, or immediate operand).
+        assert!(matches!(decode(0xe10f_0000), Instruction::MRS(_)));
+        assert!(matches!(decode(0xe129_f000), Instruction::MSR(_)));
     }
 }
