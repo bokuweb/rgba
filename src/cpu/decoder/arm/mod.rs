@@ -313,9 +313,9 @@ mod harden_tests {
         // It must decode as STR, not get mis-classified as a PSR transfer
         // (which would write CPSR into Rd and skip the store + base writeback).
         let cases = [
-            0xe52de004u32, // STR  lr, [sp, #-4]!   (`PUSH {lr}`)
-            0xe50b0008u32, // STR  r0, [r11, #-8]   (P=1, U=0, no writeback)
-            0xe54d1001u32, // STRB r1, [sp, #-1]
+            0xe52d_e004u32, // STR  lr, [sp, #-4]!   (`PUSH {lr}`)
+            0xe50b_0008u32, // STR  r0, [r11, #-8]   (P=1, U=0, no writeback)
+            0xe54d_1001u32, // STRB r1, [sp, #-1]
         ];
         for raw in cases {
             assert!(
@@ -325,8 +325,8 @@ mod harden_tests {
             );
         }
         // Genuine MRS/MSR must still decode as PSR transfers.
-        assert!(matches!(decode(0xe10f0000), Instruction::MRS(_))); // MRS r0, cpsr
-        assert!(matches!(decode(0xe129f000), Instruction::MSR(_))); // MSR cpsr, r0
-        assert!(matches!(decode(0xe329f0ff), Instruction::MSR(_))); // MSR cpsr_f, #imm
+        assert!(matches!(decode(0xe10f_0000), Instruction::MRS(_))); // MRS r0, cpsr
+        assert!(matches!(decode(0xe129_f000), Instruction::MSR(_))); // MSR cpsr, r0
+        assert!(matches!(decode(0xe329_f0ff), Instruction::MSR(_))); // MSR cpsr_f, #imm
     }
 }
