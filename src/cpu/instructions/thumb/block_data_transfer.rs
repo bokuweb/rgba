@@ -86,11 +86,14 @@ where
     }
 
     let _total_bytes = register_list.count_ones() * 4;
+    // On ARM7TDMI, when the base register is in the LDM list its final value is
+    // the value loaded from memory — the writeback is suppressed. Writing back
+    // the final address unconditionally corrupts idioms like
+    // `ldmia r3, {r1, r3}` (e.g. reading a `bn::span` {begin, end} struct).
+    let base_in_rlist = register_list & (1 << rn_idx) != 0;
     for i in 0..0x8 {
         if register_list & (1 << i) != 0 {
             let d = bus.read_word(base & 0xFFFF_FFFC);
-            // dbg!(base, d);
-            // 読み出し値は常にメモリの内容。ベースがrlistに含まれても、後段の書き戻しで最終アドレスをRnへ設定する。
             gpr[i] = d;
             let access_type = if is_n_cycle {
                 is_n_cycle = false;
@@ -103,8 +106,10 @@ where
             base = base.wrapping_add(4);
         }
     }
-    // ベースはリストに含まれていても必ず書き戻す（最終アドレス）。
-    gpr[rn_idx] = base;
+    // Only write back the final address when the base is NOT in the list.
+    if !base_in_rlist {
+        gpr[rn_idx] = base;
+    }
 
     
 
@@ -201,5 +206,77 @@ where
         // consume merged I-S cycle
         let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
         (cycle, PipelineStatus::Continue)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cpu::bus::accessor::BusAccessor;
+    use crate::types::{Byte, HalfWord, Word};
+
+    /// Tiny word-addressable memory mock for exercising the transfer ops.
+    struct MemBus {
+        mem: std::collections::HashMap<Word, Word>,
+    }
+    impl BusAccessor for MemBus {
+        fn compute_cycle(&self, _addr: Word, _access: AccessType) -> Cycle {
+            0
+        }
+        fn read_byte(&self, _addr: Word) -> Byte {
+            0
+        }
+        fn read_halfword(&self, _addr: Word) -> HalfWord {
+            0
+        }
+        fn read_word(&self, addr: Word) -> Word {
+            *self.mem.get(&(addr & !3)).unwrap_or(&0)
+        }
+        fn write_byte(&mut self, _addr: Word, _data: Byte) {}
+        fn write_halfword(&mut self, _addr: Word, _data: HalfWord) {}
+        fn write_word(&mut self, addr: Word, data: Word) {
+            self.mem.insert(addr & !3, data);
+        }
+    }
+
+    /// `LDMIA r3, {r1, r3}` where the base (r3) is also in the list. On ARM7TDMI
+    /// the base's final value is the value loaded from memory, NOT the
+    /// written-back end address. This is the idiom Butano uses to read a
+    /// `bn::span` {begin, end}; the writeback bug corrupted `end`.
+    #[test]
+    fn ldmia_base_in_rlist_keeps_loaded_value() {
+        let mut bus = MemBus { mem: std::collections::HashMap::new() };
+        bus.mem.insert(0x0200_0000, 0xAAAA_0001); // [base+0]
+        bus.mem.insert(0x0200_0004, 0xBBBB_0002); // [base+4]
+
+        let mut gpr = [0u32; 16];
+        gpr[3] = 0x0200_0000; // base
+        // 0xCB0A = LDMIA r3, {r1, r3}
+        let dec = BlockDataTransfer(0xCB0A);
+        exec_thumb_ldmia(&bus, dec, &mut gpr, false);
+
+        assert_eq!(gpr[1], 0xAAAA_0001, "r1 = [base]");
+        assert_eq!(
+            gpr[3], 0xBBBB_0002,
+            "r3 (base in list) must be the LOADED value, not the writeback address"
+        );
+    }
+
+    /// When the base is NOT in the list, writeback still advances it to the end.
+    #[test]
+    fn ldmia_base_not_in_rlist_writes_back() {
+        let mut bus = MemBus { mem: std::collections::HashMap::new() };
+        bus.mem.insert(0x0200_0000, 0x1111_1111);
+        bus.mem.insert(0x0200_0004, 0x2222_2222);
+
+        let mut gpr = [0u32; 16];
+        gpr[3] = 0x0200_0000;
+        // 0xCB06 = LDMIA r3!, {r1, r2}
+        let dec = BlockDataTransfer(0xCB06);
+        exec_thumb_ldmia(&bus, dec, &mut gpr, false);
+
+        assert_eq!(gpr[1], 0x1111_1111);
+        assert_eq!(gpr[2], 0x2222_2222);
+        assert_eq!(gpr[3], 0x0200_0008, "base advances past the 2 loaded words");
     }
 }
