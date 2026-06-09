@@ -30,6 +30,11 @@ impl GbaHandle {
     #[wasm_bindgen(constructor)]
     pub fn new(rom: &[u8]) -> GbaHandle {
         console_error_panic_hook::set_once();
+        // Forward `tracing` events to the browser console. Guarded by `Once`
+        // because the global default can only be installed once per page even
+        // if several handles are constructed.
+        static INIT_TRACING: std::sync::Once = std::sync::Once::new();
+        INIT_TRACING.call_once(tracing_wasm::set_as_global_default);
         GbaHandle {
             gba: GBA::from_rom(rom),
             framebuf: vec![0; FB_LEN],

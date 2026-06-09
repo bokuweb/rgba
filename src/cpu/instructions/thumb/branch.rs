@@ -35,7 +35,7 @@ pub fn exec_thumb_b2(dec: Branch, gpr: &mut [Word; 16], _cpsr: &mut PSR) -> Exec
     };
     let delta = signed.wrapping_shl(1) as i64;
     gpr[PC] = (gpr[PC] as i64 + delta) as u32;
-    // Consume: 2S+1N (モデル簡略化でここでは0を返しFlush)
+    // Consume: 2S+1N (simplified model: return 0 here and Flush)
     (0, PipelineStatus::Flush)
 }
 
