@@ -30,6 +30,15 @@ const WIDTH: u32 = 240;
 const HEIGHT: u32 = 160;
 
 fn main() {
+    // Install the tracing subscriber so emulator-core diagnostics reach stderr.
+    // The level is controlled by `RUST_LOG` (default: warnings and above).
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
+        )
+        .with_writer(std::io::stderr)
+        .init();
 
     let sdl_context = sdl2::init().unwrap();
     let mut event_pump = sdl_context.event_pump().unwrap();

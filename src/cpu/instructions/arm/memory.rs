@@ -18,16 +18,16 @@ where
         let rm = dec.get_Rm() as usize;
         let sh = dec.get_sh().into();
         let shamt5 = dec.get_shamt5();
-        // t362 対応: 特殊シフト RRX
-        //  - ROR #0 は RRX として解釈され、CPSR.C をビット31に入れて右1シフトする。
-        //  - テストでは C=1, Rm=0 により RRX(0) = 0x8000_0000 となることを期待。
-        //  - ここで shift(...) を使って RRX を含むシフトを評価し、オフセットに反映する。
+        // t362 support: special shift RRX
+        //  - ROR #0 is interpreted as RRX, which feeds CPSR.C into bit 31 and shifts right by 1.
+        //  - The test expects RRX(0) = 0x8000_0000 with C=1, Rm=0.
+        //  - Use shift(...) here to evaluate the shift (including RRX) and apply it to the offset.
         shift(sh, gpr[rm], shamt5, cpsr.get_C(), false)
     } else {
         dec.get_imm()
     };
-    // t362 の目的は RRX により 0x8000_0000 を生成し、プリインデックス/書き戻しで Rn に反映させること。
-    // 以前の 28bit マスクは外し、wrap演算の結果をそのまま使う（GBAのアドレスラップはバス側で処理）。
+    // t362 aims to generate 0x8000_0000 via RRX and reflect it in Rn through pre-indexing/writeback.
+    // The old 28-bit mask is removed; use the wrapping-arithmetic result directly (GBA address wrap is handled on the bus side).
     let offset_base = if dec.get_U() {
         base.wrapping_add(offset)
     } else {
@@ -127,15 +127,15 @@ where
     
     exec_memory_store(bus, gpr, dec, cpsr, |bus, gpr, base| {
         // t354: Misaligned store
-        //  - ARMv4 (ARM7TDMI) 仕様では、ワードストアが未アラインドアドレスに対して行われた場合、
-        //    アドレスの下位2bitは無視され、4バイト境界にアラインされたアドレスへ書き込む。
-        //  - gba-tests/arm/single_transfer.asm の t354（"ARM 7: Misaligned store"）がこの挙動を検証。
-        //    本実装はその要件に合わせ、STR の実行側で 4 バイト境界へ丸める。
+        //  - Per the ARMv4 (ARM7TDMI) spec, when a word store targets an unaligned address,
+        //    the low 2 bits of the address are ignored and the write goes to the 4-byte-aligned address.
+        //  - gba-tests/arm/single_transfer.asm t354 ("ARM 7: Misaligned store") verifies this behavior.
+        //    This impl matches that requirement by rounding to the 4-byte boundary in the STR execution path.
         let eff_addr = base & 0xFFFF_FFFC;
         // t356: Store PC + 4
-        //  - Rd==PC の STR は「PC+4」を格納する仕様。
-        //    本エミュレータでは gpr[PC] は常に「現在命令アドレス+8」を表すため、実装上は gpr[PC]+4 (= 実効PC+12) を書き込む。
-        //  - 参照: fixtures/gba-tests/arm/single_transfer.asm の t356 ("ARM 7: Store PC + 4")
+        //  - An STR with Rd==PC stores "PC+4" by spec.
+        //    Here gpr[PC] always represents "current instruction address + 8", so we write gpr[PC]+4 (= effective PC+12).
+        //  - Ref: fixtures/gba-tests/arm/single_transfer.asm t356 ("ARM 7: Store PC + 4")
         let value = if rd == PC { gpr[PC].wrapping_add(4) } else { gpr[rd] };
         bus.write_word(eff_addr, value);
     })

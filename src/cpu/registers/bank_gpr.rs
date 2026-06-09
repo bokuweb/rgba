@@ -181,10 +181,10 @@ impl BankGpr {
             }
             1 => {
                 // Armed -> apply overlay now
-                println!("[GLITCH] Apply overlay (mask=0x{:04X})", self.glitch_mask);
+                tracing::trace!("[GLITCH] Apply overlay (mask=0x{:04X})", self.glitch_mask);
                 for i in 0..16 {
                     if (self.glitch_mask & (1 << i)) != 0 {
-                        println!(
+                        tracing::trace!(
                             "  r{}: user|curr = 0x{:08X} | 0x{:08X} -> 0x{:08X}",
                             i, self.glitch_backup[i], gpr[i], self.glitch_values[i]
                         );
@@ -195,13 +195,13 @@ impl BankGpr {
             }
             2 => {
                 // Active -> restore and clear
-                println!("[GLITCH] Restore (mask=0x{:04X})", self.glitch_mask);
+                tracing::trace!("[GLITCH] Restore (mask=0x{:04X})", self.glitch_mask);
                 for i in 0..16 {
                     if (self.glitch_mask & (1 << i)) != 0 {
-                        // もし対象レジスタが次命令で書き換えられている場合は復元しない
-                        // （overlay 値と現在値が異なれば write と判断）
+                        // Don't restore if the register was overwritten by the next instruction
+                        // (if the overlay value differs from the current value, treat it as a write)
                         if gpr[i] == self.glitch_values[i] {
-                            println!("  r{}: restore to 0x{:08X}", i, self.glitch_backup[i]);
+                            tracing::trace!("  r{}: restore to 0x{:08X}", i, self.glitch_backup[i]);
                             gpr[i] = self.glitch_backup[i];
                         }
                         // Clear stored values

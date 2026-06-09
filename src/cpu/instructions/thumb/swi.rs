@@ -14,7 +14,7 @@ pub fn exec_thumb_swi<T: BusAccessor>(
     _cpsr: &mut PSR,
     _spsr: &mut PSR,
 ) -> ExecuteResult {
-    // 8bit 即値を BIOS ディスパッチへ渡す（optimized SWI path）
+    // Pass the 8-bit immediate to the BIOS dispatch (optimized SWI path)
     let swi_number = dec.get_immediate() as u32;
     Bios::execute_swi(bus, swi_number, gpr);
     // See exec_arm_swi: re-execute this SWI while a BIOS IntrWait is armed so the

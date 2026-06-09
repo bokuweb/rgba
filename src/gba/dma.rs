@@ -107,7 +107,7 @@ impl DMAController {
             ch.set_control(control);
             let now_timing = ch.get_timing();
             if std::env::var("AGB_TRACE_DMA").ok().as_deref() == Some("1") {
-                println!(
+                tracing::trace!(
                     "DMA ctrl ch={} was_en={} en={} ctrl={:04x} timing={} repeat={} irq={}",
                     channel,
                     was_enabled,
