@@ -74,9 +74,9 @@ impl GBA {
         let saved = std::fs::read(&save_path).unwrap_or_default();
         let label = if is_eeprom { "EEPROM" } else { "SRAM/Flash" };
         if saved.is_empty() {
-            println!("💾 Backup type: {label} ({kind:?}) (save file: {})", save_path.display());
+            tracing::info!("Backup type: {label} ({kind:?}) (save file: {})", save_path.display());
         } else {
-            println!("💾 Loaded save ({label}, {} bytes) from {}", saved.len(), save_path.display());
+            tracing::info!("Loaded save ({label}, {} bytes) from {}", saved.len(), save_path.display());
         }
 
         // A Backup is always constructed (it backs the 0x0E region); for EEPROM
@@ -277,7 +277,7 @@ impl GBA {
                     self.bus.eeprom_clear_dirty();
                     self.bus.backup_clear_dirty();
                 }
-                Err(e) => eprintln!("⚠️  failed to write save {}: {}", path.display(), e),
+                Err(e) => tracing::error!("failed to write save {}: {}", path.display(), e),
             }
         } else {
             // No backing file (embedded ROM): drop the dirty flags so we don't
@@ -309,7 +309,7 @@ impl GBA {
             // it observes the freshly-updated DISPSTAT edges.
             self.bus.execute_dma_transfers();
 
-            // IE/IF/IMEの組み合わせでサービス可能ならCPUにIRQ要求
+            // Request an IRQ on the CPU if the IE/IF/IME combination allows servicing.
             if self.bus.should_service_interrupt() {
                 self.arm.request_irq();
             }
@@ -406,19 +406,19 @@ mod repro {
                 continue;
             }
             // Name-entry macro (period 100): hold DOWN to drop the cursor onto the
-            // left-most bottom-menu cell "おまかせ" (random name), confirm, then
-            // hold RIGHT to reach "おわり" (done) and confirm the よろしいですか dialog.
+            // left-most bottom-menu cell "omakase" (random name), confirm, then
+            // hold RIGHT to reach "owari" (done) and confirm the "yoroshii desu ka" dialog.
             // Cursor starts in the left column and typing doesn't move it, so a
-            // straight DOWN lands on おまかせ. Looping this clears every name screen.
+            // straight DOWN lands on omakase. Looping this clears every name screen.
             let f = fr % 100;
             if f < 16 {
                 key.set_DOWN(KeyStatus::ON);
             } else if f == 24 || f == 25 {
-                key.set_A(KeyStatus::ON); // select おまかせ
+                key.set_A(KeyStatus::ON); // select omakase
             } else if (32..48).contains(&f) {
-                key.set_RIGHT(KeyStatus::ON); // move to おわり
+                key.set_RIGHT(KeyStatus::ON); // move to owari
             } else if matches!(f, 54 | 55 | 64 | 65 | 74 | 75 | 84 | 85) {
-                key.set_A(KeyStatus::ON); // おわり + よろしいですか/dialogue advance
+                key.set_A(KeyStatus::ON); // owari + "yoroshii desu ka"/dialogue advance
             }
             gba.update_key(key);
             let buf = gba.frame(false);
@@ -447,7 +447,7 @@ mod repro {
             if fr % 30 == 0 || fr == total - 1 {
                 write_bmp(&format!("target/bb/f{fr:05}.bmp"), &buf);
                 let dispcnt = gba.bus.read_halfword(0x0400_0000);
-                eprintln!(
+                tracing::debug!(
                     "frame {fr}: varied={varied} px0={:02x}{:02x}{:02x} dispcnt={:04x}",
                     buf[0], buf[1], buf[2], dispcnt
                 );
