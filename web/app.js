@@ -22,6 +22,23 @@ const canvas = $('screen');
 const ctx = canvas.getContext('2d');
 const image = ctx.createImageData(240, 160);
 
+// audio scope (oscilloscope) — per-channel ring buffers filled from the audio
+// stream every frame, independent of whether playback is enabled.
+const scopeCanvas = $('scope');
+const scopeCtx = scopeCanvas.getContext('2d');
+const SCOPE_SAMPLES = 1024;
+let scopeL = new Float32Array(SCOPE_SAMPLES);
+let scopeR = new Float32Array(SCOPE_SAMPLES);
+let scopePos = 0;
+
+// fps meter (wall-clock emulated frames/sec, updated ~2x/sec)
+let fpsFrames = 0, fpsLast = performance.now();
+
+// layer isolation
+const MODE_KIND = ['tiled', 'tiled', 'tiled', 'bitmap', 'bitmap', 'bitmap'];
+const isolateBox = $('isolate');
+const lyrBoxes = Array.from(document.querySelectorAll('.lyrbox'));
+
 // GBA key bit order expected by GbaHandle.setKey
 const KEYMAP = {
   KeyZ: 0, KeyX: 1, Space: 2, Enter: 3,
@@ -41,6 +58,9 @@ function refreshStatus() {
   // Monotonic cycle count — visible proof the core is advancing even when the
   // PC is parked in a VBlank-wait loop at frame boundaries.
   $('cycval').textContent = 'cyc ' + Math.round(gba.cycles()).toLocaleString();
+  const m = gba.videoMode();
+  $('vmodeval').textContent = `MODE ${m} · ${MODE_KIND[m] || '?'}`;
+  syncLayerUi();
 }
 
 function refreshRegs() {
@@ -125,7 +145,9 @@ function loop() {
   if (!running) return;
   const hitBp = gba.runUntilBreak();
   paint(gba.framebuffer());
-  feedAudio();
+  drainAudio();
+  drawScope();
+  tickFps();
   refreshStatus();
   refreshRegs();
   refreshDisasm();
@@ -148,11 +170,86 @@ async function ensureAudio() {
   audioNode.connect(audioCtx.destination);
 }
 function resumeAudio() { if (audioOn && audioCtx && audioCtx.state === 'suspended') audioCtx.resume(); }
-function feedAudio() {
-  if (!audioOn || !audioNode) return;
-  const s = gba.takeAudioF32();
-  if (s.length) audioNode.port.postMessage(s, [s.buffer]);
+
+// Drain the emulator's audio every frame: always copy into the scope ring (so
+// the waveform shows even with playback muted), and forward to the AudioWorklet
+// only when playback is on. Draining unconditionally also keeps the core's
+// sample queue from growing while muted.
+function drainAudio() {
+  if (!gba) return;
+  const s = gba.takeAudioF32(); // interleaved L,R in [-1, 1]
+  if (!s.length) return;
+  for (let i = 0; i + 1 < s.length; i += 2) {
+    scopeL[scopePos] = s[i];
+    scopeR[scopePos] = s[i + 1];
+    scopePos = (scopePos + 1) % SCOPE_SAMPLES;
+  }
+  // Read scope samples above BEFORE transferring the buffer to the worklet.
+  if (audioOn && audioNode) audioNode.port.postMessage(s, [s.buffer]);
 }
+
+function drawScope() {
+  const W = scopeCanvas.width, H = scopeCanvas.height, mid = H / 2;
+  scopeCtx.clearRect(0, 0, W, H);
+  scopeCtx.strokeStyle = '#18202b';
+  scopeCtx.lineWidth = 1;
+  scopeCtx.beginPath();
+  scopeCtx.moveTo(0, mid);
+  scopeCtx.lineTo(W, mid);
+  scopeCtx.stroke();
+  const trace = (buf, color) => {
+    scopeCtx.strokeStyle = color;
+    scopeCtx.beginPath();
+    for (let x = 0; x < W; x++) {
+      // scopePos points at the oldest sample (next write slot).
+      const idx = (scopePos + Math.floor((x / W) * SCOPE_SAMPLES)) % SCOPE_SAMPLES;
+      const y = mid - buf[idx] * (mid - 2);
+      if (x === 0) scopeCtx.moveTo(x, y); else scopeCtx.lineTo(x, y);
+    }
+    scopeCtx.stroke();
+  };
+  trace(scopeR, 'rgba(56,189,248,.6)');  // R = cyan
+  trace(scopeL, 'rgba(0,255,163,.9)');   // L = green
+}
+
+function tickFps() {
+  fpsFrames++;
+  const now = performance.now();
+  const dt = now - fpsLast;
+  if (dt >= 500) {
+    $('fpsval').textContent = Math.round((fpsFrames * 1000) / dt) + ' fps';
+    fpsFrames = 0;
+    fpsLast = now;
+  }
+}
+
+// ---------------------------------------------------------------- layers
+// Push the current isolation choice to the core. With "isolate" off we render
+// normally (mask = -1 → respect the game's DISPCNT). With it on, only the
+// checked layers draw — overriding DISPCNT, so a layer the game disabled can be
+// forced visible to inspect hidden content.
+function applyLayerMask() {
+  if (!gba) return;
+  if (!isolateBox.checked) { gba.setLayerMask(-1); return; }
+  let mask = 0;
+  for (const b of lyrBoxes) if (b.checked) mask |= 1 << Number(b.dataset.bit);
+  gba.setLayerMask(mask);
+}
+
+// Keep the layer checkboxes in sync. While isolating they are user-editable;
+// otherwise they are a live read-out of the game's DISPCNT enable bits.
+function syncLayerUi() {
+  const editable = isolateBox.checked;
+  $('lyrset').classList.toggle('live', editable);
+  for (const b of lyrBoxes) b.disabled = !editable;
+  if (!editable && gba) {
+    const f = gba.layerFlags();
+    for (const b of lyrBoxes) b.checked = ((f >> Number(b.dataset.bit)) & 1) !== 0;
+  }
+}
+
+isolateBox.addEventListener('change', () => { syncLayerUi(); applyLayerMask(); });
+for (const b of lyrBoxes) b.addEventListener('change', applyLayerMask);
 
 $('audio').addEventListener('click', async () => {
   if (!gba) return;
@@ -251,6 +348,8 @@ function bootGba(bytes) {
   prevRegs = new Array(16).fill(-1); // force first-frame highlight off
   prevRegs = Array.from(gba.registers());
   paint(gba.framebuffer());
+  // A fresh core resets the LCD layer override; re-apply the current choice.
+  applyLayerMask();
   refreshAll();
   for (const b of ['run', 'pause', 'step', 'reset', 'audio']) $(b).disabled = false;
   $('pause').disabled = true;
