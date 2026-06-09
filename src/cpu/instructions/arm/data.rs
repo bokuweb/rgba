@@ -24,7 +24,7 @@ where
         } else {
             let amount = (rot * 2) & 31; // 2,4,...,30
             let res = ror(imm, amount, cpsr.get_C(), false);
-            let carry = (res & 0x8000_0000) != 0; // 即値回転のCは結果bit31
+            let carry = (res & 0x8000_0000) != 0; // C for immediate rotate is result bit 31
             (res, carry)
         }
     } else if dec.get_bit4() {
@@ -280,7 +280,7 @@ where
 {
     let s = dec.get_S();
     let rd = dec.get_Rd() as usize;
-    // Rn はその時点のレジスタ値を使用（PC は既にパイプライン相当オフセット込み）
+    // Use Rn's register value at this point (PC already includes the pipeline-equivalent offset)
     let op1 = get_operand(&*gpr, dec.get_Rn(), dec.get_I(), dec.get_bit4());
     
     exec_data_processing(bus, gpr, dec, cpsr, &mut |gpr, value, _, cpsr| {
@@ -331,7 +331,7 @@ where
                 cpsr.set_N_from(d as u32);
                 cpsr.set_Z_from(d as u32);
                 cpsr.set_C_from(d);
-                // V: (~(op1 ^ (op2 + Cin)) & (op1 ^ result)) の MSB
+                // V: MSB of (~(op1 ^ (op2 + Cin)) & (op1 ^ result))
                 let op1 = rn_value as i32;
                 let op2 = value as i32;
                 let cin = i32::from(c_flag);
@@ -372,11 +372,11 @@ where
             } else {
                 cpsr.set_N_from(d);
                 cpsr.set_Z_from(d);
-                // C（ノーボロー）を 64bit で厳密に
+                // C (no borrow) computed precisely in 64-bit
                 let rn64 = rn_value as u64;
                 let sub64 = (value as u64) + (borrow_in as u64);
                 cpsr.set_C(rn64 >= sub64);
-                // V（符号オーバーフロー）
+                // V (signed overflow)
                 let op1 = rn_value as i32;
                 let op2c = (value as i32).wrapping_add(borrow_in as i32);
                 let (_, v) = op1.overflowing_sub(op2c);
@@ -415,11 +415,11 @@ where
             } else {
                 cpsr.set_N_from(d);
                 cpsr.set_Z_from(d);
-                // C（ノーボロー）を 64bit で厳密に
+                // C (no borrow) computed precisely in 64-bit
                 let op2_64 = value as u64;
                 let subtrahend64 = (rn_value as u64) + (borrow_in as u64);
                 cpsr.set_C(op2_64 >= subtrahend64);
-                // V（符号オーバーフロー）
+                // V (signed overflow)
                 let (_, v) = (value as i32)
                     .overflowing_sub((rn_value as i32).wrapping_add(borrow_in as i32));
                 cpsr.set_V(v);

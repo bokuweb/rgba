@@ -446,14 +446,14 @@ impl ARM {
                 arm::Instruction::MUL(dec) => exec_arm_mul(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::MLA(dec) => exec_arm_mla(bus, dec, &mut self.gpr, &mut self.cpsr)?,
                 arm::Instruction::UMULL(dec) => {
-                    // LDM^グリッチが有効化されている場合、乗算の被乗数(Rm, Rs)はオーバレイ対象から除外する
+                    // When the LDM^ glitch is active, exclude the multiply operands (Rm, Rs) from the overlay
                     if self.bank_gpr.is_glitch_active_or_armed() {
                         self.bank_gpr.refine_remove_indices_from_overlay(&[dec.get_Rm() as usize, dec.get_Rs() as usize], &mut self.gpr);
                     }
                     let rd_idx = dec.get_Rd() as usize;
                     let rn_idx = dec.get_Rn() as usize;
                     let r = exec_arm_umull(bus, dec, &mut self.gpr, &mut self.cpsr)?;
-                    // 実行直後に書き込み先(RdHi, RdLo)がオーバレイ対象なら取り除く。
+                    // Right after execution, drop the destinations (RdHi, RdLo) from the overlay if present.
                     if self.bank_gpr.is_glitch_active_or_armed() {
                         self.bank_gpr.refine_remove_indices_from_overlay(&[rd_idx, rn_idx], &mut self.gpr);
                     }
@@ -466,7 +466,7 @@ impl ARM {
                     let rd_idx = dec.get_Rd() as usize;
                     let rn_idx = dec.get_Rn() as usize;
                     let r = exec_arm_umlal(bus, dec, &mut self.gpr, &mut self.cpsr)?;
-                    // 実行直後に書き込み先(RdHi, RdLo)がオーバレイ対象なら取り除く。
+                    // Right after execution, drop the destinations (RdHi, RdLo) from the overlay if present.
                     if self.bank_gpr.is_glitch_active_or_armed() {
                         self.bank_gpr.refine_remove_indices_from_overlay(&[rd_idx, rn_idx], &mut self.gpr);
                     }
@@ -479,7 +479,7 @@ impl ARM {
                     let rd_idx = dec.get_Rd() as usize;
                     let rn_idx = dec.get_Rn() as usize;
                     let r = exec_arm_smull(bus, dec, &mut self.gpr, &mut self.cpsr)?;
-                    // 実行直後に書き込み先(RdHi, RdLo)がオーバレイ対象なら取り除く。
+                    // Right after execution, drop the destinations (RdHi, RdLo) from the overlay if present.
                     if self.bank_gpr.is_glitch_active_or_armed() {
                         self.bank_gpr.refine_remove_indices_from_overlay(&[rd_idx, rn_idx], &mut self.gpr);
                     }
@@ -492,7 +492,7 @@ impl ARM {
                     let rd_idx = dec.get_Rd() as usize;
                     let rn_idx = dec.get_Rn() as usize;
                     let r = exec_arm_smlal(bus, dec, &mut self.gpr, &mut self.cpsr)?;
-                    // 実行直後に書き込み先(RdHi, RdLo)がオーバレイ対象なら取り除く。
+                    // Right after execution, drop the destinations (RdHi, RdLo) from the overlay if present.
                     if self.bank_gpr.is_glitch_active_or_armed() {
                         self.bank_gpr.refine_remove_indices_from_overlay(&[rd_idx, rn_idx], &mut self.gpr);
                     }
@@ -626,8 +626,8 @@ impl ARM {
                 thumb::Instruction::PUSH(dec) => exec_thumb_push(bus, dec, &mut self.gpr),
                 thumb::Instruction::POP(dec) => exec_thumb_pop(bus, dec, &mut self.gpr),
                 thumb::Instruction::SWI(dec) => {
-                    // 原因: Thumb SWI 未実装により BIOS 呼び出しができずテストが失敗。
-                    // この分岐で Thumb 用 SWI 実装へ委譲する。
+                    // Cause: Thumb SWI was unimplemented, so BIOS calls failed and tests broke.
+                    // This branch delegates to the Thumb SWI implementation.
                     let (c, ps) = exec_thumb_swi(bus, dec, &mut self.gpr, &mut self.cpsr, &mut self.spsr);
                     (c, ps)
                 }

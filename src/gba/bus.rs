@@ -247,7 +247,7 @@ impl BusAccessor for CpuBus {
             0x0400_00A8..=0x0400_03FF => 0,
             // Palette 1KB mirrors
             0x0500_0000..=0x05FF_FFFF => self.palette.read_byte((addr - 0x0500_0000) & 0x3FF),
-            // 修正(004): VRAMミラー (0x20000で折り返し、0x18000-0x1FFFFは0x10000-0x17FFFへ)
+            // Fix(004): VRAM mirror (wraps at 0x20000; 0x18000-0x1FFFF maps to 0x10000-0x17FFF)
             0x0600_0000..=0x06FF_FFFF => self.vram.read_byte(Self::map_vram_offset(addr)),
             // OAM 1KB mirrors
             0x0700_0000..=0x07FF_FFFF => self.oam.read_byte((addr - 0x0700_0000) & 0x3FF),
@@ -312,9 +312,9 @@ impl BusAccessor for CpuBus {
                 }
             },
             0x0500_0000..=0x05FF_FFFF => self.palette.read_halfword((addr - 0x0500_0000) & 0x3FF),
-            // 修正(004): VRAMミラー対応
+            // Fix(004): VRAM mirror handling
             0x0600_0000..=0x06FF_FFFF => self.vram.read_halfword(Self::map_vram_offset(addr)),
-            // 修正(006): OAM 1KB ミラー（16bit 読み）
+            // Fix(006): OAM 1KB mirror (16-bit read)
             0x0700_0000..=0x07FF_FFFF => self.oam.read_halfword((addr - 0x0700_0000) & 0x3FF),
             // GamePak GPIO / RTC registers (only readable once the game enables
             // GPIO reads; otherwise these addresses read ROM).
@@ -324,7 +324,7 @@ impl BusAccessor for CpuBus {
             0x0D00_0000..=0x0DFF_FFFF if self.eeprom.is_some() => 1,
             0x0800_0000..=0x0DFF_FFFF => self.gamepak_read_halfword(addr),
             0x0E00_0000..=0x0E00_FFFF => {
-                println!("⚠️  WARNING: Invalid halfword access to SRAM at 0x{addr:08x} (SRAM is byte-access only) - returning 0xFFFF");
+                tracing::warn!("Invalid halfword access to SRAM at 0x{addr:08x} (SRAM is byte-access only) - returning 0xFFFF");
                 0xFFFF
             }
             _ => {
@@ -345,7 +345,7 @@ impl BusAccessor for CpuBus {
                 lo | (hi << 16)
             }
             0x0400_0100..=0x0400_010F => {
-                // 組み合わせて32bit値を返す（TMxCNT_L/CNT_H）
+                // Combine bytes into a 32-bit value (TMxCNT_L/CNT_H).
                 let base = addr - 0x0400_0100 ;
                 let b0 = self.timers.read(base) as u32;
                 let b1 = self.timers.read(base + 1) as u32;
@@ -366,12 +366,12 @@ impl BusAccessor for CpuBus {
                 let off = (addr - 0x0300_0000) & 0x7FFF;
                 self.wram.read_word(off)
             },
-            // 修正(004): VRAMミラー（0x20000で折り返し、0x18000..は0x10000..へ）
+            // Fix(004): VRAM mirror (wraps at 0x20000; 0x18000.. maps to 0x10000..)
             0x0600_0000..=0x06FF_FFFF => {
                 let vram_addr = Self::map_vram_offset(addr);
                 self.vram.read_word(vram_addr)
             }
-            // 修正(006): OAM 1KB ミラー（32bit 読み）
+            // Fix(006): OAM 1KB mirror (32-bit read)
             0x0700_0000..=0x07FF_FFFF => self.oam.read_word((addr - 0x0700_0000) & 0x3FF),
             0x0400_0000..=0x0400_005F => self.lcdc.read_word(addr - 0x0400_0000),
             0x0400_0060..=0x0400_00A7 => {
@@ -405,7 +405,7 @@ impl BusAccessor for CpuBus {
             0x0500_0000..=0x05FF_FFFF => self.palette.read_word((addr - 0x0500_0000) & 0x3FF),
             0x0800_0000..=0x0DFF_FFFF => self.gamepak_read_word(addr),
             0x0E00_0000..=0x0E00_FFFF => {
-                println!("⚠️  WARNING: Invalid word access to SRAM at 0x{addr:08x} (SRAM is byte-access only) - returning 0xFFFFFFFF");
+                tracing::warn!("Invalid word access to SRAM at 0x{addr:08x} (SRAM is byte-access only) - returning 0xFFFFFFFF");
                 0xFFFF_FFFF
             }
             _ => {
@@ -512,7 +512,7 @@ impl BusAccessor for CpuBus {
                 self.mgba_debug_write(addr, data as u32, 1);
             }
             _ => {
-                println!("⚠️  WARNING: Invalid write_byte to 0x{addr:08x} = 0x{data:02x} (ignored)");
+                tracing::warn!("Invalid write_byte to 0x{addr:08x} = 0x{data:02x} (ignored)");
             }
         }
     }
@@ -574,7 +574,7 @@ impl BusAccessor for CpuBus {
                             let reg = (addr - (0x0400_00B0 + (channel as u32) * 0x0C)) as u16;
                             let ch = self.dma.channels[channel];
                             if self.trace_dma {
-                                println!(
+                                tracing::trace!(
                                     "DMA reg16 write ch={channel} reg=0x{reg:02x} addr=0x{addr:08x} data=0x{data:04x}"
                                 );
                             }
@@ -619,11 +619,11 @@ impl BusAccessor for CpuBus {
             }
             0x0500_0000..=0x05FF_FFFF => self.palette.write_halfword((addr - 0x0500_0000) & 0x3FF, data),
             0x0600_0000..=0x06FF_FFFF => {
-                // 修正(004): halfword write もミラー
+                // Fix(004): mirror halfword writes too
                 let vram_addr = Self::map_vram_offset(addr);
                 self.vram.write_halfword(vram_addr, data);
             }
-            // 修正(006): OAM 1KB ミラー（16bit 書き）
+            // Fix(006): OAM 1KB mirror (16-bit write)
             0x0700_0000..=0x07FF_FFFF => self.oam.write_halfword((addr - 0x0700_0000) & 0x3FF, data),
             // GamePak GPIO / RTC registers.
             0x0800_00C4 | 0x0800_00C6 | 0x0800_00C8 => self.rtc.write(addr, data),
@@ -635,13 +635,13 @@ impl BusAccessor for CpuBus {
                 }
             }
             0x0E00_0000..=0x0E00_FFFF => {
-                println!("⚠️  WARNING: Invalid halfword write to SRAM at 0x{addr:08x} = 0x{data:04x} (SRAM is byte-access only, ignored)");
+                tracing::warn!("Invalid halfword write to SRAM at 0x{addr:08x} = 0x{data:04x} (SRAM is byte-access only, ignored)");
             }
             0x04FF_F600..=0x04FF_F7FF => {
                 self.mgba_debug_write(addr, data as u32, 2);
             }
             _ => {
-                println!("⚠️  WARNING: Invalid write_halfword to 0x{addr:08x} = 0x{data:04x} (ignored)");
+                tracing::warn!("Invalid write_halfword to 0x{addr:08x} = 0x{data:04x} (ignored)");
             }
         }
     }
@@ -672,7 +672,7 @@ impl BusAccessor for CpuBus {
             }
             // Unused
             0x0300_8000..=0x03FF_FFFF => {
-                println!("⚠️  WARNING: Write to unused area 0x{addr:08x} = 0x{data:08x} (ignored)");
+                tracing::warn!("Write to unused area 0x{addr:08x} = 0x{data:08x} (ignored)");
             }
             0x0400_0000..=0x0400_005F => self.lcdc.write_word(addr - 0x0400_0000, data),
             0x0400_0100..=0x0400_010F => {
@@ -791,20 +791,20 @@ impl BusAccessor for CpuBus {
             }
             0x0500_0000..=0x05FF_FFFF => self.palette.write_word((addr - 0x0500_0000) & 0x3FF, data),
             0x0600_0000..=0x06FF_FFFF => {
-                // 修正(004): 書き込み側もミラー
+                // Fix(004): mirror the write side too
                 let vram_addr = Self::map_vram_offset(addr);
                 self.vram.write_word(vram_addr, data);
             }
-            // 修正(006): OAM 1KB ミラー（32bit 書き）
+            // Fix(006): OAM 1KB mirror (32-bit write)
             0x0700_0000..=0x07FF_FFFF => self.oam.write_word((addr - 0x0700_0000) & 0x3FF, data),
             0x0E00_0000..=0x0E00_FFFF => {
-                println!("⚠️  WARNING: Invalid word write to SRAM at 0x{addr:08x} = 0x{data:08x} (SRAM is byte-access only, ignored)");
+                tracing::warn!("Invalid word write to SRAM at 0x{addr:08x} = 0x{data:08x} (SRAM is byte-access only, ignored)");
             }
             0x04FF_F600..=0x04FF_F7FF => {
                 self.mgba_debug_write(addr, data, 4);
             }
             _ => {
-                println!("⚠️  WARNING: Invalid write_word to 0x{addr:08x} = 0x{data:08x} (ignored)");
+                tracing::warn!("Invalid write_word to 0x{addr:08x} = 0x{data:08x} (ignored)");
             }
         }
     }
@@ -898,7 +898,7 @@ impl CpuBus {
                     let end = self.mgba_log_buffer.iter().position(|&b| b == 0).unwrap_or(256);
                     let msg = String::from_utf8_lossy(&self.mgba_log_buffer[..end]);
                     let level = data & 0x7;
-                    println!("[mGBA log {level}] {msg}");
+                    tracing::debug!("[mGBA log {level}] {msg}");
                 }
                 self.mgba_log_buffer = [0; 256];
                 true
@@ -1088,7 +1088,7 @@ impl CpuBus {
             }
             if self.trace_dma && has_timed_enabled {
                 let vcount = self.lcdc.read_halfword(0x0006);
-                println!(
+                tracing::trace!(
                     "DMA timing edge vblank_rising={vblank_rising} hblank_rising={hblank_rising} vcount={vcount}"
                 );
             }
@@ -1097,7 +1097,7 @@ impl CpuBus {
                     continue;
                 }
                 if self.trace_dma && has_timed_enabled {
-                    println!(
+                    tracing::trace!(
                         "DMA ch{} enabled timing={} pending={}",
                         channel,
                         self.dma.channels[channel].get_timing(),
@@ -1135,7 +1135,7 @@ impl CpuBus {
         let request_irq = self.dma.channels[channel].handle_irq();
         if let Some((source, dest, count, transfer_size)) = self.dma.get_pending_transfer(channel) {
             if self.trace_dma {
-                println!(
+                tracing::trace!(
                     "DMA start ch={} timing={} src={:08x} dst={:08x} count={} size={} ctrl={:04x}",
                     channel,
                     self.dma.channels[channel].get_timing(),
@@ -1151,7 +1151,7 @@ impl CpuBus {
             if request_irq {
                 self.dma_irq_latch[channel] = true;
                 if self.trace_dma {
-                    println!("DMA irq latched ch={channel}");
+                    tracing::trace!("DMA irq latched ch={channel}");
                 }
             }
         }
@@ -1510,7 +1510,7 @@ impl CpuBus {
         self.dma.channels[channel].next_count = 0;
 
         if self.trace_dma && channel == 0 {
-            println!(
+            tracing::trace!(
                 "DMA done ch=0 first=0x{:08x} last=0x{:08x} next_src=0x{:08x} next_dst=0x{:08x} pub_src=0x{:08x} pub_dst=0x{:08x} pub_count={} en={}",
                 first_value.unwrap_or(0),
                 last_value.unwrap_or(0),
@@ -1579,7 +1579,7 @@ impl CpuBus {
                 let _ = data;
             }
             _ => {
-                println!("⚠️  DMA write_word to unsupported address: 0x{addr:08x} = 0x{data:08x}");
+                tracing::warn!("DMA write_word to unsupported address: 0x{addr:08x} = 0x{data:08x}");
             }
         }
     }
@@ -1613,7 +1613,7 @@ impl CpuBus {
                 let _ = data;
             }
             _ => {
-                println!("⚠️  DMA write_halfword to unsupported address: 0x{addr:08x} = 0x{data:04x}");
+                tracing::warn!("DMA write_halfword to unsupported address: 0x{addr:08x} = 0x{data:04x}");
             }
         }
     }
