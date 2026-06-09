@@ -6,6 +6,12 @@
       "runtimeExecutable": "python3",
       "runtimeArgs": ["-m", "http.server", "8753"],
       "port": 8753
+    },
+    {
+      "name": "gba-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["web/static-server.js"],
+      "port": 8761
     }
   ]
 }

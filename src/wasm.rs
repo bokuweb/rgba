@@ -108,6 +108,31 @@ impl GbaHandle {
         self.framebuf.clone()
     }
 
+    // ---- Render inspection ------------------------------------------------
+
+    /// Current BG/video mode as a 0..=5 index (the DISPCNT mode field).
+    #[wasm_bindgen(js_name = videoMode)]
+    pub fn video_mode(&self) -> u8 {
+        self.gba.video_mode()
+    }
+
+    /// DISPCNT layer-enable bits the game has set: bit0..bit3 = BG0..BG3,
+    /// bit4 = OBJ. Lets the UI show which layers are live this frame.
+    #[wasm_bindgen(js_name = layerFlags)]
+    pub fn layer_flags(&self) -> u8 {
+        self.gba.layer_flags()
+    }
+
+    /// Isolate the rendered layers. Pass `-1` to render normally (respect the
+    /// game's DISPCNT). Pass a non-negative mask to show *only* those layers,
+    /// overriding DISPCNT: bit0..bit3 = BG0..BG3, bit4 = OBJ. This drives the
+    /// "sprites only", "background only" and "show hidden layer" debug views.
+    #[wasm_bindgen(js_name = setLayerMask)]
+    pub fn set_layer_mask(&mut self, mask: i32) {
+        let m = if mask < 0 { None } else { Some(mask as u8) };
+        self.gba.set_debug_layer_mask(m);
+    }
+
     fn copy_framebuffer(&mut self, buf: &[u8]) {
         let n = buf.len().min(FB_LEN);
         self.framebuf[..n].copy_from_slice(&buf[..n]);

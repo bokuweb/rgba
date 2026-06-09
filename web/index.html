@@ -136,6 +136,27 @@
     border-radius: 2px; width: 100%; max-width: 420px; height: auto;
     box-shadow: 0 0 30px rgba(56,189,248,.08);
   }
+  .vmode { color: var(--violet); font-weight: 700; }
+  .fps   { color: var(--amber); font-weight: 700; min-width: 52px; text-align: right; }
+
+  /* ---- layer isolation ---- */
+  .layers {
+    display: flex; align-items: center; gap: 6px 12px; flex-wrap: wrap;
+    padding: 8px 10px; border-top: 1px solid var(--line); color: var(--dim);
+  }
+  .layers label { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; user-select: none; }
+  .layers input { accent-color: var(--green); cursor: pointer; }
+  .layers .iso { color: var(--fg); font-weight: 700; }
+  .layers .lyrset { display: inline-flex; gap: 12px; opacity: .5; transition: opacity .12s ease; }
+  .layers .lyrset.live { opacity: 1; }
+  .layers .lyrset.live label { color: var(--fg); }
+
+  /* ---- audio scope ---- */
+  #scopePane .body { padding: 8px 10px; resize: none; display: flex; }
+  canvas#scope {
+    width: 100%; height: 88px; background: #04070c; border: 1px solid var(--line2);
+    border-radius: 2px;
+  }
   /* ---- registers ---- */
   #regs .body { resize: none; }
   .reggrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px 18px; }
@@ -221,9 +242,31 @@
 
     <div class="col right">
       <section class="panel" id="screenPane">
-        <h2>screen</h2>
+        <h2>screen
+          <span class="tools">
+            <span class="vmode" id="vmodeval" title="DISPCNT video / BG mode">MODE —</span>
+            <span class="fps" id="fpsval" title="emulated frames per second">— fps</span>
+          </span>
+        </h2>
         <div class="body">
           <canvas id="screen" width="240" height="160"></canvas>
+        </div>
+        <div class="layers" id="layers" title="check 'isolate' to view layers separately (sprites only / bg only / hidden layers)">
+          <label class="iso"><input type="checkbox" id="isolate" /> isolate</label>
+          <span class="lyrset" id="lyrset">
+            <label><input type="checkbox" class="lyrbox" data-bit="0" checked /> BG0</label>
+            <label><input type="checkbox" class="lyrbox" data-bit="1" checked /> BG1</label>
+            <label><input type="checkbox" class="lyrbox" data-bit="2" checked /> BG2</label>
+            <label><input type="checkbox" class="lyrbox" data-bit="3" checked /> BG3</label>
+            <label><input type="checkbox" class="lyrbox" data-bit="4" checked /> OBJ</label>
+          </span>
+        </div>
+      </section>
+
+      <section class="panel" id="scopePane">
+        <h2>audio scope <span class="tools hint">L green · R cyan</span></h2>
+        <div class="body">
+          <canvas id="scope" width="480" height="88"></canvas>
         </div>
       </section>
 

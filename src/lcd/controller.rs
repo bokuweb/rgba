@@ -88,6 +88,12 @@ pub struct LCDController {
     bldcnt: HalfWord,   // BLDCNT - Color Special Effects Selection (0x4000050)
     bldalpha: HalfWord, // BLDALPHA - Alpha Blending Coefficients (0x4000052)
     bldy: HalfWord,     // BLDY - Brightness (Fade-In/Out) Coefficient (0x4000054)
+    /// Debugger layer-isolation override. `None` = render normally (respect the
+    /// DISPCNT enable bits). `Some(mask)` = force the layer set in `mask` to be
+    /// the *only* visible layers, ignoring DISPCNT: bit0..bit3 = BG0..BG3,
+    /// bit4 = OBJ. This lets the frontend view "sprites only", "background only",
+    /// or peek at a layer the game has currently disabled (hidden content).
+    debug_layer_mask: Option<u8>,
 }
 
 impl LCDController {
@@ -168,10 +174,62 @@ impl LCDController {
             bldcnt: 0,   // BLDCNT - Color Special Effects Selection
             bldalpha: 0, // BLDALPHA - Alpha Blending Coefficients
             bldy: 0,     // BLDY - Brightness (Fade-In/Out) Coefficient
+            debug_layer_mask: None,
         }
     }
 
     pub fn get_bg_mode(&self) -> BgMode { self.dispcnt.mode() }
+
+    /// Current BG/video mode as a 0..=5 index (the DISPCNT mode field).
+    pub fn bg_mode_index(&self) -> u8 {
+        match self.dispcnt.mode() {
+            BgMode::Mode0 => 0,
+            BgMode::Mode1 => 1,
+            BgMode::Mode2 => 2,
+            BgMode::Mode3 => 3,
+            BgMode::Mode4 => 4,
+            BgMode::Mode5 => 5,
+        }
+    }
+
+    /// DISPCNT layer-enable bits packed for the frontend: bit0..bit3 = BG0..BG3,
+    /// bit4 = OBJ. Reflects what the *game* has enabled, independent of any
+    /// debugger isolation override.
+    pub fn dispcnt_layer_flags(&self) -> u8 {
+        (self.dispcnt.screen_display_bg0() as u8)
+            | ((self.dispcnt.screen_display_bg1() as u8) << 1)
+            | ((self.dispcnt.screen_display_bg2() as u8) << 2)
+            | ((self.dispcnt.screen_display_bg3() as u8) << 3)
+            | ((self.dispcnt.screen_display_obj() as u8) << 4)
+    }
+
+    /// Set (or clear with `None`) the debugger layer-isolation override.
+    pub fn set_debug_layer_mask(&mut self, mask: Option<u8>) {
+        self.debug_layer_mask = mask;
+    }
+
+    /// Whether BG layer `0..=3` should be drawn: the isolation mask when active,
+    /// otherwise the game's DISPCNT enable bit.
+    fn bg_layer_visible(&self, layer: usize) -> bool {
+        match self.debug_layer_mask {
+            Some(m) => (m >> layer) & 1 != 0,
+            None => match layer {
+                0 => self.dispcnt.screen_display_bg0(),
+                1 => self.dispcnt.screen_display_bg1(),
+                2 => self.dispcnt.screen_display_bg2(),
+                3 => self.dispcnt.screen_display_bg3(),
+                _ => false,
+            },
+        }
+    }
+
+    /// Whether the OBJ (sprite) layer should be drawn under the current override.
+    fn obj_visible(&self) -> bool {
+        match self.debug_layer_mask {
+            Some(m) => (m >> 4) & 1 != 0,
+            None => self.dispcnt.screen_display_obj(),
+        }
+    }
 
     pub fn run(&mut self, cycles: usize) -> (bool, bool) {
         self.cycles += cycles;
@@ -883,7 +941,7 @@ impl LCDController {
     fn render_obj_line(&self, line: usize, vram: &Ram, palette: &Ram, oam: &Ram) -> (Vec<Option<ObjPixel>>, Vec<bool>) {
         let mut buf: Vec<Option<ObjPixel>> = vec![None; 240];
         let mut objwin: Vec<bool> = vec![false; 240];
-        if !self.dispcnt.screen_display_obj() {
+        if !self.obj_visible() {
             return (buf, objwin);
         }
         let one_d = self.dispcnt.obj_char_mapping();
@@ -1091,35 +1149,15 @@ impl LCDController {
         vram: &Ram,
         palette: &Ram,
     ) -> Option<(u16, BGR)> {
-        let (enabled, bgcnt, scroll_x, scroll_y) = match layer {
-            0 => (
-                self.dispcnt.screen_display_bg0(),
-                self.bg0cnt,
-                self.bg0hofs as Word,
-                self.bg0vofs as Word,
-            ),
-            1 => (
-                self.dispcnt.screen_display_bg1(),
-                self.bg1cnt,
-                self.bg1hofs as Word,
-                self.bg1vofs as Word,
-            ),
-            2 => (
-                self.dispcnt.screen_display_bg2(),
-                self.bg2cnt,
-                self.bg2hofs as Word,
-                self.bg2vofs as Word,
-            ),
-            3 => (
-                self.dispcnt.screen_display_bg3(),
-                self.bg3cnt,
-                self.bg3hofs as Word,
-                self.bg3vofs as Word,
-            ),
+        let (bgcnt, scroll_x, scroll_y) = match layer {
+            0 => (self.bg0cnt, self.bg0hofs as Word, self.bg0vofs as Word),
+            1 => (self.bg1cnt, self.bg1hofs as Word, self.bg1vofs as Word),
+            2 => (self.bg2cnt, self.bg2hofs as Word, self.bg2vofs as Word),
+            3 => (self.bg3cnt, self.bg3hofs as Word, self.bg3vofs as Word),
             _ => return None,
         };
 
-        if !enabled {
+        if !self.bg_layer_visible(layer) {
             return None;
         }
 
@@ -1211,9 +1249,8 @@ impl LCDController {
         vram: &Ram,
         palette: &Ram,
     ) -> Option<(u16, BGR)> {
-        let (enabled, bgcnt, pa, pb, pc, pd, refx, refy) = match layer {
+        let (bgcnt, pa, pb, pc, pd, refx, refy) = match layer {
             2 => (
-                self.dispcnt.screen_display_bg2(),
                 self.bg2cnt,
                 self.bg2pa as i16 as i32,
                 self.bg2pb as i16 as i32,
@@ -1223,7 +1260,6 @@ impl LCDController {
                 self.bg2y as i32,
             ),
             3 => (
-                self.dispcnt.screen_display_bg3(),
                 self.bg3cnt,
                 self.bg3pa as i16 as i32,
                 self.bg3pb as i16 as i32,
@@ -1234,7 +1270,7 @@ impl LCDController {
             ),
             _ => return None,
         };
-        if !enabled {
+        if !self.bg_layer_visible(layer) {
             return None;
         }
 
@@ -1297,7 +1333,7 @@ impl LCDController {
     fn scanline_bitmap3(&mut self, line: usize, vram: &Ram, palette: &Ram, oam: &Ram) {
         let (obj, _objwin) = self.render_obj_line(line, vram, palette, oam);
         let bg_prio = self.bg2cnt.bg_priority();
-        let bg_on = self.dispcnt.screen_display_bg2();
+        let bg_on = self.bg_layer_visible(2);
         let backdrop = BGR::new(palette.read_halfword(0));
         let base = line * 240 * 4;
         for x in 0..240usize {
@@ -1317,7 +1353,7 @@ impl LCDController {
         let (obj, _objwin) = self.render_obj_line(line, vram, palette, oam);
         let offset = if matches!(self.dispcnt.frame(), Frame::Frame1) { 0xA000 } else { 0x0000 };
         let bg_prio = self.bg2cnt.bg_priority();
-        let bg_on = self.dispcnt.screen_display_bg2();
+        let bg_on = self.bg_layer_visible(2);
         let backdrop = BGR::new(palette.read_halfword(0));
         let base = line * 240 * 4;
         for x in 0..240usize {
@@ -1339,7 +1375,7 @@ impl LCDController {
     fn scanline_bitmap5(&mut self, line: usize, vram: &Ram, palette: &Ram, oam: &Ram) {
         let (obj, _objwin) = self.render_obj_line(line, vram, palette, oam);
         let base_addr = if matches!(self.dispcnt.frame(), Frame::Frame1) { 0xA000u32 } else { 0 };
-        let bg_on = self.dispcnt.screen_display_bg2();
+        let bg_on = self.bg_layer_visible(2);
         let bg_prio = self.bg2cnt.bg_priority();
         let pa = self.bg2pa as i16 as i32;
         let pb = self.bg2pb as i16 as i32;
