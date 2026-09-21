@@ -819,6 +819,67 @@ mod test {
         assert!(arm.get_gpr(PC) > pc_before);
     }
 
+    /// Run a Thumb snippet from address 0x100 with the given initial r0..r3
+    /// and return the CPU afterwards. Each instruction is stepped exactly once.
+    fn run_thumb(code: &[u16], regs: [u32; 4]) -> ARM {
+        let mut bus = MockBus::new();
+        for (i, insn) in code.iter().enumerate() {
+            let a = 0x100 + i * 2;
+            bus.mem[a..a + 2].copy_from_slice(&insn.to_le_bytes());
+        }
+        let mut arm = ARM::new();
+        arm.reset();
+        arm.cpsr.set_cpu_state(CpuState::Thumb);
+        arm.set_gpr(PC, 0x100);
+        arm.flush_pipeline();
+        for (i, r) in regs.iter().enumerate() {
+            arm.set_gpr(i, *r);
+        }
+        for _ in 0..code.len() {
+            arm.step(&mut bus, false).unwrap();
+        }
+        arm
+    }
+
+    #[test]
+    fn thumb_add_imm3_sets_carry_on_wrap() {
+        // adds r0, r0, #1 with r0 = 0xFFFF_FFFF -> 0, C=1, Z=1. Compilers emit
+        // `bcc loop` after this to count a negative index up to zero.
+        let arm = run_thumb(&[0x1C40], [0xFFFF_FFFF, 0, 0, 0]);
+        assert_eq!(arm.get_gpr(0), 0);
+        assert!(arm.cpsr.get_C());
+        assert!(arm.cpsr.get_Z());
+        let arm = run_thumb(&[0x1C40], [5, 0, 0, 0]);
+        assert_eq!(arm.get_gpr(0), 6);
+        assert!(!arm.cpsr.get_C());
+    }
+
+    #[test]
+    fn thumb_neg_carry_only_when_operand_is_zero() {
+        // neg r0, r1 == rsbs r0, r1, #0: C = NOT borrow(0 - r1).
+        let arm = run_thumb(&[0x4248], [0, 5, 0, 0]);
+        assert_eq!(arm.get_gpr(0), (-5i32) as u32);
+        assert!(!arm.cpsr.get_C());
+        assert!(arm.cpsr.get_N());
+        let arm = run_thumb(&[0x4248], [0, 0, 0, 0]);
+        assert_eq!(arm.get_gpr(0), 0);
+        assert!(arm.cpsr.get_C());
+        assert!(arm.cpsr.get_Z());
+    }
+
+    #[test]
+    fn thumb_sbc_carry_is_not_borrow() {
+        // cmp r2, r2 (C=1) ; sbc r0, r1
+        let arm = run_thumb(&[0x4292, 0x4188], [32, 16, 0, 0]);
+        assert_eq!(arm.get_gpr(0), 16);
+        assert!(arm.cpsr.get_C(), "32 - 16 - 0 does not borrow");
+        // cmp r2, r3 with r2 < r3 (C=0) ; sbc r0, r1 -> 5 - 16 - 1 borrows
+        let arm = run_thumb(&[0x429A, 0x4188], [5, 16, 1, 2]);
+        assert_eq!(arm.get_gpr(0), 5u32.wrapping_sub(17));
+        assert!(!arm.cpsr.get_C());
+        assert!(arm.cpsr.get_N());
+    }
+
     #[test]
     // step
     fn increment_pc_by_tick() {
