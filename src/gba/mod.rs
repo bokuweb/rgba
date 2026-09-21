@@ -443,7 +443,7 @@ mod repro {
             let buf = gba.frame(false);
             // Report whether this frame has any visible variation (not a flat color).
             let first = &buf[0..3];
-            let varied = buf.chunks_exact(4).any(|px| px[0..3] != *first);
+            let varied = buf.as_chunks::<4>().0.iter().any(|px| px[0..3] != *first);
             if fr % 30 == 0 || fr == total - 1 {
                 write_bmp(&format!("target/bb/f{fr:05}.bmp"), &buf);
                 let dispcnt = gba.bus.read_halfword(0x0400_0000);
