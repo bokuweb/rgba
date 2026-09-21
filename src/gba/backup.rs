@@ -227,9 +227,7 @@ impl Backup {
             0x80 => self.erase_armed = true,        // erase command coming
             0x10 if self.erase_armed => {
                 // Chip erase.
-                for b in &mut self.data {
-                    *b = 0xFF;
-                }
+                self.data.fill(0xFF);
                 self.erase_armed = false;
                 self.dirty = true;
             }
