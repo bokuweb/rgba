@@ -244,7 +244,11 @@ impl BusAccessor for CpuBus {
                 self.timers.read(ofs)
             }
             0x0400_0060..=0x0400_00A7 => self.apu.read_register(addr),
-            0x0400_00A8..=0x0400_03FF => 0,
+            // DMA / SIO / IE / IF / WAITCNT / IME: byte reads see the containing halfword.
+            0x0400_00A8..=0x0400_03FF => {
+                let hw = self.read_halfword(addr & !1);
+                if (addr & 1) == 0 { (hw & 0x00FF) as u8 } else { (hw >> 8) as u8 }
+            }
             // Palette 1KB mirrors
             0x0500_0000..=0x05FF_FFFF => self.palette.read_byte((addr - 0x0500_0000) & 0x3FF),
             // Fix(004): VRAM mirror (wraps at 0x20000; 0x18000-0x1FFFF maps to 0x10000-0x17FFF)
@@ -467,16 +471,23 @@ impl BusAccessor for CpuBus {
                 let ofs = addr - 0x0400_0100 ;
                 self.timers.write(ofs, data);
             }
-            0x0400_0060..=0x0400_03FF => {
-                // TODO: Implement DMA, Timer, and other I/O registers
-                match addr {
-                    // Sound registers + FIFO (byte access)
-                    0x0400_0060..=0x0400_00A7 => self.apu.write_register(addr, data),
-                    _ if (0x0400_00B0..=0x0400_00DE).contains(&addr) => {
-                        let _ = data;
-                    }
-                    _ => {}
-                }
+            // Sound registers + FIFO (byte access)
+            0x0400_0060..=0x0400_00A7 => self.apu.write_register(addr, data),
+            // IF is acknowledge-on-write: a byte store must only clear the bits in
+            // that byte, so don't merge in the other (still pending) half.
+            0x0400_0202 => self.interrupt_controller.borrow_mut().write_if(data as HalfWord),
+            0x0400_0203 => self.interrupt_controller.borrow_mut().write_if((data as HalfWord) << 8),
+            // DMA / SIO / IE / WAITCNT / IME: byte stores read-modify-write the
+            // containing halfword register.
+            0x0400_00A8..=0x0400_03FF => {
+                let aligned = addr & !1;
+                let cur = self.read_halfword(aligned);
+                let new = if (addr & 1) == 0 {
+                    (cur & 0xFF00) | (data as u16)
+                } else {
+                    (cur & 0x00FF) | ((data as u16) << 8)
+                };
+                self.write_halfword(aligned, new);
             }
             // Palette: byte store behaves as halfword store replicated (0xVV -> 0xVVVV)
             0x0500_0000..=0x05FF_FFFF => {
@@ -525,7 +536,7 @@ impl BusAccessor for CpuBus {
         }
         match addr {
             // I/O Register
-            0x0200_0000..=0x02FF_FFFF => self.eram.write_halfword((addr - 0x0200_0000) & 0x3F_FFFF, data),
+            0x0200_0000..=0x02FF_FFFF => self.eram.write_halfword((addr - 0x0200_0000) & 0x3FFFF, data),
             // BIOS IF work area mirror (0x03007FF8, mirrored in all IWRAM aliases)
             0x0300_0000..=0x03FF_FFFF if ((addr - 0x0300_0000) & 0x7FFF) == 0x7FF8 => {
                 self.interrupt_controller.borrow_mut().write_bios_if_work(data);
@@ -664,15 +675,13 @@ impl BusAccessor for CpuBus {
                 self.interrupt_controller.borrow_mut().write_bios_if_work((data & 0xFFFF) as HalfWord);
                 self.wram.write_word(0x7FF8, data);
             }
-            // WRAM
-            0x0300_0000..=0x0300_7FFF => {
-                // info!("wram addr = {:x} {:x}", addr, data);
-                let off = addr - 0x0300_0000;
+            // IWRAM, mirrored every 32 KiB across the whole 0x03xxxxxx page.
+            // The top mirror matters: libtonc-style runtimes install their IRQ
+            // handler through `*(fnptr*)0x03FFFFFC` (REG_BASE - 4), which the
+            // BIOS IRQ stub reads back as `ldr pc, [r0, #-4]` with r0 = 0x04000000.
+            0x0300_0000..=0x03FF_FFFF => {
+                let off = (addr - 0x0300_0000) & 0x7FFF;
                 self.wram.write_word(off, data);
-            }
-            // Unused
-            0x0300_8000..=0x03FF_FFFF => {
-                tracing::warn!("Write to unused area 0x{addr:08x} = 0x{data:08x} (ignored)");
             }
             0x0400_0000..=0x0400_005F => self.lcdc.write_word(addr - 0x0400_0000, data),
             0x0400_0100..=0x0400_010F => {
@@ -1663,6 +1672,58 @@ mod tests {
         bus.interrupt_controller.borrow().read_if()
     }
 
+    #[test]
+    fn iwram_word_write_through_top_mirror_lands_in_iwram() {
+        // libtonc installs its ISR via `*(fnptr*)0x03FFFFFC` (REG_BASE - 4); the
+        // BIOS IRQ stub reads it back through 0x03007FFC. Both are the same cell.
+        let mut bus = new_bus();
+        bus.write_word(0x03FF_FFFC, 0x0300_17BC);
+        assert_eq!(bus.read_word(0x0300_7FFC), 0x0300_17BC);
+        // Any 32 KiB-aligned alias works, and reads through the alias too.
+        bus.write_word(0x0301_0010, 0xDEAD_BEEF);
+        assert_eq!(bus.read_word(0x0300_0010), 0xDEAD_BEEF);
+        assert_eq!(bus.read_word(0x03FF_8010), 0xDEAD_BEEF);
+    }
+
+    #[test]
+    fn ewram_halfword_write_wraps_at_256k() {
+        // 0x0204_0000.. mirrors 0x0200_0000..; the mask must not exceed the
+        // 256 KiB buffer (it used to be 0x3F_FFFF, which panicked on a mirror).
+        let mut bus = new_bus();
+        bus.write_halfword(0x0204_0002, 0x1234);
+        assert_eq!(bus.read_halfword(0x0200_0002), 0x1234);
+        bus.write_halfword(0x02FF_FFFE, 0xBEEF);
+        assert_eq!(bus.read_halfword(0x0203_FFFE), 0xBEEF);
+    }
+
+    #[test]
+    fn byte_access_to_ie_if_ime_waitcnt() {
+        let mut bus = new_bus();
+        // IME / IE via byte stores (some toolchains emit strb for `REG_IME = 1`).
+        bus.write_byte(0x0400_0208, 0x01);
+        assert_eq!(bus.read_halfword(0x0400_0208), 0x0001);
+        assert_eq!(bus.read_byte(0x0400_0208), 0x01);
+        bus.write_byte(0x0400_0200, 0x09);
+        bus.write_byte(0x0400_0201, 0x10);
+        assert_eq!(bus.read_halfword(0x0400_0200), 0x1009);
+        assert_eq!(bus.read_byte(0x0400_0201), 0x10);
+        // WAITCNT byte store keeps the other half.
+        bus.write_halfword(0x0400_0204, 0x4317);
+        bus.write_byte(0x0400_0204, 0x14);
+        assert_eq!(bus.read_halfword(0x0400_0204), 0x4314);
+
+        // IF is acknowledge-on-write: a byte store clears only bits of that byte
+        // and must not (via read-modify-write) acknowledge the other half.
+        bus.interrupt_controller.borrow_mut().write_ie(0xFFFF);
+        bus.interrupt_controller.borrow_mut().request_interrupt(InterruptType::VBlank);
+        bus.interrupt_controller.borrow_mut().request_interrupt(InterruptType::Keypad);
+        assert_eq!(if_flags(&bus), 0x1001);
+        bus.write_byte(0x0400_0202, 0x01);
+        assert_eq!(if_flags(&bus), 0x1000, "high byte must survive a low-byte ack");
+        bus.write_byte(0x0400_0203, 0x10);
+        assert_eq!(if_flags(&bus), 0x0000);
+    }
+
     /// Build a bus whose GamePak ROM is filled with `insn`, run an ARM core from
     /// 0x0800_0000 with the given WAITCNT, and return the steady-state cycle cost
     /// of one instruction. A DP instruction does no data access, so this measures
@@ -1942,7 +2003,7 @@ mod tests {
         assert_eq!(bus.read_byte(addr + 1), ((((addr + 1) >> 1) >> 8) as u8));
         // Word reads combine two consecutive open-bus halfwords.
         let lo = (addr >> 1) & 0xFFFF;
-        let hi = ((addr + 2) >> 1) & 0xFFFF;
+        let hi = u32::midpoint(addr, 2) & 0xFFFF;
         assert_eq!(bus.read_word(addr), lo | (hi << 16));
     }
 }
