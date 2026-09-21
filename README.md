@@ -188,6 +188,10 @@ are recorded per entry and shown in the debugger when a ROM is loaded.
 | [Bugtris](https://github.com/NotImplementedLife/Bugtris) | NotImplementedLife | GBA Jam 2022 | GPL-3.0 |
 | [The Hat Chooses the Wizard](https://github.com/agbrs/agb/tree/master/examples/the-hat-chooses-the-wizard) | agb (Corwin & Gwilym) | GBA Jam 2021 | MPL-2.0 |
 | [The Purple Night](https://github.com/agbrs/agb/tree/master/examples/the-purple-night) | agb team | GBA Jam 2022 | MPL-2.0 |
+| [Feline](https://github.com/foopod/gbaGamejam2021/tree/main/feline) | Jono Shields | GBA Jam 2021 | MIT code, CC0 art/SFX, CC BY-NC-SA music (modarchive.org) |
+| [Varooom 3D](https://github.com/GValiente/butano/tree/master/games/varooom-3d) | GValiente, tempest, Kaappis | GBA Jam 2021 | Zlib |
+| [Butano Fighter](https://github.com/GValiente/butano/tree/master/games/butano-fighter) | GValiente | — | Zlib |
+| [2048 Advance](https://github.com/Paperdomo101/2048-GBA) | Basil Termini | GBA Jam 2024 | CC0-1.0 |
 | [gba-tests](https://github.com/jsmolka/gba-tests) arm / thumb / memory / bios | jsmolka | — | MIT |
 | [mGBA test suite](https://github.com/mgba-emu/suite) | endrift | — | MIT |
 | hello, lifegame | bokuweb | — | this repository |
