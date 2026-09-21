@@ -1567,4 +1567,98 @@ mod test {
         assert_eq!(bus.get_mem(0x0000_0118), 0xA000_0006);
         assert_eq!(bus.get_mem(0x0000_011c), 0xA000_0007);
     }
+
+    // --- Thumb ALU flag regressions ---
+    //
+    // Run a single Thumb instruction (padded with a NOP `mov r8, r8`) from
+    // address 0 with the CPU already in Thumb state.
+    fn run_thumb(op: u16, init: impl FnOnce(&mut ARM)) -> ARM {
+        setup();
+        let mut bus = MockBus::new();
+        bus.set(0x0, u32::from(op) | (0x46C0 << 16)); // op; nop
+        bus.set(0x4, 0x46C0_46C0);
+        let mut arm = ARM::new();
+        arm.cpsr.set_cpu_state(crate::cpu::registers::psr::CpuState::Thumb);
+        init(&mut arm);
+        arm.run_immediately(&mut bus);
+        arm
+    }
+
+    #[test]
+    // neg r3, r0 (rsbs r3, r0, #0) with r0 = 3: 0 - 3 borrows, so C must be
+    // clear. GCC relies on this for `x == K` idioms (`rsbs; adcs`), and
+    // BPCore-Engine's Lua parser mis-parsed every script when C was set here.
+    fn thumb_neg_positive_operand_clears_carry() {
+        let arm = run_thumb(0x4243, |arm| {
+            arm.cpsr.set_C(true);
+            arm.set_gpr(0, 3);
+        });
+        assert_eq!(arm.get_gpr(3), 0xFFFF_FFFD);
+        assert!(!arm.get_cpsr().get_C());
+        assert!(arm.get_cpsr().get_N());
+        assert!(!arm.get_cpsr().get_Z());
+        assert!(!arm.get_cpsr().get_V());
+    }
+
+    #[test]
+    // neg r3, r0 with r0 = 0: no borrow, C set, Z set.
+    fn thumb_neg_zero_operand_sets_carry_and_zero() {
+        let arm = run_thumb(0x4243, |arm| {
+            arm.cpsr.set_C(false);
+            arm.set_gpr(0, 0);
+        });
+        assert_eq!(arm.get_gpr(3), 0);
+        assert!(arm.get_cpsr().get_C());
+        assert!(arm.get_cpsr().get_Z());
+        assert!(!arm.get_cpsr().get_N());
+        assert!(!arm.get_cpsr().get_V());
+    }
+
+    #[test]
+    // neg r3, r0 with r0 = 0x8000_0000: result wraps to itself, borrow (C=0)
+    // and signed overflow (V=1). Must not panic in debug builds either.
+    fn thumb_neg_int_min_sets_overflow() {
+        let arm = run_thumb(0x4243, |arm| {
+            arm.set_gpr(0, 0x8000_0000);
+        });
+        assert_eq!(arm.get_gpr(3), 0x8000_0000);
+        assert!(!arm.get_cpsr().get_C());
+        assert!(arm.get_cpsr().get_V());
+        assert!(arm.get_cpsr().get_N());
+    }
+
+    #[test]
+    // neg r3, r0 with r0 = -5: 0 - (-5) = 5, borrow as unsigned, so C=0.
+    fn thumb_neg_negative_operand_clears_carry() {
+        let arm = run_thumb(0x4243, |arm| {
+            arm.set_gpr(0, 0xFFFF_FFFB);
+        });
+        assert_eq!(arm.get_gpr(3), 5);
+        assert!(!arm.get_cpsr().get_C());
+        assert!(!arm.get_cpsr().get_V());
+    }
+
+    #[test]
+    // sbc r3, r0 (r3 = r3 - r0 - !C): 10 - 3 - 0 with C set -> 7, no borrow, C=1.
+    fn thumb_sbc_no_borrow_sets_carry() {
+        let arm = run_thumb(0x4183, |arm| {
+            arm.cpsr.set_C(true);
+            arm.set_gpr(3, 10);
+            arm.set_gpr(0, 3);
+        });
+        assert_eq!(arm.get_gpr(3), 7);
+        assert!(arm.get_cpsr().get_C());
+    }
+
+    #[test]
+    // sbc r3, r0: 3 - 10 - 1 with C clear -> borrow, C=0.
+    fn thumb_sbc_borrow_clears_carry() {
+        let arm = run_thumb(0x4183, |arm| {
+            arm.cpsr.set_C(false);
+            arm.set_gpr(3, 3);
+            arm.set_gpr(0, 10);
+        });
+        assert_eq!(arm.get_gpr(3), 0xFFFF_FFF8);
+        assert!(!arm.get_cpsr().get_C());
+    }
 }

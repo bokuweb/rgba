@@ -105,8 +105,7 @@ cargo run --release -- ./fixtures/hello/hello.gba
 Verified with [jsmolka/gba-tests](https://github.com/jsmolka/gba-tests) (ARM /
 THUMB / memory / BIOS), the [mGBA test suite](https://github.com/mgba-emu/suite),
 armwrestler and the homebrew titles in the ROM library. Compatibility is still
-a work in progress — some engines (e.g. BPCore/Lua, some Butano titles) don't
-boot yet.
+a work in progress — some Butano titles don't boot yet.
 
 ## Architecture
 
@@ -188,6 +187,7 @@ are recorded per entry and shown in the debugger when a ROM is loaded.
 | [Bugtris](https://github.com/NotImplementedLife/Bugtris) | NotImplementedLife | GBA Jam 2022 | GPL-3.0 |
 | [The Hat Chooses the Wizard](https://github.com/agbrs/agb/tree/master/examples/the-hat-chooses-the-wizard) | agb (Corwin & Gwilym) | GBA Jam 2021 | MPL-2.0 |
 | [The Purple Night](https://github.com/agbrs/agb/tree/master/examples/the-purple-night) | agb team | GBA Jam 2022 | MPL-2.0 |
+| [MeteoRain](https://github.com/drludos/meteorain-gba) | Dr. Ludos | GBA Jam 2021 | MIT code; music "Overmode" by Warlord is CC BY-NC-SA |
 | [gba-tests](https://github.com/jsmolka/gba-tests) arm / thumb / memory / bios | jsmolka | — | MIT |
 | [mGBA test suite](https://github.com/mgba-emu/suite) | endrift | — | MIT |
 | hello, lifegame | bokuweb | — | this repository |

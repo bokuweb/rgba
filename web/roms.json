@@ -194,6 +194,19 @@
           "sha256": "646c2a5d3405c82c7f165bfdff99e3ffd372b02f861017da9ec1f623cdfb3edc",
           "size": 8388608,
           "note": "Action platformer written in Rust with the agb crate. ROM mirrored from the gbadev Homebrew Hub database (pinned commit)."
+        },
+        {
+          "id": "meteorain",
+          "title": "MeteoRain",
+          "file": "meteorain.gba",
+          "author": "Dr. Ludos · music \"Overmode\" by Warlord",
+          "event": "GBA Jam 2021",
+          "license": "MIT code; music \"Overmode\" by Warlord is CC BY-NC-SA",
+          "source": "https://github.com/drludos/meteorain-gba",
+          "url": "https://raw.githubusercontent.com/gbadev-org/games/c1a9c4d700eee7e9bb9bac8d7105e220c86fbade/entries/meteorain-gba-jam-2021/MeteoRain.gba",
+          "sha256": "ce45d4624c385bf2aa4545aee8613cfff5f4b1f3879a0c704dfc5e349f64798d",
+          "size": 1710503,
+          "note": "Dodge the meteors. Written in Lua on BPCore-Engine. ROM mirrored from the gbadev Homebrew Hub database (pinned commit)."
         }
       ]
     },
