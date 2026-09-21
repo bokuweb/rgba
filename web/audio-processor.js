@@ -1,4 +1,4 @@
-// AudioWorklet processor for rusty-gba.
+// AudioWorklet processor for rgba.
 //
 // The main thread posts interleaved L/R Float32 chunks (drained from the
 // emulator's APU each frame). We queue them and emit them sample-by-sample in

@@ -1,4 +1,4 @@
-# rusty-gba — web debugger (WASM)
+# rgba — web debugger (WASM)
 
 Hosted build: https://bokuweb.github.io/rgba/ (deployed from `main` by
 `.github/workflows/pages.yml`).
@@ -13,6 +13,23 @@ A browser frontend for the emulator core, No$gba-style:
   editing (click a byte, type, Enter);
 * **disassemble** (bin → asm) and **assemble** (asm → bin) ARM into memory;
 * **audio** via an AudioWorklet (`web/audio-processor.js`).
+
+## ROM library
+
+The toolbar's **library** picker loads open-source ROMs listed in
+[`roms.json`](roms.json): MIT-licensed homebrew from GBA Jam (Dungeon Master,
+CASCADE7, Where is the ball?, GBA Microjam '23, BeatBeast) plus the jsmolka
+`gba-tests` and mGBA test suites. Each entry records author, license and a
+source link, which are shown next to the picker once loaded. `?rom=<id>` in the
+URL deep-links to an entry (e.g. [`?rom=dungeon-master`](https://bokuweb.github.io/rgba/?rom=dungeon-master)).
+
+The files themselves are not committed; `fetch-roms.py` downloads them from
+each author's GitHub release (verifying the pinned sha256) and copies the
+in-repo fixtures into `web/roms/`:
+
+```sh
+python3 web/fetch-roms.py
+```
 
 ## Build
 
@@ -34,7 +51,8 @@ python3 -m http.server 8753
 # then open http://localhost:8753/web/
 ```
 
-Pick a `.gba` file (e.g. `fixtures/hello/hello.gba`) to start.
+Pick a ROM from the library dropdown, or load any `.gba` file
+(e.g. `fixtures/hello/hello.gba`).
 
 Keys: `Z`=A `X`=B `Enter`=Start `Space`=Select arrows=D-Pad `A`=L `S`=R.
 

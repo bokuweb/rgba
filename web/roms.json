@@ -1,0 +1,150 @@
+{
+  "_comment": "ROM library for the web debugger. Every entry is open source; `file` is served from web/roms/ (populated by web/fetch-roms.sh, which also verifies `sha256`). Entries with `fixture` are copied from this repository, the rest are downloaded from the author's GitHub release.",
+  "groups": [
+    {
+      "name": "Homebrew games",
+      "roms": [
+        {
+          "id": "dungeon-master",
+          "title": "Dungeon Master",
+          "file": "dungeon-master.gba",
+          "author": "Maksim Jaroslavcevas (Maksasj)",
+          "event": "GBA Jam 2022",
+          "license": "MIT",
+          "source": "https://github.com/Maksasj/dungeon_master",
+          "url": "https://github.com/Maksasj/dungeon_master/releases/download/0.2/main.gba",
+          "sha256": "0ad1222343cc71a27ec22f7e2b78338d90f9b986652be7d857732e5387fb8eb8",
+          "size": 872004,
+          "note": "Rogue-like written in C with devkitadv."
+        },
+        {
+          "id": "cascade7",
+          "title": "CASCADE7",
+          "file": "cascade7.gba",
+          "author": "Mick Schroeder",
+          "license": "MIT",
+          "source": "https://github.com/mick-schroeder/gba-cascade7",
+          "url": "https://github.com/mick-schroeder/gba-cascade7/releases/download/v1.0.0/CASCADE7.gba",
+          "sha256": "24311677e8c24cf1e34f854ec75d706f2f08c0798f4bd8a781a600e439dcf291",
+          "size": 224924,
+          "note": "Drop7-style puzzle game built with Butano. The CASCADE7 name and logo are trademarks of Mick Schroeder, LLC."
+        },
+        {
+          "id": "where-is-the-ball",
+          "title": "Where is the ball?",
+          "file": "where-is-the-ball.gba",
+          "author": "johedan20012",
+          "event": "GBA Jam 2021",
+          "license": "MIT",
+          "source": "https://github.com/johedan20012/WhereIsTheBall",
+          "url": "https://github.com/johedan20012/WhereIsTheBall/releases/download/IDK/WhereIsTheBall.gba",
+          "sha256": "ed896a3b2b2dce9e83b4fba1820172931e83372ecedf9d0919a4c55e73001e53",
+          "size": 43100,
+          "note": "Tiny shell-game entry (43 KB)."
+        },
+        {
+          "id": "microjam23",
+          "title": "GBA Microjam '23",
+          "file": "microjam23.gba",
+          "author": "gbadev community",
+          "event": "GBA Microjam 2023",
+          "license": "MIT (see licenses/ in the release zip for per-asset credits)",
+          "source": "https://github.com/gbadev-org/microjam23",
+          "url": "https://github.com/gbadev-org/microjam23/releases/download/1.02/microjam23.zip",
+          "zip_member": "microjam23.gba",
+          "sha256": "3c097651d4f00e6130b3eab7e148c8d2bb182200db8ec3babdcf19d696f49339",
+          "size": 11166812,
+          "note": "WarioWare-style collection of community microgames (Butano)."
+        },
+        {
+          "id": "beat-beast",
+          "title": "BeatBeast",
+          "file": "beat-beast.gba",
+          "author": "afska et al.",
+          "event": "GBA Jam 2024",
+          "license": "MIT (code); music/SFX by Synthenia, CC BY-NC 4.0",
+          "source": "https://github.com/afska/beat-beast",
+          "url": "https://github.com/afska/beat-beast/releases/download/v1.1.7/BeatBeast_jam.gba",
+          "sha256": "2a4986bdf6bd65601f1ae08f471d0aafc3e23d57f594162f77f351a1150e43eb",
+          "size": 33506864,
+          "note": "Rhythm shooter with PCM/GSM streaming audio — a good DMA + timer + FIFO stress test. 32 MB download."
+        }
+      ]
+    },
+    {
+      "name": "Test ROMs",
+      "roms": [
+        {
+          "id": "gba-tests-arm",
+          "title": "gba-tests: arm",
+          "file": "gba-tests-arm.gba",
+          "fixture": "fixtures/gba-tests/arm/arm.gba",
+          "author": "Julian Smolka (jsmolka)",
+          "license": "MIT",
+          "source": "https://github.com/jsmolka/gba-tests",
+          "note": "ARM instruction tests. Prints the number of the first failing test, or a pass screen."
+        },
+        {
+          "id": "gba-tests-thumb",
+          "title": "gba-tests: thumb",
+          "file": "gba-tests-thumb.gba",
+          "fixture": "fixtures/gba-tests/thumb/thumb.gba",
+          "author": "Julian Smolka (jsmolka)",
+          "license": "MIT",
+          "source": "https://github.com/jsmolka/gba-tests",
+          "note": "THUMB instruction tests."
+        },
+        {
+          "id": "gba-tests-memory",
+          "title": "gba-tests: memory",
+          "file": "gba-tests-memory.gba",
+          "fixture": "fixtures/gba-tests/memory/memory.gba",
+          "author": "Julian Smolka (jsmolka)",
+          "license": "MIT",
+          "source": "https://github.com/jsmolka/gba-tests",
+          "note": "Memory mirroring / access-width tests."
+        },
+        {
+          "id": "gba-tests-bios",
+          "title": "gba-tests: bios",
+          "file": "gba-tests-bios.gba",
+          "fixture": "fixtures/gba-tests/bios/bios.gba",
+          "author": "Julian Smolka (jsmolka)",
+          "license": "MIT",
+          "source": "https://github.com/jsmolka/gba-tests",
+          "note": "BIOS SWI tests."
+        },
+        {
+          "id": "mgba-suite",
+          "title": "mGBA test suite",
+          "file": "mgba-suite.gba",
+          "fixture": "fixtures/suite/suite.gba",
+          "author": "Jeffrey Pfau (endrift)",
+          "license": "MIT",
+          "source": "https://github.com/mgba-emu/suite",
+          "note": "Timing / memory / video / BIOS accuracy suite; navigate the menu with the D-pad and A."
+        },
+        {
+          "id": "hello",
+          "title": "hello",
+          "file": "hello.gba",
+          "fixture": "fixtures/hello/hello.gba",
+          "author": "bokuweb",
+          "license": "same as this repository",
+          "source": "https://github.com/bokuweb/rgba/tree/main/fixtures/hello",
+          "note": "Minimal C ROM used by the unit tests (860 bytes) — nice for single-stepping."
+        },
+        {
+          "id": "lifegame",
+          "title": "lifegame",
+          "file": "lifegame.gba",
+          "fixture": "fixtures/lifegame/lifegame.gba",
+          "author": "bokuweb",
+          "license": "same as this repository",
+          "source": "https://github.com/bokuweb/rgba/tree/main/fixtures/lifegame",
+          "note": "Conway's Game of Life in mode 3."
+        }
+      ]
+    }
+  ]
+}
