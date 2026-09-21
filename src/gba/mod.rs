@@ -337,6 +337,18 @@ mod repro {
     use crate::io::{Key, KeyStatus};
     use std::io::Write;
 
+    /// Honour `RUST_LOG` in the manual harnesses (tests install no subscriber
+    /// by default). Safe to call more than once.
+    fn init_tracing() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
+            )
+            .with_test_writer()
+            .try_init();
+    }
+
     fn write_bmp(path: &str, rgba: &[u8]) {
         let (w, h) = (240usize, 160usize);
         let row_padded = (w * 3 + 3) & !3;
@@ -426,6 +438,7 @@ mod repro {
     #[ignore = "manual frame-capture harness; requires fixtures/beat_beast/BeatBeast_jam.gba"]
     fn capture_beat_beast() {
         use crate::cpu::bus::accessor::BusAccessor;
+        init_tracing();
         let path =
             std::env::var("ROM").unwrap_or_else(|_| "fixtures/beat_beast/BeatBeast_jam.gba".into());
         let bin = std::fs::read(&path).expect("rom");
@@ -456,6 +469,7 @@ mod repro {
     #[ignore = "manual triage harness; set ROM=path/to/rom.gba"]
     fn probe_rom() {
         use crate::cpu::bus::accessor::BusAccessor;
+        init_tracing();
         let path = std::env::var("ROM").expect("ROM");
         let bin = std::fs::read(&path).expect("rom");
         let mut gba = GBA::from_rom(&bin);
