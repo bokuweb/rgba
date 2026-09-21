@@ -194,6 +194,57 @@
           "sha256": "646c2a5d3405c82c7f165bfdff99e3ffd372b02f861017da9ec1f623cdfb3edc",
           "size": 8388608,
           "note": "Action platformer written in Rust with the agb crate. ROM mirrored from the gbadev Homebrew Hub database (pinned commit)."
+        },
+        {
+          "id": "feline",
+          "title": "Feline",
+          "file": "feline.gba",
+          "author": "Jono Shields (foopod)",
+          "event": "GBA Jam 2021",
+          "license": "MIT (code) · CC0 art & SFX · music by FearsomeDragonfly (modarchive.org), CC BY-NC-SA",
+          "source": "https://github.com/foopod/gbaGamejam2021/tree/main/feline",
+          "url": "https://raw.githubusercontent.com/gbadev-org/games/c1a9c4d700eee7e9bb9bac8d7105e220c86fbade/entries/feline/feline.gba",
+          "sha256": "fb6645e87576bbc3680ef7e30060044c39a3ffcd5231a89433218f68ab88eee8",
+          "size": 1504920,
+          "note": "Cat platformer/adventure built with Butano. Music tracks are CC BY-NC-SA from modarchive.org (see credits/music.txt in the repository). ROM mirrored from the gbadev Homebrew Hub database (pinned commit)."
+        },
+        {
+          "id": "varooom-3d",
+          "title": "Varooom 3D",
+          "file": "varooom-3d.gba",
+          "author": "GValiente, tempest, Kaappis",
+          "event": "GBA Jam 2021",
+          "license": "Zlib",
+          "source": "https://github.com/GValiente/butano/tree/master/games/varooom-3d",
+          "url": "https://raw.githubusercontent.com/gbadev-org/games/c1a9c4d700eee7e9bb9bac8d7105e220c86fbade/entries/varooom3d/varooom-3d.gba",
+          "sha256": "f7d97ee8722e0a58c60825b343339eb8f457e21b0d2bf4a45cb4fd0f9d281029",
+          "size": 7975756,
+          "note": "Software-rendered 3D racer that ships with the Butano engine. ROM mirrored from the gbadev Homebrew Hub database (pinned commit)."
+        },
+        {
+          "id": "butano-fighter",
+          "title": "Butano Fighter",
+          "file": "butano-fighter.gba",
+          "author": "GValiente",
+          "license": "Zlib",
+          "source": "https://github.com/GValiente/butano/tree/master/games/butano-fighter",
+          "url": "https://raw.githubusercontent.com/gbadev-org/games/c1a9c4d700eee7e9bb9bac8d7105e220c86fbade/entries/butano-fighter/butano-fighter.gba",
+          "sha256": "343782e77ce2bf61d27928e2eb86a2238b67145df194fb7dae3dddcd1a13009c",
+          "size": 3482456,
+          "note": "Vertical shoot 'em up that ships with the Butano engine. ROM mirrored from the gbadev Homebrew Hub database (pinned commit)."
+        },
+        {
+          "id": "2048-advance",
+          "title": "2048 Advance",
+          "file": "2048-advance.gba",
+          "author": "Basil Termini (Paperdomo101)",
+          "event": "GBA Jam 2024",
+          "license": "CC0-1.0",
+          "source": "https://github.com/Paperdomo101/2048-GBA",
+          "url": "https://raw.githubusercontent.com/gbadev-org/games/c1a9c4d700eee7e9bb9bac8d7105e220c86fbade/entries/basil-termini_2048-advance/files/2048_jam.gba",
+          "sha256": "706e37783f00a0eb48f3f2f42f9455d0766e34bc61064277127ffd2f6deb6dcf",
+          "size": 247232,
+          "note": "Port of Gabriele Cirulli's 2048. ROM mirrored from the gbadev Homebrew Hub database (pinned commit)."
         }
       ]
     },
