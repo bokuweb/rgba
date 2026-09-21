@@ -675,10 +675,10 @@ impl BusAccessor for CpuBus {
                 self.interrupt_controller.borrow_mut().write_bios_if_work((data & 0xFFFF) as HalfWord);
                 self.wram.write_word(0x7FF8, data);
             }
-            // IWRAM, mirrored every 32 KiB across the whole 0x03xxxxxx page.
-            // The top mirror matters: libtonc-style runtimes install their IRQ
-            // handler through `*(fnptr*)0x03FFFFFC` (REG_BASE - 4), which the
-            // BIOS IRQ stub reads back as `ldr pc, [r0, #-4]` with r0 = 0x04000000.
+            // IWRAM 32KB mirrors across 0x0300_0000-0x03FF_FFFF. Word writes
+            // must alias like byte/halfword writes do: tonc-style code (Butano,
+            // libtonc) installs its IRQ handler via `REG_ISR` = 0x03FF_FFFC,
+            // the top mirror of 0x0300_7FFC.
             0x0300_0000..=0x03FF_FFFF => {
                 let off = (addr - 0x0300_0000) & 0x7FFF;
                 self.wram.write_word(off, data);
@@ -1537,8 +1537,8 @@ impl CpuBus {
     fn read_word_internal(&self, addr: Word) -> Word {
         match addr {
             0x0800_0000..=0x0DFF_FFFF => self.gamepak_read_word(addr),
-            0x0300_0000..=0x0300_7FFF => self.wram.read_word(addr - 0x0300_0000),
-            0x0200_0000..=0x0203_FFFF => self.eram.read_word(addr - 0x0200_0000),
+            0x0300_0000..=0x03FF_FFFF => self.wram.read_word((addr - 0x0300_0000) & 0x7FFF),
+            0x0200_0000..=0x02FF_FFFF => self.eram.read_word((addr - 0x0200_0000) & 0x3FFFF),
             0x0600_0000..=0x06FF_FFFF => self.vram.read_word(Self::map_vram_offset(addr)),
             // Allow DMA reads from I/O (e.g. timers/FIFOs) and other mapped ranges.
             _ => self.read_word(addr),
@@ -1548,8 +1548,8 @@ impl CpuBus {
     fn read_halfword_internal(&self, addr: Word) -> HalfWord {
         match addr {
             0x0800_0000..=0x0DFF_FFFF => self.gamepak_read_halfword(addr),
-            0x0300_0000..=0x0300_7FFF => self.wram.read_halfword(addr - 0x0300_0000),
-            0x0200_0000..=0x0203_FFFF => self.eram.read_halfword(addr - 0x0200_0000),
+            0x0300_0000..=0x03FF_FFFF => self.wram.read_halfword((addr - 0x0300_0000) & 0x7FFF),
+            0x0200_0000..=0x02FF_FFFF => self.eram.read_halfword((addr - 0x0200_0000) & 0x3FFFF),
             0x0600_0000..=0x06FF_FFFF => self.vram.read_halfword(Self::map_vram_offset(addr)),
             // Allow DMA reads from I/O (e.g. timers/FIFOs) and other mapped ranges.
             _ => self.read_halfword(addr),
@@ -1572,7 +1572,7 @@ impl CpuBus {
             0x0500_0000..=0x0500_03FF => {
                 self.palette.write_word(addr - 0x0500_0000, data);
             }
-            0x0300_0000..=0x0300_7FFF => self.wram.write_word(addr - 0x0300_0000, data),
+            0x0300_0000..=0x03FF_FFFF => self.wram.write_word((addr - 0x0300_0000) & 0x7FFF, data),
             0x0200_0000..=0x02FF_FFFF => self.eram.write_word((addr - 0x0200_0000) & 0x3FFFF, data),
             0x0700_0000..=0x07FF_FFFF => self.oam.write_word((addr - 0x0700_0000) & 0x3FF, data),
             // I/O registers (DISPCNT, BLDCNT, sound, etc.). A DMA can legitimately
@@ -1609,8 +1609,8 @@ impl CpuBus {
             0x0500_0000..=0x0500_03FF => {
                 self.palette.write_halfword(addr - 0x0500_0000, data);
             }
-            0x0300_0000..=0x0300_7FFF => self.wram.write_halfword(addr - 0x0300_0000, data),
-            0x0200_0000..=0x0203_FFFF => self.eram.write_halfword(addr - 0x0200_0000, data),
+            0x0300_0000..=0x03FF_FFFF => self.wram.write_halfword((addr - 0x0300_0000) & 0x7FFF, data),
+            0x0200_0000..=0x02FF_FFFF => self.eram.write_halfword((addr - 0x0200_0000) & 0x3FFFF, data),
             0x0700_0000..=0x07FF_FFFF => self.oam.write_halfword((addr - 0x0700_0000) & 0x3FF, data),
             // I/O registers (DISPCNT, BLDCNT, sound, etc.). A DMA can legitimately
             // target memory-mapped registers (e.g. games update DISPCNT via DMA);
@@ -1991,6 +1991,64 @@ mod tests {
     }
 
     #[test]
+    fn iwram_mirror_word_write_lands_in_iwram() {
+        // 32KB IWRAM is mirrored every 0x8000 across 0x0300_0000-0x03FF_FFFF.
+        // tonc-style code (Butano, libtonc) installs its IRQ handler through
+        // `REG_ISR` = 0x03FF_FFFC, the top mirror of 0x0300_7FFC, with a word
+        // store; if that write is dropped the BIOS IRQ stub jumps to 0 and the
+        // ROM silently resets on its first VBlank (Feline, Varooom 3D, ...).
+        let mut bus = new_bus();
+        bus.write_word(0x03FF_FFFC, 0x0800_1234);
+        assert_eq!(bus.read_word(0x0300_7FFC), 0x0800_1234);
+        assert_eq!(bus.read_word(0x03FF_FFFC), 0x0800_1234);
+        // Any other alias behaves the same, and byte/halfword views agree.
+        bus.write_word(0x0301_0010, 0xDEAD_BEEF);
+        assert_eq!(bus.read_word(0x0300_0010), 0xDEAD_BEEF);
+        assert_eq!(bus.read_halfword(0x0300_0012), 0xDEAD);
+        assert_eq!(bus.read_byte(0x03FF_8010), 0xEF);
+    }
+
+    #[test]
+    fn ewram_mirror_halfword_write_lands_in_ewram() {
+        // 256KB EWRAM mirrors every 0x40000 across 0x0200_0000-0x02FF_FFFF.
+        let mut bus = new_bus();
+        bus.write_halfword(0x0204_0002, 0xBEEF);
+        assert_eq!(bus.read_halfword(0x0200_0002), 0xBEEF);
+        bus.write_halfword(0x02FF_FFFE, 0xCAFE);
+        assert_eq!(bus.read_halfword(0x0203_FFFE), 0xCAFE);
+    }
+
+    #[test]
+    fn dma_to_iwram_and_ewram_mirrors_lands_in_ram() {
+        // DMA uses its own (non-triggering) memory accessors; they must honour
+        // the same WRAM mirroring as CPU accesses.
+        let mut bus = new_bus();
+        for i in 0..4u32 {
+            bus.write_word(0x0200_0000 + i * 4, 0x1111_0000 + i);
+        }
+        // DMA3: src = EWRAM, dst = top IWRAM mirror, 32-bit, 4 units.
+        bus.write_halfword(0x0400_00D4, 0x0000);
+        bus.write_halfword(0x0400_00D6, 0x0200); // SAD -> 0x02000000
+        bus.write_halfword(0x0400_00D8, 0xFFE0);
+        bus.write_halfword(0x0400_00DA, 0x03FF); // DAD -> 0x03FFFFE0
+        bus.write_halfword(0x0400_00DC, 4);
+        bus.write_halfword(0x0400_00DE, 0x8000 | 0x0400); // enable, 32-bit
+        for i in 0..4u32 {
+            assert_eq!(bus.read_word(0x0300_7FE0 + i * 4), 0x1111_0000 + i);
+        }
+        // And back out of an IWRAM mirror into an EWRAM mirror, 16-bit.
+        bus.write_halfword(0x0400_00D4, 0xFFE0);
+        bus.write_halfword(0x0400_00D6, 0x03FF); // SAD -> 0x03FFFFE0
+        bus.write_halfword(0x0400_00D8, 0x0100);
+        bus.write_halfword(0x0400_00DA, 0x0204); // DAD -> 0x02040100 (mirror of 0x02000100)
+        bus.write_halfword(0x0400_00DC, 8);
+        bus.write_halfword(0x0400_00DE, 0x8000); // enable, 16-bit
+        for i in 0..4u32 {
+            assert_eq!(bus.read_word(0x0200_0100 + i * 4), 0x1111_0000 + i);
+        }
+    }
+
+    #[test]
     fn gamepak_out_of_bounds_reads_open_bus() {
         // The default test ROM is 0x80000 bytes; reads past the cart return the
         // lower 16 bits of (address / 2) per halfword. (gba-tests unsafe t002)
@@ -2003,7 +2061,7 @@ mod tests {
         assert_eq!(bus.read_byte(addr + 1), ((((addr + 1) >> 1) >> 8) as u8));
         // Word reads combine two consecutive open-bus halfwords.
         let lo = (addr >> 1) & 0xFFFF;
-        let hi = u32::midpoint(addr, 2) & 0xFFFF;
+        let hi = ((addr >> 1) + 1) & 0xFFFF; // == ((addr + 2) >> 1) for even addr
         assert_eq!(bus.read_word(addr), lo | (hi << 16));
     }
 }
