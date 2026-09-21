@@ -2,3 +2,5 @@
 /fixtures/*/*.elf
 target
 log
+# macOS AppleDouble sidecar files (exFAT / network volumes)
+._*

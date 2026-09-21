@@ -1,0 +1,68 @@
+name: Deploy web debugger to GitHub Pages
+
+# Builds the WASM package with wasm-pack and publishes `web/` (with the
+# generated `web/pkg/`) to GitHub Pages. The page is served at the repo's
+# Pages URL; `web/index.html` loads `./pkg/rusty_gba.js` relatively, so the
+# directory can be hosted as-is.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deployment at a time; let in-progress runs finish so a production
+# deploy is never cancelled halfway.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-wasm-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+      - name: build wasm
+        run: wasm-pack build --target web --out-dir web/pkg --no-typescript --release
+      - name: assemble site
+        # Ship only what the page needs: the static frontend + wasm package.
+        # static-server.js is a local dev helper and the README is not served.
+        run: |
+          mkdir -p dist
+          cp web/index.html web/app.js web/audio-processor.js dist/
+          cp -r web/pkg dist/pkg
+          rm -f dist/pkg/.gitignore dist/pkg/package.json
+          touch dist/.nojekyll
+      - uses: actions/configure-pages@v5
+        with:
+          # Create the Pages site (source = GitHub Actions) on first run.
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
