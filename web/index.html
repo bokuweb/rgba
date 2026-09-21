@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>rusty-gba // debugger</title>
+<title>rgba // debugger</title>
 <style>
   :root {
     --bg:        #070a0f;
@@ -73,6 +73,18 @@
   button.danger:hover { border-color: var(--red); color: var(--red); box-shadow: 0 0 18px rgba(255,92,87,.15); }
   button.on { background: rgba(0,255,163,.12); border-color: var(--green); color: var(--green); }
   label.file input { display: none; }
+  select.romsel {
+    font-family: var(--mono); font-size: 12px; cursor: pointer; max-width: 240px;
+    color: var(--fg); background: #060a10; border: 1px solid var(--line2);
+    border-radius: 2px; padding: 5px 8px;
+  }
+  select.romsel:hover, select.romsel:focus { outline: none; border-color: var(--green); color: var(--green); }
+  select.romsel optgroup { color: var(--dim); font-style: normal; }
+  select.romsel option { color: var(--fg); }
+  .romstatus { color: var(--dim); font-size: 11px; }
+  .romstatus a { color: var(--cyan); text-decoration: none; }
+  .romstatus a:hover { text-decoration: underline; }
+  .romstatus .lic { color: var(--amber); }
 
   /* ---- masonry-ish two-column layout (no vertical gaps) ---- */
   .grid { display: flex; gap: 12px; padding: 12px; align-items: flex-start; }
@@ -204,8 +216,12 @@
 </head>
 <body>
   <div class="toolbar">
-    <div class="brand"><b>rusty-gba</b> <span class="sub">// debugger</span></div>
+    <div class="brand"><b>rgba</b> <span class="sub">// debugger</span></div>
+    <select id="romSel" class="romsel" title="open-source ROM library (see roms.json for licenses)">
+      <option value="">library…</option>
+    </select>
     <label class="file">load rom<input type="file" id="rom" accept=".gba,.bin" /></label>
+    <span class="romstatus" id="romStatus"></span>
     <button id="run" class="accent" disabled>▶ run</button>
     <button id="pause" disabled>⏸ pause</button>
     <button id="step" disabled>⤵ step</button>

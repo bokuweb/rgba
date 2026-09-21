@@ -7,15 +7,15 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug executable 'rusty-gba'",
+            "name": "Debug executable 'rgba'",
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=rusty-gba",
-                    "--package=rusty-gba"
+                    "--bin=rgba",
+                    "--package=rgba"
                 ],
                 "filter": {
-                    "name": "rusty-gba",
+                    "name": "rgba",
                     "kind": "bin"
                 }
             },
@@ -25,16 +25,16 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Debug unit tests in executable 'rusty-gba'",
+            "name": "Debug unit tests in executable 'rgba'",
             "cargo": {
                 "args": [
                     "test",
                     "--no-run",
-                    "--bin=rusty-gba",
-                    "--package=rusty-gba"
+                    "--bin=rgba",
+                    "--package=rgba"
                 ],
                 "filter": {
-                    "name": "rusty-gba",
+                    "name": "rgba",
                     "kind": "bin"
                 }
             },

@@ -1,4 +1,4 @@
-import init, { GbaHandle } from './pkg/rusty_gba.js';
+import init, { GbaHandle } from './pkg/rgba.js';
 
 // ---------------------------------------------------------------- helpers
 const $ = (id) => document.getElementById(id);
@@ -359,9 +359,81 @@ $('rom').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
   romBytes = new Uint8Array(await file.arrayBuffer());
+  $('romSel').value = '';
+  setStatus(`${file.name} · ${fmtSize(file.size)}`);
   setRunning(false);
   bootGba(romBytes);
 });
+
+// ---------------------------------------------------------------- ROM library
+// `roms.json` lists open-source ROMs served from ./roms/ (populated by
+// web/fetch-roms.py). Each entry carries its license + source link, which we
+// show next to the picker so credit is always visible.
+const fmtSize = (n) => n >= 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`;
+function setStatus(html) { $('romStatus').innerHTML = html; }
+
+let library = [];
+async function loadLibrary() {
+  try {
+    const res = await fetch('./roms.json');
+    if (!res.ok) return;
+    const manifest = await res.json();
+    const sel = $('romSel');
+    for (const g of manifest.groups) {
+      const grp = document.createElement('optgroup');
+      grp.label = g.name;
+      for (const r of g.roms) {
+        library.push(r);
+        const o = document.createElement('option');
+        o.value = r.id;
+        o.textContent = r.size ? `${r.title} (${fmtSize(r.size)})` : r.title;
+        grp.appendChild(o);
+      }
+      sel.appendChild(grp);
+    }
+  } catch (e) {
+    console.warn('roms.json unavailable', e);
+  }
+}
+
+async function loadLibraryRom(id) {
+  const r = library.find((x) => x.id === id);
+  if (!r) return;
+  const sel = $('romSel');
+  sel.disabled = true;
+  setStatus(`fetching ${r.title}…`);
+  try {
+    const res = await fetch(`./roms/${r.file}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    // Stream so the status line can show progress on the larger ROMs.
+    const total = Number(res.headers.get('content-length')) || r.size || 0;
+    const chunks = []; let got = 0;
+    const reader = res.body.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value); got += value.length;
+      if (total) setStatus(`fetching ${r.title}… ${Math.round(got / total * 100)}%`);
+    }
+    romBytes = new Uint8Array(got);
+    let off = 0; for (const c of chunks) { romBytes.set(c, off); off += c.length; }
+    const credit = [
+      r.author ? `by ${r.author}` : '',
+      r.event || '',
+      `<span class="lic">${r.license}</span>`,
+      r.source ? `<a href="${r.source}" target="_blank" rel="noopener">source</a>` : '',
+    ].filter(Boolean).join(' · ');
+    setStatus(credit);
+    setRunning(false);
+    bootGba(romBytes);
+    history.replaceState(null, '', `?rom=${encodeURIComponent(id)}`);
+  } catch (e) {
+    setStatus(`<span class="err">failed to load ${r.title}: ${e.message}</span>`);
+  } finally {
+    sel.disabled = false;
+  }
+}
+$('romSel').addEventListener('change', (e) => { if (e.target.value) loadLibraryRom(e.target.value); });
 
 $('run').addEventListener('click', () => setRunning(true));
 $('pause').addEventListener('click', () => { setRunning(false); refreshAll(); });
@@ -389,4 +461,12 @@ addEventListener('keyup', (e) => {
 
 // ---------------------------------------------------------------- boot
 await init();
-console.log('rusty-gba debugger ready — load a .gba to begin');
+await loadLibrary();
+console.log('rgba debugger ready — load a .gba to begin');
+
+// Deep link: ?rom=<id> picks a library ROM on load (e.g. ?rom=dungeon-master).
+const wanted = new URLSearchParams(location.search).get('rom');
+if (wanted && library.some((r) => r.id === wanted)) {
+  $('romSel').value = wanted;
+  loadLibraryRom(wanted);
+}

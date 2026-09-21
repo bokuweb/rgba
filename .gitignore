@@ -4,3 +4,5 @@ target
 log
 # macOS AppleDouble sidecar files (exFAT / network volumes)
 ._*
+web/roms/
+web/pkg/

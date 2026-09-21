@@ -1,5 +1,5 @@
 [package]
-name = "rusty-gba"
+name = "rgba"
 version = "0.1.0"
 authors = ["bokuweb"]
 edition = "2018"
@@ -15,7 +15,7 @@ crate-type = ["cdylib", "rlib"]
 path = "src/lib.rs"
 
 [[bin]]
-name = "rusty-gba"
+name = "rgba"
 path = "src/main.rs"
 
 # Structured logging facade. Diagnostics throughout the emulator core go through

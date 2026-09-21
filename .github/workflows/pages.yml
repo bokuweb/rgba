@@ -2,7 +2,7 @@ name: Deploy web debugger to GitHub Pages
 
 # Builds the WASM package with wasm-pack and publishes `web/` (with the
 # generated `web/pkg/`) to GitHub Pages. The page is served at the repo's
-# Pages URL; `web/index.html` loads `./pkg/rusty_gba.js` relatively, so the
+# Pages URL; `web/index.html` loads `./pkg/rgba.js` relatively, so the
 # directory can be hosted as-is.
 
 on:
@@ -40,13 +40,18 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - name: build wasm
         run: wasm-pack build --target web --out-dir web/pkg --no-typescript --release
+      - name: fetch ROM library
+        # Downloads the open-source ROMs listed in web/roms.json (pinned by
+        # sha256) and copies the in-repo fixtures into web/roms/.
+        run: python3 web/fetch-roms.py
       - name: assemble site
-        # Ship only what the page needs: the static frontend + wasm package.
-        # static-server.js is a local dev helper and the README is not served.
+        # Ship only what the page needs: the static frontend, wasm package and
+        # ROM library. static-server.js / fetch-roms.py are dev helpers.
         run: |
           mkdir -p dist
-          cp web/index.html web/app.js web/audio-processor.js dist/
+          cp web/index.html web/app.js web/audio-processor.js web/roms.json dist/
           cp -r web/pkg dist/pkg
+          cp -r web/roms dist/roms
           rm -f dist/pkg/.gitignore dist/pkg/package.json
           touch dist/.nojekyll
       - uses: actions/configure-pages@v5
