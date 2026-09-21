@@ -10,7 +10,8 @@ use crate::types::*;
 
 pub fn exec_thumb_add1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let imm = dec.get_imm3() as u32;
-    let d = ((gpr[dec.get_Rn5_3() as usize]) + imm) as u64;
+    // Widen before adding so a wrap past 2^32 is visible to set_C_from.
+    let d = gpr[dec.get_Rn5_3() as usize] as u64 + imm as u64;
 
     cpsr.set_N_from(d as u32);
     cpsr.set_Z_from(d as u32);
@@ -280,16 +281,15 @@ pub fn exec_thumb_sbc<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
     let rd = dec.get_Rd2_0() as usize;
     let rm = dec.get_Rm5_3() as usize;
 
-    let c = u64::from(!cpsr.get_C());
-    let m = gpr[rm] as u64 + c;
-    let d = (gpr[rd] as u64).wrapping_sub(m);
-    cpsr.set_N_from(d as u32);
-    cpsr.set_Z_from(d as u32);
-    cpsr.set_C_from(d);
-    let (_, v) = (gpr[rd] as i32).overflowing_sub(m as i32);
+    let borrow_in = u32::from(!cpsr.get_C());
+    let d = gpr[rd].wrapping_sub(gpr[rm]).wrapping_sub(borrow_in);
+    cpsr.set_N_from(d);
+    cpsr.set_Z_from(d);
+    // C = NOT borrow: set when rd >= rm + borrow_in (in 64-bit, like ARM SBC).
+    cpsr.set_C(gpr[rd] as u64 >= gpr[rm] as u64 + borrow_in as u64);
+    let (_, v) = (gpr[rd] as i32).overflowing_sub((gpr[rm] as i32).wrapping_add(borrow_in as i32));
     cpsr.set_V(v);
-    // cpsr.set_V_from(gpr[rd], d as u32);
-    gpr[rd] = d as u32;
+    gpr[rd] = d;
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
 }
@@ -328,10 +328,11 @@ pub fn exec_thumb_tst<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
 
 pub fn exec_thumb_neg<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let s = gpr[dec.get_Rm5_3() as usize] as i32;
-    let d = -s;
+    let d = s.wrapping_neg();
     cpsr.set_Z_from(d as u32);
     cpsr.set_N_from(d as u32);
-    cpsr.set_C(d <= 0);
+    // NEG is RSB Rd, Rs, #0: C = NOT borrow of (0 - Rs), i.e. set only for Rs == 0.
+    cpsr.set_C(s == 0);
     cpsr.set_V(0_i32.overflowing_sub(s).1);
     gpr[dec.get_Rd2_0() as usize] = d as u32;
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
