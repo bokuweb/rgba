@@ -17,7 +17,7 @@ A browser frontend for the emulator core, No$gba-style:
 ## ROM library
 
 The toolbar's **library** picker loads open-source ROMs listed in
-[`roms.json`](roms.json): 15 open-source homebrew games (Dungeon Master,
+[`roms.json`](roms.json): 27 open-source homebrew games (Dungeon Master,
 CASCADE7, Skyland, Minicraft, µCity Advance, Hero Core, Blind Jump, the agb
 titles, several GBA Jam entries, …) plus the jsmolka `gba-tests` and mGBA test
 suites. Each entry records author, license and a

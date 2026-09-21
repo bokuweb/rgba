@@ -244,7 +244,11 @@ impl BusAccessor for CpuBus {
                 self.timers.read(ofs)
             }
             0x0400_0060..=0x0400_00A7 => self.apu.read_register(addr),
-            0x0400_00A8..=0x0400_03FF => 0,
+            // DMA / SIO / IE / IF / WAITCNT / IME: byte reads see the containing halfword.
+            0x0400_00A8..=0x0400_03FF => {
+                let hw = self.read_halfword(addr & !1);
+                if (addr & 1) == 0 { (hw & 0x00FF) as u8 } else { (hw >> 8) as u8 }
+            }
             // Palette 1KB mirrors
             0x0500_0000..=0x05FF_FFFF => self.palette.read_byte((addr - 0x0500_0000) & 0x3FF),
             // Fix(004): VRAM mirror (wraps at 0x20000; 0x18000-0x1FFFF maps to 0x10000-0x17FFF)
@@ -467,16 +471,23 @@ impl BusAccessor for CpuBus {
                 let ofs = addr - 0x0400_0100 ;
                 self.timers.write(ofs, data);
             }
-            0x0400_0060..=0x0400_03FF => {
-                // TODO: Implement DMA, Timer, and other I/O registers
-                match addr {
-                    // Sound registers + FIFO (byte access)
-                    0x0400_0060..=0x0400_00A7 => self.apu.write_register(addr, data),
-                    _ if (0x0400_00B0..=0x0400_00DE).contains(&addr) => {
-                        let _ = data;
-                    }
-                    _ => {}
-                }
+            // Sound registers + FIFO (byte access)
+            0x0400_0060..=0x0400_00A7 => self.apu.write_register(addr, data),
+            // IF is acknowledge-on-write: a byte store must only clear the bits in
+            // that byte, so don't merge in the other (still pending) half.
+            0x0400_0202 => self.interrupt_controller.borrow_mut().write_if(data as HalfWord),
+            0x0400_0203 => self.interrupt_controller.borrow_mut().write_if((data as HalfWord) << 8),
+            // DMA / SIO / IE / WAITCNT / IME: byte stores read-modify-write the
+            // containing halfword register.
+            0x0400_00A8..=0x0400_03FF => {
+                let aligned = addr & !1;
+                let cur = self.read_halfword(aligned);
+                let new = if (addr & 1) == 0 {
+                    (cur & 0xFF00) | (data as u16)
+                } else {
+                    (cur & 0x00FF) | ((data as u16) << 8)
+                };
+                self.write_halfword(aligned, new);
             }
             // Palette: byte store behaves as halfword store replicated (0xVV -> 0xVVVV)
             0x0500_0000..=0x05FF_FFFF => {
@@ -1659,6 +1670,34 @@ mod tests {
 
     fn if_flags(bus: &CpuBus) -> u16 {
         bus.interrupt_controller.borrow().read_if()
+    }
+
+    #[test]
+    fn byte_access_to_ie_if_ime_waitcnt() {
+        let mut bus = new_bus();
+        // IME / IE via byte stores (some toolchains emit strb for `REG_IME = 1`).
+        bus.write_byte(0x0400_0208, 0x01);
+        assert_eq!(bus.read_halfword(0x0400_0208), 0x0001);
+        assert_eq!(bus.read_byte(0x0400_0208), 0x01);
+        bus.write_byte(0x0400_0200, 0x09);
+        bus.write_byte(0x0400_0201, 0x10);
+        assert_eq!(bus.read_halfword(0x0400_0200), 0x1009);
+        assert_eq!(bus.read_byte(0x0400_0201), 0x10);
+        // WAITCNT byte store keeps the other half.
+        bus.write_halfword(0x0400_0204, 0x4317);
+        bus.write_byte(0x0400_0204, 0x14);
+        assert_eq!(bus.read_halfword(0x0400_0204), 0x4314);
+
+        // IF is acknowledge-on-write: a byte store clears only bits of that byte
+        // and must not (via read-modify-write) acknowledge the other half.
+        bus.interrupt_controller.borrow_mut().write_ie(0xFFFF);
+        bus.interrupt_controller.borrow_mut().request_interrupt(InterruptType::VBlank);
+        bus.interrupt_controller.borrow_mut().request_interrupt(InterruptType::Keypad);
+        assert_eq!(if_flags(&bus), 0x1001);
+        bus.write_byte(0x0400_0202, 0x01);
+        assert_eq!(if_flags(&bus), 0x1000, "high byte must survive a low-byte ack");
+        bus.write_byte(0x0400_0203, 0x10);
+        assert_eq!(if_flags(&bus), 0x0000);
     }
 
     /// Build a bus whose GamePak ROM is filled with `insn`, run an ARM core from

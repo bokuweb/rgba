@@ -167,9 +167,7 @@ impl GBA {
             self.cycles = self.cycles.wrapping_add(cycles);
             self.bus.advance_clock(cycles);
             self.bus.execute_dma_transfers();
-            if self.bus.should_service_interrupt() {
-                self.arm.request_irq();
-            }
+            self.arm.set_irq_line(self.bus.should_service_interrupt());
             if self.bus.take_frame_ready() {
                 return false;
             }
@@ -190,9 +188,7 @@ impl GBA {
         self.cycles = self.cycles.wrapping_add(cycles);
         self.bus.advance_clock(cycles);
         self.bus.execute_dma_transfers();
-        if self.bus.should_service_interrupt() {
-            self.arm.request_irq();
-        }
+        self.arm.set_irq_line(self.bus.should_service_interrupt());
         self.bus.take_frame_ready()
     }
 
@@ -309,10 +305,8 @@ impl GBA {
             // it observes the freshly-updated DISPSTAT edges.
             self.bus.execute_dma_transfers();
 
-            // Request an IRQ on the CPU if the IE/IF/IME combination allows servicing.
-            if self.bus.should_service_interrupt() {
-                self.arm.request_irq();
-            }
+            // Drive the CPU's IRQ line from the current IE/IF/IME state.
+            self.arm.set_irq_line(self.bus.should_service_interrupt());
 
             if self.bus.take_frame_ready() {
                 break;
@@ -342,6 +336,18 @@ mod repro {
     use super::*;
     use crate::io::{Key, KeyStatus};
     use std::io::Write;
+
+    /// Honour `RUST_LOG` in the manual harnesses (tests install no subscriber
+    /// by default). Safe to call more than once.
+    fn init_tracing() {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(
+                tracing_subscriber::EnvFilter::try_from_default_env()
+                    .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("warn")),
+            )
+            .with_test_writer()
+            .try_init();
+    }
 
     fn write_bmp(path: &str, rgba: &[u8]) {
         let (w, h) = (240usize, 160usize);
@@ -432,6 +438,7 @@ mod repro {
     #[ignore = "manual frame-capture harness; requires fixtures/beat_beast/BeatBeast_jam.gba"]
     fn capture_beat_beast() {
         use crate::cpu::bus::accessor::BusAccessor;
+        init_tracing();
         let path =
             std::env::var("ROM").unwrap_or_else(|_| "fixtures/beat_beast/BeatBeast_jam.gba".into());
         let bin = std::fs::read(&path).expect("rom");
@@ -453,6 +460,138 @@ mod repro {
                 );
             }
         }
+    }
+    /// Triage harness: run `FRAMES` frames of `ROM` while sampling the PC every
+    /// instruction, then print where the CPU spends its time (top PCs with a
+    /// disassembly), the LCD/IRQ registers, the BIOS IRQ-check flags and the
+    /// last SWIs executed. Use it to see why a ROM shows a flat screen.
+    #[test]
+    #[ignore = "manual triage harness; set ROM=path/to/rom.gba"]
+    fn probe_rom() {
+        use crate::cpu::bus::accessor::BusAccessor;
+        init_tracing();
+        let path = std::env::var("ROM").expect("ROM");
+        let bin = std::fs::read(&path).expect("rom");
+        let mut gba = GBA::from_rom(&bin);
+        let total: usize = std::env::var("FRAMES").ok().and_then(|s| s.parse().ok()).unwrap_or(120);
+        let mut hist: std::collections::HashMap<u32, u64> = std::collections::HashMap::new();
+        let mut swis: std::collections::VecDeque<(u32, u32, u32, u32)> = std::collections::VecDeque::new();
+        let mut swi_hist: std::collections::HashMap<u32, u64> = std::collections::HashMap::new();
+        let mut frames_done = 0;
+        let mut last_pc = 0u32;
+        let mut stuck_since = 0usize;
+        let mut vectors: std::collections::BTreeMap<u32, u64> = std::collections::BTreeMap::new();
+        let mut prev_addr_before_vector: Option<u32> = None;
+        while frames_done < total {
+            let pc = gba.arm.gpr[15];
+            let thumb = gba.is_thumb();
+            let addr = if thumb { pc.wrapping_sub(4) } else { pc.wrapping_sub(8) };
+            *hist.entry(addr).or_default() += 1;
+            let raw = if thumb {
+                u32::from(gba.bus.read_halfword(addr & !1))
+            } else {
+                gba.bus.read_word(addr & !3)
+            };
+            let is_swi = if thumb { (raw & 0xFF00) == 0xDF00 } else { (raw & 0x0F00_0000) == 0x0F00_0000 && (raw >> 28) != 0xF };
+            if is_swi && !gba.bus.is_cpu_halted() {
+                let n = if thumb { raw & 0xFF } else { (raw >> 16) & 0xFF };
+                *swi_hist.entry(n).or_default() += 1;
+                swis.push_back((n, addr, gba.arm.gpr[0], gba.arm.gpr[1]));
+                if swis.len() > 12 {
+                    swis.pop_front();
+                }
+            }
+            if pc == last_pc { stuck_since += 1; } else { stuck_since = 0; last_pc = pc; }
+            if addr < 0x20 || addr == 0x0800_0000 || addr == 0x0800_00C0 {
+                *vectors.entry(addr).or_default() += 1;
+                if (addr == 0x10 || addr == 0x18) && vectors.values().sum::<u64>() < 12 {
+                    println!("IRQ taken (frame {frames_done}): IE={:04x} IF={:04x} IME={:04x} from {:08x}",
+                        gba.bus.read_halfword(0x0400_0200), gba.bus.read_halfword(0x0400_0202), gba.bus.read_halfword(0x0400_0208), prev_addr_before_vector.unwrap_or(0));
+                }
+                if addr < 0x20 && addr != 0x10 && addr != 0x18 {
+                    if let Some(prev) = prev_addr_before_vector {
+                        println!("vector {addr:08x} reached from {prev:08x} (frame {frames_done}) r0-r15={:08x?} cpsr={:08x}", gba.arm.gpr, gba.cpsr_bits());
+                    }
+                }
+                if addr == 0x0800_00C0 || addr == 0x0800_0000 {
+                    if let Some(prev) = prev_addr_before_vector {
+                        println!("entry {addr:08x} reached from {prev:08x} (frame {frames_done})");
+                    }
+                }
+            }
+            prev_addr_before_vector = Some(addr);
+            if gba.step_instruction() {
+                frames_done += 1;
+                if frames_done % 30 == 0 {
+                    let buf = gba.read_framebuffer();
+                    let first = &buf[0..3];
+                    let varied = buf.as_chunks::<4>().0.iter().any(|px| px[0..3] != *first);
+                    println!("frame {frames_done}: varied={varied} px0={:02x}{:02x}{:02x} dispcnt={:04x}",
+                        buf[0], buf[1], buf[2], gba.bus.read_halfword(0x0400_0000));
+                }
+            }
+        }
+        let mut top: Vec<(u32, u64)> = hist.into_iter().collect();
+        top.sort_by_key(|&(_, n)| std::cmp::Reverse(n));
+        let total_samples: u64 = top.iter().map(|x| x.1).sum();
+        println!("--- top PCs ({total_samples} samples) ---");
+        for (addr, n) in top.iter().take(24) {
+            let thumb = gba.is_thumb();
+            let dis = if thumb {
+                crate::cpu::disasm::thumb(gba.bus.read_halfword(addr & !1), *addr)
+            } else {
+                crate::cpu::disasm::arm(gba.bus.read_word(addr & !3), *addr)
+            };
+            println!("{addr:08x} {:6.2}%  {dis}", *n as f64 * 100.0 / total_samples as f64);
+        }
+        println!("--- regs ---");
+        println!("r0-r15: {:08x?}", gba.arm.gpr);
+        println!("cpsr={:08x} thumb={} halted={} stuck_same_pc={}", gba.cpsr_bits(), gba.is_thumb(), gba.bus.is_cpu_halted(), stuck_since);
+        let rd = |a: u32| gba.bus.read_halfword(a);
+        println!("DISPCNT={:04x} DISPSTAT={:04x} VCOUNT={:04x}", rd(0x0400_0000), rd(0x0400_0004), rd(0x0400_0006));
+        println!("IE={:04x} IF={:04x} IME={:04x} bios_if={:04x} intr_wait={:?}", rd(0x0400_0200), rd(0x0400_0202), rd(0x0400_0208), gba.bus.read_bios_if(), gba.bus.intr_wait_mask());
+        println!("IRQ handler @03007FFC = {:08x}", gba.bus.read_word(0x0300_7FFC));
+        println!("TM0CNT={:04x}/{:04x} TM1CNT={:04x}/{:04x} SOUNDCNT_H={:04x} SOUNDCNT_X={:04x}",
+            rd(0x0400_0100), rd(0x0400_0102), rd(0x0400_0104), rd(0x0400_0106), rd(0x0400_0082), rd(0x0400_0084));
+        for ch in 0..4u32 {
+            let b = 0x0400_00B0 + ch * 12;
+            println!("DMA{ch}: src={:08x} dst={:08x} cnt={:04x} ctl={:04x}", gba.bus.read_word(b), gba.bus.read_word(b + 4), rd(b + 8), rd(b + 10));
+        }
+        println!("BG0CNT={:04x} BG1CNT={:04x} BG2CNT={:04x} BG3CNT={:04x} BLDCNT={:04x} BLDY={:04x} WININ={:04x} WINOUT={:04x}",
+            rd(0x0400_0008), rd(0x0400_000A), rd(0x0400_000C), rd(0x0400_000E), rd(0x0400_0050), rd(0x0400_0054), rd(0x0400_0048), rd(0x0400_004A));
+        let mut sh: Vec<(u32, u64)> = swi_hist.into_iter().collect();
+        sh.sort_unstable();
+        println!("--- vectors/entry hits ---");
+        for (a, n) in &vectors { println!("{a:08x}: {n}"); }
+        println!("--- SWI histogram ---");
+        for (n, c) in sh { println!("swi {n:02x}: {c}"); }
+        println!("--- last SWIs (num, addr, r0, r1) ---");
+        for s in swis { println!("swi {:02x} @{:08x} r0={:08x} r1={:08x}", s.0, s.1, s.2, s.3); }
+        // DIS=<hex addr>:<count>[:t] disassembles `count` instructions at the end.
+        if let Ok(spec) = std::env::var("DIS") {
+            let parts: Vec<&str> = spec.split(':').collect();
+            let start = u32::from_str_radix(parts[0].trim_start_matches("0x"), 16).unwrap();
+            let count: u32 = parts[1].parse().unwrap();
+            let thumb = parts.get(2) == Some(&"t");
+            println!("--- disassembly @{start:08x} ---");
+            for i in 0..count {
+                if thumb {
+                    let a = start + i * 2;
+                    let raw = gba.bus.read_halfword(a);
+                    println!("{a:08x}  {raw:04x}      {}", crate::cpu::disasm::thumb(raw, a));
+                } else {
+                    let a = start + i * 4;
+                    let raw = gba.bus.read_word(a);
+                    println!("{a:08x}  {raw:08x}  {}", crate::cpu::disasm::arm(raw, a));
+                }
+            }
+        }
+        let buf = gba.read_framebuffer();
+        let first = &buf[0..3];
+        let varied = buf.as_chunks::<4>().0.iter().any(|px| px[0..3] != *first);
+        println!("final: varied={varied}");
+        let _ = std::fs::create_dir_all("target/bb");
+        write_bmp("target/bb/probe.bmp", &buf);
     }
 }
 
