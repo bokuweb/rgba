@@ -1,5 +1,5 @@
 {
-  "_comment": "ROM library for the web debugger. Every entry is open source; `file` is served from web/roms/ (populated by web/fetch-roms.sh, which also verifies `sha256`). Entries with `fixture` are copied from this repository, the rest are downloaded from the author's GitHub release.",
+  "_comment": "ROM library for the web debugger. Every entry is open source; `file` is served from web/roms/ (populated by web/fetch-roms.py, which also verifies `sha256`). Entries with `fixture` are copied from this repository; the rest are downloaded from the author's GitHub release or, when there is none, from a pinned commit of the gbadev Homebrew Hub database (github.com/gbadev-org/games).",
   "groups": [
     {
       "name": "Homebrew games",
@@ -68,6 +68,132 @@
           "sha256": "2a4986bdf6bd65601f1ae08f471d0aafc3e23d57f594162f77f351a1150e43eb",
           "size": 33506864,
           "note": "Rhythm shooter with PCM/GSM streaming audio — a good DMA + timer + FIFO stress test. 32 MB download."
+        },
+        {
+          "id": "skyland",
+          "title": "Skyland",
+          "file": "skyland.gba",
+          "author": "Evan Bowman",
+          "license": "MPL-2.0",
+          "source": "https://github.com/evanbowman/skyland",
+          "url": "https://github.com/evanbowman/skyland/releases/download/2022.1.7.0/Skyland.gba",
+          "sha256": "516f185f206366f9d44ed2df0d8afb2bc0e2f7d3adc2a2ed6e686c6c3eb4ac90",
+          "size": 3041425,
+          "note": "Real-time strategy / island-building game with a built-in LISP interpreter."
+        },
+        {
+          "id": "minicraft",
+          "title": "Minicraft for GBA",
+          "file": "minicraft.gba",
+          "author": "Vulcalien",
+          "license": "GPL-3.0-or-later (demake of Minicraft; artwork and sounds by Markus Persson)",
+          "source": "https://github.com/Vulcalien/minicraft-gba",
+          "url": "https://github.com/Vulcalien/minicraft-gba/releases/download/2.0/minicraft-gba_2.0.zip",
+          "zip_member": "minicraft.gba",
+          "sha256": "d0a62b6457b0d6fab383c417dca7ce9bcb9e239ced4c047e5fcbd1e010844caf",
+          "size": 131072,
+          "note": "Faithful demake of the Ludum Dare 22 game in 128 KB."
+        },
+        {
+          "id": "ucity-advance",
+          "title": "µCity Advance",
+          "file": "ucity-advance.gba",
+          "author": "Antonio Niño Díaz (AntonioND)",
+          "license": "GPL-3.0 (code) · CC BY-NC-SA 4.0 (art) · music from modarchive.org",
+          "source": "https://github.com/AntonioND/ucity-advance",
+          "url": "https://github.com/AntonioND/ucity-advance/releases/download/v1.0.3/ucity-advance-v1.0.3.gba",
+          "sha256": "069230a67939896c15cba86f0bffe31d12655597e2ac4cfed5b832e216b57bff",
+          "size": 1933560,
+          "note": "City-building sim; exercises affine backgrounds, windows and SRAM saves."
+        },
+        {
+          "id": "hero-core",
+          "title": "Hero Core (GBA port)",
+          "file": "hero-core.gba",
+          "author": "Evan Bowman (port) · Daniel Remar (original game) · BrotherAndroid (music)",
+          "license": "GPL-2.0 · original game is freeware and must not be sold",
+          "source": "https://github.com/evanbowman/Hero-port-gba",
+          "url": "https://github.com/evanbowman/Hero-port-gba/releases/download/1.0/HeroCore.gba",
+          "sha256": "1b8a776c5679de95d575496f0b61dd63d74bf6766cf69461895de5be09fe1fb9",
+          "size": 23642396,
+          "note": "Port of the 2010 PC metroidvania. 22 MB download."
+        },
+        {
+          "id": "blind-jump",
+          "title": "Blind Jump",
+          "file": "blind-jump.gba",
+          "author": "Evan Bowman",
+          "license": "MIT code (GBA build is GPL via libgba) · art © Evan Bowman, non-commercial · CC music, see in-game credits",
+          "source": "https://github.com/evanbowman/blind-jump-portable",
+          "url": "https://github.com/evanbowman/blind-jump-portable/releases/download/2021.11.20.0/BlindJump.gba",
+          "sha256": "597d11e93567f14f97ba4bc44bf41691b5e0fbac8dd169e6b559bb9086a1739d",
+          "size": 16565008,
+          "note": "Action/adventure roguelite with 5 languages. 16 MB download."
+        },
+        {
+          "id": "collie-defense",
+          "title": "Collie Defense",
+          "file": "collie-defense.gba",
+          "author": "vayan",
+          "event": "GBA Jam 2024",
+          "license": "CC BY-SA 4.0",
+          "source": "https://github.com/vayan/collie-defence",
+          "url": "https://raw.githubusercontent.com/gbadev-org/games/c1a9c4d700eee7e9bb9bac8d7105e220c86fbade/entries/collie-defence/collie-defence_jam.gba",
+          "sha256": "ef3eb807ff0c083f64668157dd3f616ac4ec6396a79c3479af7702ddc43c6be4",
+          "size": 1207868,
+          "note": "Tower defense. ROM mirrored from the gbadev Homebrew Hub database (pinned commit)."
+        },
+        {
+          "id": "glacia-dungeon",
+          "title": "Glacia Dungeon",
+          "file": "glacia-dungeon.gba",
+          "author": "NotImplementedLife",
+          "event": "GBA Jam 2022",
+          "license": "GPL-3.0",
+          "source": "https://github.com/NotImplementedLife/GlaciaDungeon",
+          "url": "https://github.com/NotImplementedLife/GlaciaDungeon/releases/download/v1.5.2/GlaciaDungeon.V1.5.2.gba",
+          "sha256": "976418b666b9359e1078c652947aa70ad46e9be53f3e9d64474f1fac5a138749",
+          "size": 1210608,
+          "note": "Ice-skating puzzle game."
+        },
+        {
+          "id": "bugtris",
+          "title": "Bugtris",
+          "file": "bugtris.gba",
+          "author": "NotImplementedLife",
+          "event": "GBA Jam 2022",
+          "license": "GPL-3.0",
+          "source": "https://github.com/NotImplementedLife/Bugtris",
+          "url": "https://raw.githubusercontent.com/gbadev-org/games/c1a9c4d700eee7e9bb9bac8d7105e220c86fbade/entries/bugtris/Bugtris.gba",
+          "sha256": "410af552f6f9f558c686fa9cde4d882f2df8e255a0b65ef781eb6828a5aaf9ff",
+          "size": 422596,
+          "note": "\"A Tetris created by cats\". ROM mirrored from the gbadev Homebrew Hub database (pinned commit)."
+        },
+        {
+          "id": "hat-chooses-the-wizard",
+          "title": "The Hat Chooses the Wizard",
+          "file": "hat-chooses-the-wizard.gba",
+          "author": "Corwin and Gwilym (agb) · music by Otto Halmén",
+          "event": "GBA Jam 2021",
+          "license": "MPL-2.0",
+          "source": "https://github.com/agbrs/agb/tree/master/examples/the-hat-chooses-the-wizard",
+          "url": "https://raw.githubusercontent.com/gbadev-org/games/c1a9c4d700eee7e9bb9bac8d7105e220c86fbade/entries/the-hat-chooses-the-wizard/the-hat-chooses-the-wizard.gba",
+          "sha256": "77d180e4d4668256e7af39403d107ff522bdaa0ede27a206772ac05d5b36a066",
+          "size": 2097152,
+          "note": "Platformer written in Rust with the agb crate. ROM mirrored from the gbadev Homebrew Hub database (pinned commit)."
+        },
+        {
+          "id": "purple-night",
+          "title": "The Purple Night",
+          "file": "purple-night.gba",
+          "author": "agb team",
+          "event": "GBA Jam 2022",
+          "license": "MPL-2.0",
+          "source": "https://github.com/agbrs/agb/tree/master/examples/the-purple-night",
+          "url": "https://raw.githubusercontent.com/gbadev-org/games/c1a9c4d700eee7e9bb9bac8d7105e220c86fbade/entries/the-purple-night/the-purple-night.gba",
+          "sha256": "646c2a5d3405c82c7f165bfdff99e3ffd372b02f861017da9ec1f623cdfb3edc",
+          "size": 8388608,
+          "note": "Action platformer written in Rust with the agb crate. ROM mirrored from the gbadev Homebrew Hub database (pinned commit)."
         }
       ]
     },

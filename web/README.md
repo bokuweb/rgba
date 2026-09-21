@@ -17,14 +17,16 @@ A browser frontend for the emulator core, No$gba-style:
 ## ROM library
 
 The toolbar's **library** picker loads open-source ROMs listed in
-[`roms.json`](roms.json): MIT-licensed homebrew from GBA Jam (Dungeon Master,
-CASCADE7, Where is the ball?, GBA Microjam '23, BeatBeast) plus the jsmolka
-`gba-tests` and mGBA test suites. Each entry records author, license and a
+[`roms.json`](roms.json): 15 open-source homebrew games (Dungeon Master,
+CASCADE7, Skyland, Minicraft, µCity Advance, Hero Core, Blind Jump, the agb
+titles, several GBA Jam entries, …) plus the jsmolka `gba-tests` and mGBA test
+suites. Each entry records author, license and a
 source link, which are shown next to the picker once loaded. `?rom=<id>` in the
 URL deep-links to an entry (e.g. [`?rom=dungeon-master`](https://bokuweb.github.io/rgba/?rom=dungeon-master)).
 
 The files themselves are not committed; `fetch-roms.py` downloads them from
-each author's GitHub release (verifying the pinned sha256) and copies the
+each author's GitHub release — or a pinned commit of the gbadev Homebrew Hub
+database when there is no release — verifying the pinned sha256, and copies the
 in-repo fixtures into `web/roms/`:
 
 ```sh
