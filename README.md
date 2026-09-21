@@ -155,7 +155,17 @@ ignored frame-capture harness for eyeballing any ROM headlessly:
 ROM=web/roms/dungeon-master.gba FRAMES=600 cargo test --release --lib capture_beat_beast -- --ignored
 ```
 
-(frames land in `target/bb/*.bmp`). The C / Rust fixtures can be rebuilt with
+(frames land in `target/bb/*.bmp`). When a ROM shows a flat screen,
+`probe_rom` runs it for `FRAMES` frames and prints where the CPU spends its
+time (PC histogram with disassembly), the LCD / IRQ / DMA registers, vector
+hits and the last SWIs — usually enough to tell a VCOUNT spin from a stalled
+IntrWait or a crash into the reset vector:
+
+```bash
+ROM=path/to/game.gba FRAMES=300 cargo test --release --lib probe_rom -- --ignored --nocapture
+```
+
+The C / Rust fixtures can be rebuilt with
 `cd fixtures && make`, which uses Docker (`shumon84/gba` and `bokuweb/rust-gba`
 from the root `Dockerfile`).
 
@@ -188,6 +198,13 @@ are recorded per entry and shown in the debugger when a ROM is loaded.
 | [Bugtris](https://github.com/NotImplementedLife/Bugtris) | NotImplementedLife | GBA Jam 2022 | GPL-3.0 |
 | [The Hat Chooses the Wizard](https://github.com/agbrs/agb/tree/master/examples/the-hat-chooses-the-wizard) | agb (Corwin & Gwilym) | GBA Jam 2021 | MPL-2.0 |
 | [The Purple Night](https://github.com/agbrs/agb/tree/master/examples/the-purple-night) | agb team | GBA Jam 2022 | MPL-2.0 |
+| [Apotris](https://gitea.com/akouzoukos/apotris) | akouzoukos | — | GPL-3.0 |
+| [HEXES](https://github.com/EigenlightArts/HEXES) | Dania Rifki (EigenlightArts) | GBA Jam 2022 | MIT |
+| [Solar Guard](https://github.com/Deft-Spade/Solar-Guard) | Deft-Spade | GBA Jam 2021 | GPL-3.0 |
+| [Galactic Quest](https://github.com/origamiscienceguy/Galactic_Quest) | origamiscienceguy | GBA Jam 2024 | GPL-3.0 |
+| [Coquiman](https://github.com/pmprog/coquiman_jam) | PMProg, Nikku4211 | GBA Winter Jam '23 | MIT |
+| [GBArcade](https://github.com/emmabritton/gba_gbarcade) | Emma Britton | — | MIT |
+| [Nonogram Advance](https://github.com/emmabritton/gba_nonogram_advance) | Emma Britton | — | MIT |
 | [gba-tests](https://github.com/jsmolka/gba-tests) arm / thumb / memory / bios | jsmolka | — | MIT |
 | [mGBA test suite](https://github.com/mgba-emu/suite) | endrift | — | MIT |
 | hello, lifegame | bokuweb | — | this repository |
