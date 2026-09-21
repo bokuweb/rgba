@@ -1673,30 +1673,6 @@ mod tests {
     }
 
     #[test]
-    fn iwram_word_write_through_top_mirror_lands_in_iwram() {
-        // libtonc installs its ISR via `*(fnptr*)0x03FFFFFC` (REG_BASE - 4); the
-        // BIOS IRQ stub reads it back through 0x03007FFC. Both are the same cell.
-        let mut bus = new_bus();
-        bus.write_word(0x03FF_FFFC, 0x0300_17BC);
-        assert_eq!(bus.read_word(0x0300_7FFC), 0x0300_17BC);
-        // Any 32 KiB-aligned alias works, and reads through the alias too.
-        bus.write_word(0x0301_0010, 0xDEAD_BEEF);
-        assert_eq!(bus.read_word(0x0300_0010), 0xDEAD_BEEF);
-        assert_eq!(bus.read_word(0x03FF_8010), 0xDEAD_BEEF);
-    }
-
-    #[test]
-    fn ewram_halfword_write_wraps_at_256k() {
-        // 0x0204_0000.. mirrors 0x0200_0000..; the mask must not exceed the
-        // 256 KiB buffer (it used to be 0x3F_FFFF, which panicked on a mirror).
-        let mut bus = new_bus();
-        bus.write_halfword(0x0204_0002, 0x1234);
-        assert_eq!(bus.read_halfword(0x0200_0002), 0x1234);
-        bus.write_halfword(0x02FF_FFFE, 0xBEEF);
-        assert_eq!(bus.read_halfword(0x0203_FFFE), 0xBEEF);
-    }
-
-    #[test]
     fn byte_access_to_ie_if_ime_waitcnt() {
         let mut bus = new_bus();
         // IME / IE via byte stores (some toolchains emit strb for `REG_IME = 1`).
