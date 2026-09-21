@@ -7,13 +7,13 @@ A Game Boy Advance emulator written in Rust. One core, two frontends:
 
 * **native** — an SDL2 window (`cargo run -- rom.gba`)
 * **web** — a WASM build wrapped in a No$gba-style debugger, with a built-in
-  library of open-source homebrew ROMs
+  library of 15 open-source homebrew games
 
 **▶ Try it in the browser: https://bokuweb.github.io/rgba/**
 
 [![Homebrew running in rgba](docs/gallery.png)](https://bokuweb.github.io/rgba/)
 
-<sub>Dungeon Master · CASCADE7 · Where is the ball? · GBA Microjam '23 · BeatBeast · mGBA test suite — all rendered by rgba.</sub>
+<sub>Dungeon Master · CASCADE7 · GBA Microjam '23 · BeatBeast · Skyland · Minicraft · µCity Advance · Hero Core · Collie Defense · The Hat Chooses the Wizard · mGBA test suite — all rendered by rgba.</sub>
 
 ## Contents
 
@@ -164,8 +164,12 @@ from the root `Dockerfile`).
 The web debugger ships a small library of **open-source** ROMs so there is
 something to run without hunting for files. They are not committed to this
 repository; the Pages build downloads each one from its author's GitHub release
-and verifies a pinned sha256 (see [`web/roms.json`](web/roms.json) and
-[`web/fetch-roms.py`](web/fetch-roms.py)).
+(or, where there is none, from a pinned commit of the
+[gbadev Homebrew Hub](https://github.com/gbadev-org/games) database) and
+verifies a pinned sha256 (see [`web/roms.json`](web/roms.json) and
+[`web/fetch-roms.py`](web/fetch-roms.py)). Several titles are copyleft
+(GPL / MPL / CC BY-SA) or carry non-commercial asset licenses — the exact terms
+are recorded per entry and shown in the debugger when a ROM is loaded.
 
 | ROM | Author | Event | License |
 |-----|--------|-------|---------|
@@ -174,6 +178,16 @@ and verifies a pinned sha256 (see [`web/roms.json`](web/roms.json) and
 | [Where is the ball?](https://github.com/johedan20012/WhereIsTheBall) | johedan20012 | GBA Jam 2021 | MIT |
 | [GBA Microjam '23](https://github.com/gbadev-org/microjam23) | gbadev community | Microjam 2023 | MIT (per-asset credits in release) |
 | [BeatBeast](https://github.com/afska/beat-beast) | afska et al. | GBA Jam 2024 | MIT code, CC BY-NC 4.0 audio |
+| [Skyland](https://github.com/evanbowman/skyland) | Evan Bowman | — | MPL-2.0 |
+| [Minicraft for GBA](https://github.com/Vulcalien/minicraft-gba) | Vulcalien | — | GPL-3.0 (demake; art & sounds by Markus Persson) |
+| [µCity Advance](https://github.com/AntonioND/ucity-advance) | AntonioND | — | GPL-3.0 code, CC BY-NC-SA 4.0 art |
+| [Hero Core (GBA port)](https://github.com/evanbowman/Hero-port-gba) | Evan Bowman / Daniel Remar | — | GPL-2.0; original is freeware, not for sale |
+| [Blind Jump](https://github.com/evanbowman/blind-jump-portable) | Evan Bowman | — | MIT code (GPL GBA build), non-commercial art, CC music |
+| [Collie Defense](https://github.com/vayan/collie-defence) | vayan | GBA Jam 2024 | CC BY-SA 4.0 |
+| [Glacia Dungeon](https://github.com/NotImplementedLife/GlaciaDungeon) | NotImplementedLife | GBA Jam 2022 | GPL-3.0 |
+| [Bugtris](https://github.com/NotImplementedLife/Bugtris) | NotImplementedLife | GBA Jam 2022 | GPL-3.0 |
+| [The Hat Chooses the Wizard](https://github.com/agbrs/agb/tree/master/examples/the-hat-chooses-the-wizard) | agb (Corwin & Gwilym) | GBA Jam 2021 | MPL-2.0 |
+| [The Purple Night](https://github.com/agbrs/agb/tree/master/examples/the-purple-night) | agb team | GBA Jam 2022 | MPL-2.0 |
 | [gba-tests](https://github.com/jsmolka/gba-tests) arm / thumb / memory / bios | jsmolka | — | MIT |
 | [mGBA test suite](https://github.com/mgba-emu/suite) | endrift | — | MIT |
 | hello, lifegame | bokuweb | — | this repository |
