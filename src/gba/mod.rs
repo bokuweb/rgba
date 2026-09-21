@@ -167,9 +167,7 @@ impl GBA {
             self.cycles = self.cycles.wrapping_add(cycles);
             self.bus.advance_clock(cycles);
             self.bus.execute_dma_transfers();
-            if self.bus.should_service_interrupt() {
-                self.arm.request_irq();
-            }
+            self.arm.set_irq_line(self.bus.should_service_interrupt());
             if self.bus.take_frame_ready() {
                 return false;
             }
@@ -190,9 +188,7 @@ impl GBA {
         self.cycles = self.cycles.wrapping_add(cycles);
         self.bus.advance_clock(cycles);
         self.bus.execute_dma_transfers();
-        if self.bus.should_service_interrupt() {
-            self.arm.request_irq();
-        }
+        self.arm.set_irq_line(self.bus.should_service_interrupt());
         self.bus.take_frame_ready()
     }
 
@@ -309,10 +305,8 @@ impl GBA {
             // it observes the freshly-updated DISPSTAT edges.
             self.bus.execute_dma_transfers();
 
-            // Request an IRQ on the CPU if the IE/IF/IME combination allows servicing.
-            if self.bus.should_service_interrupt() {
-                self.arm.request_irq();
-            }
+            // Drive the CPU's IRQ line from the current IE/IF/IME state.
+            self.arm.set_irq_line(self.bus.should_service_interrupt());
 
             if self.bus.take_frame_ready() {
                 break;
@@ -496,6 +490,10 @@ mod repro {
             if pc == last_pc { stuck_since += 1; } else { stuck_since = 0; last_pc = pc; }
             if addr < 0x20 || addr == 0x0800_0000 || addr == 0x0800_00C0 {
                 *vectors.entry(addr).or_default() += 1;
+                if (addr == 0x10 || addr == 0x18) && vectors.values().sum::<u64>() < 12 {
+                    println!("IRQ taken (frame {frames_done}): IE={:04x} IF={:04x} IME={:04x} from {:08x}",
+                        gba.bus.read_halfword(0x0400_0200), gba.bus.read_halfword(0x0400_0202), gba.bus.read_halfword(0x0400_0208), prev_addr_before_vector.unwrap_or(0));
+                }
                 if addr < 0x20 && addr != 0x10 && addr != 0x18 {
                     if let Some(prev) = prev_addr_before_vector {
                         println!("vector {addr:08x} reached from {prev:08x} (frame {frames_done}) r0-r15={:08x?} cpsr={:08x}", gba.arm.gpr, gba.cpsr_bits());
@@ -555,6 +553,25 @@ mod repro {
         for (n, c) in sh { println!("swi {n:02x}: {c}"); }
         println!("--- last SWIs (num, addr, r0, r1) ---");
         for s in swis { println!("swi {:02x} @{:08x} r0={:08x} r1={:08x}", s.0, s.1, s.2, s.3); }
+        // DIS=<hex addr>:<count>[:t] disassembles `count` instructions at the end.
+        if let Ok(spec) = std::env::var("DIS") {
+            let parts: Vec<&str> = spec.split(':').collect();
+            let start = u32::from_str_radix(parts[0].trim_start_matches("0x"), 16).unwrap();
+            let count: u32 = parts[1].parse().unwrap();
+            let thumb = parts.get(2) == Some(&"t");
+            println!("--- disassembly @{start:08x} ---");
+            for i in 0..count {
+                if thumb {
+                    let a = start + i * 2;
+                    let raw = gba.bus.read_halfword(a);
+                    println!("{a:08x}  {raw:04x}      {}", crate::cpu::disasm::thumb(raw, a));
+                } else {
+                    let a = start + i * 4;
+                    let raw = gba.bus.read_word(a);
+                    println!("{a:08x}  {raw:08x}  {}", crate::cpu::disasm::arm(raw, a));
+                }
+            }
+        }
         let buf = gba.read_framebuffer();
         let first = &buf[0..3];
         let varied = buf.as_chunks::<4>().0.iter().any(|px| px[0..3] != *first);

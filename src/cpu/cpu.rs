@@ -144,6 +144,16 @@ impl ARM {
         self.gpr[n] = data;
     }
 
+    /// Drive the (level-sensitive) IRQ input. The caller re-evaluates
+    /// `IE & IF & IME` every step and passes the result; the CPU takes the
+    /// exception only while the line is still high once IRQs are enabled.
+    /// A latched request would fire a spurious IRQ after a handler that
+    /// acknowledges IF (and possibly narrows IE) re-enables interrupts.
+    pub const fn set_irq_line(&mut self, asserted: bool) {
+        self.irq_pending = asserted;
+    }
+
+    #[cfg(test)]
     pub const fn request_irq(&mut self) {
         self.irq_pending = true;
     }
@@ -782,6 +792,31 @@ mod test {
         );
         assert_eq!(arm.get_gpr(SP), 0x0300_7F00);
         assert_eq!(arm.get_gpr(LR), 0xDEAD_BEEF);
+    }
+
+    #[test]
+    fn irq_line_is_level_sensitive_not_latched() {
+        // Take one IRQ, then (as a handler would) acknowledge it so the line
+        // drops before IRQs are re-enabled: no second exception may fire.
+        setup();
+        let mut bus = MockBus::new();
+        let mut arm = ARM::new();
+        arm.reset();
+        arm.set_gpr(PC, 0x0800_0008);
+        arm.set_irq_line(true);
+        let _ = arm.step(&mut bus, false).unwrap();
+        assert_eq!(arm.get_gpr(PC), 0x0000_0018);
+        assert!(arm.cpsr.get_I());
+
+        // Handler acknowledges IF: the level drops while I is still set.
+        arm.set_irq_line(false);
+        // Handler re-enables IRQs (e.g. `msr cpsr_c, #0x1f` for nesting).
+        arm.cpsr.set_I(false);
+        let pc_before = arm.get_gpr(PC);
+        let _ = arm.step(&mut bus, false).unwrap();
+        assert_ne!(arm.get_gpr(PC), 0x0000_0018, "stale IRQ must not fire");
+        assert_eq!(arm.cpsr.get_mode(), crate::cpu::registers::psr::Mode::IRQ);
+        assert!(arm.get_gpr(PC) > pc_before);
     }
 
     #[test]
