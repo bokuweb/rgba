@@ -280,16 +280,17 @@ pub fn exec_thumb_sbc<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
     let rd = dec.get_Rd2_0() as usize;
     let rm = dec.get_Rm5_3() as usize;
 
-    let c = u64::from(!cpsr.get_C());
-    let m = gpr[rm] as u64 + c;
-    let d = (gpr[rd] as u64).wrapping_sub(m);
-    cpsr.set_N_from(d as u32);
-    cpsr.set_Z_from(d as u32);
-    cpsr.set_C_from(d);
-    let (_, v) = (gpr[rd] as i32).overflowing_sub(m as i32);
-    cpsr.set_V(v);
-    // cpsr.set_V_from(gpr[rd], d as u32);
-    gpr[rd] = d as u32;
+    // SBC Rd, Rm: Rd = Rd - Rm - NOT(C). C out = NOT borrow.
+    let a = gpr[rd];
+    let b = gpr[rm];
+    let m = b as u64 + u64::from(!cpsr.get_C());
+    let r = (a as u64).wrapping_sub(m) as u32;
+    cpsr.set_N_from(r);
+    cpsr.set_Z_from(r);
+    cpsr.set_C(a as u64 >= m);
+    // Signed overflow: operands differ in sign and the result's sign differs from Rd's.
+    cpsr.set_V(((a ^ b) & (a ^ r)) >> 31 != 0);
+    gpr[rd] = r;
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
 }
@@ -327,13 +328,16 @@ pub fn exec_thumb_tst<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
 }
 
 pub fn exec_thumb_neg<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
-    let s = gpr[dec.get_Rm5_3() as usize] as i32;
-    let d = -s;
-    cpsr.set_Z_from(d as u32);
-    cpsr.set_N_from(d as u32);
-    cpsr.set_C(d <= 0);
-    cpsr.set_V(0_i32.overflowing_sub(s).1);
-    gpr[dec.get_Rd2_0() as usize] = d as u32;
+    // NEG Rd, Rm is `RSBS Rd, Rm, #0`, i.e. `0 - Rm`, so the flags follow SUB:
+    // C = NOT borrow, which for a zero minuend is set only when Rm == 0.
+    // GCC relies on this for `p ? 0 : -1` (`neg; adc; neg`).
+    let m = gpr[dec.get_Rm5_3() as usize];
+    let d = m.wrapping_neg();
+    cpsr.set_Z_from(d);
+    cpsr.set_N_from(d);
+    cpsr.set_C(m == 0);
+    cpsr.set_V(m == 0x8000_0000);
+    gpr[dec.get_Rd2_0() as usize] = d;
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
 }
@@ -394,14 +398,16 @@ pub fn exec_thumb4_cmn<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
 pub fn exec_thumb4_adc<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
     let rd = gpr[dec.get_Rd2_0() as usize];
     let rs = gpr[dec.get_Rs() as usize];
-    let c: u32 = cpsr.get_C().into();
-    let (_, v) = (rd as i32).overflowing_add(rs as i32 + c as i32);
-    let d = (rd as u64).wrapping_add(rs as u64 + c as u64);
-    gpr[dec.get_Rd2_0() as usize] = d as u32;
-    cpsr.set_N_from(d as u32);
-    cpsr.set_Z_from(d as u32);
+    let c = u64::from(cpsr.get_C());
+    let d = rd as u64 + rs as u64 + c;
+    let r = d as u32;
+    // Signed overflow: both operands share a sign that the result does not.
+    let v = (!(rd ^ rs) & (rd ^ r)) >> 31 != 0;
+    gpr[dec.get_Rd2_0() as usize] = r;
+    cpsr.set_N_from(r);
+    cpsr.set_Z_from(r);
     cpsr.set_V(v);
-    cpsr.set_C(d & (1 << 32) != 0);
+    cpsr.set_C(d > 0xFFFF_FFFF);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
 }
@@ -520,5 +526,133 @@ pub fn exec_thumb_mov3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     } else {
         let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
         (s, PipelineStatus::Continue)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cpu::bus::accessor::BusAccessor;
+    use crate::types::{Byte, HalfWord, Word};
+
+    /// Bus stub: the ALU ops only touch it for cycle counting.
+    struct NullBus;
+    impl BusAccessor for NullBus {
+        fn compute_cycle(&self, _addr: Word, _access: AccessType) -> Cycle {
+            0
+        }
+        fn read_byte(&self, _addr: Word) -> Byte {
+            0
+        }
+        fn read_halfword(&self, _addr: Word) -> HalfWord {
+            0
+        }
+        fn read_word(&self, _addr: Word) -> Word {
+            0
+        }
+        fn write_byte(&mut self, _addr: Word, _data: Byte) {}
+        fn write_halfword(&mut self, _addr: Word, _data: HalfWord) {}
+        fn write_word(&mut self, _addr: Word, _data: Word) {}
+    }
+
+    const NEG_R3_R0: DataProcessing = DataProcessing(0x4243); // neg r3, r0
+    const ADC_R0_R3: DataProcessing = DataProcessing(0x4158); // adc r0, r3
+    const SBC_R0_R1: DataProcessing = DataProcessing(0x4188); // sbc r0, r1
+
+    fn flags(cpsr: &PSR) -> (bool, bool, bool, bool) {
+        (cpsr.get_N(), cpsr.get_Z(), cpsr.get_C(), cpsr.get_V())
+    }
+
+    /// `NEG Rd, Rm` is `Rd = 0 - Rm`, so C follows SUB semantics: set only
+    /// when no borrow occurs, i.e. when Rm == 0.
+    #[test]
+    fn neg_carry_is_set_only_for_zero_operand() {
+        let bus = NullBus;
+        for (rm, want_c) in [(0u32, true), (1, false), (32, false), (0x0800_1820, false), (0xFFFF_FFFF, false), (0x8000_0000, false)] {
+            let mut gpr = [0u32; 16];
+            gpr[0] = rm;
+            let mut cpsr = PSR::default();
+            exec_thumb_neg(&bus, NEG_R3_R0, &mut gpr, &mut cpsr);
+            assert_eq!(gpr[3], rm.wrapping_neg(), "result for rm={rm:#x}");
+            assert_eq!(cpsr.get_C(), want_c, "C for rm={rm:#x}");
+            assert_eq!(cpsr.get_V(), rm == 0x8000_0000, "V for rm={rm:#x}");
+            assert_eq!(cpsr.get_Z(), rm == 0, "Z for rm={rm:#x}");
+            assert_eq!(cpsr.get_N(), (rm.wrapping_neg() as i32) < 0, "N for rm={rm:#x}");
+        }
+    }
+
+    /// GCC's `return p ? 0 : -1;` idiom: `neg r3, r0; adc r0, r3; neg r0, r0`.
+    /// Attack on Voxelburg's `init_screens()` uses this on each screen pointer;
+    /// with the wrong NEG carry every non-null pointer became -1.
+    #[test]
+    fn neg_adc_neg_null_check_idiom() {
+        let bus = NullBus;
+        for (ptr, want) in [(0x0300_1234u32, 0u32), (0, 0xFFFF_FFFF)] {
+            let mut gpr = [0u32; 16];
+            gpr[0] = ptr;
+            let mut cpsr = PSR::default();
+            exec_thumb_neg(&bus, NEG_R3_R0, &mut gpr, &mut cpsr);
+            exec_thumb4_adc(&bus, ADC_R0_R3, &mut gpr, &mut cpsr);
+            exec_thumb_neg(&bus, DataProcessing(0x4240), &mut gpr, &mut cpsr); // neg r0, r0
+            assert_eq!(gpr[0], want, "ptr={ptr:#x}");
+        }
+    }
+
+    #[test]
+    fn adc_flags_and_overflow() {
+        let bus = NullBus;
+        // 0xFFFF_FFFF + 0 + C(1) = 0 with carry out.
+        let mut gpr = [0u32; 16];
+        gpr[0] = 0xFFFF_FFFF;
+        let mut cpsr = PSR::default();
+        cpsr.set_C(true);
+        exec_thumb4_adc(&bus, ADC_R0_R3, &mut gpr, &mut cpsr);
+        assert_eq!(gpr[0], 0);
+        assert_eq!(flags(&cpsr), (false, true, true, false));
+
+        // 0x7FFF_FFFF + 0 + C(1) overflows into the sign bit (V), no carry.
+        let mut gpr = [0u32; 16];
+        gpr[0] = 0x7FFF_FFFF;
+        let mut cpsr = PSR::default();
+        cpsr.set_C(true);
+        exec_thumb4_adc(&bus, ADC_R0_R3, &mut gpr, &mut cpsr);
+        assert_eq!(gpr[0], 0x8000_0000);
+        assert_eq!(flags(&cpsr), (true, false, false, true));
+
+        // Rs = 0x7FFF_FFFF with C=1 must not be computed as an i32 `rs + c`.
+        let mut gpr = [0u32; 16];
+        gpr[0] = 1;
+        gpr[3] = 0x7FFF_FFFF;
+        let mut cpsr = PSR::default();
+        cpsr.set_C(true);
+        exec_thumb4_adc(&bus, ADC_R0_R3, &mut gpr, &mut cpsr);
+        assert_eq!(gpr[0], 0x8000_0001);
+        assert_eq!(flags(&cpsr), (true, false, false, true));
+    }
+
+    /// SBC: `Rd = Rd - Rs - !C`; C is set when NO borrow occurs.
+    #[test]
+    fn sbc_carry_means_no_borrow() {
+        let bus = NullBus;
+        let cases = [
+            // (rd, rs, c_in, result, N, Z, C, V)
+            (32u32, 16u32, true, 16u32, false, false, true, false),
+            (32, 16, false, 15, false, false, true, false),
+            (16, 32, true, 0xFFFF_FFF0, true, false, false, false),
+            (0, 0, false, 0xFFFF_FFFF, true, false, false, false),
+            (0, 0, true, 0, false, true, true, false),
+            (0x8000_0000, 1, true, 0x7FFF_FFFF, false, false, true, true),
+            (5, 0xFFFF_FFFF, false, 5, false, false, false, false),
+        ];
+        for (rd, rs, c_in, want, n, z, c, v) in cases {
+            let mut gpr = [0u32; 16];
+            gpr[0] = rd;
+            gpr[1] = rs;
+            let mut cpsr = PSR::default();
+            cpsr.set_C(c_in);
+            exec_thumb_sbc(&bus, SBC_R0_R1, &mut gpr, &mut cpsr);
+            assert_eq!(gpr[0], want, "result for {rd:#x} - {rs:#x} - !{c_in}");
+            assert_eq!(flags(&cpsr), (n, z, c, v), "flags for {rd:#x} - {rs:#x} - !{c_in}");
+        }
     }
 }
