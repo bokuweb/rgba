@@ -1,5 +1,8 @@
 # rusty-gba — web debugger (WASM)
 
+Hosted build: https://bokuweb.github.io/rgba/ (deployed from `main` by
+`.github/workflows/pages.yml`).
+
 A browser frontend for the emulator core, No$gba-style:
 
 * run / pause / single-step, with the **current PC** shown live in the toolbar
