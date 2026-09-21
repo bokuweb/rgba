@@ -1942,7 +1942,7 @@ mod tests {
         assert_eq!(bus.read_byte(addr + 1), ((((addr + 1) >> 1) >> 8) as u8));
         // Word reads combine two consecutive open-bus halfwords.
         let lo = (addr >> 1) & 0xFFFF;
-        let hi = ((addr + 2) >> 1) & 0xFFFF;
+        let hi = ((addr >> 1) + 1) & 0xFFFF;
         assert_eq!(bus.read_word(addr), lo | (hi << 16));
     }
 }
