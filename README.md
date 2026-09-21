@@ -105,8 +105,7 @@ cargo run --release -- ./fixtures/hello/hello.gba
 Verified with [jsmolka/gba-tests](https://github.com/jsmolka/gba-tests) (ARM /
 THUMB / memory / BIOS), the [mGBA test suite](https://github.com/mgba-emu/suite),
 armwrestler and the homebrew titles in the ROM library. Compatibility is still
-a work in progress — some engines (e.g. BPCore/Lua, some Butano titles) don't
-boot yet.
+a work in progress — some Butano titles don't boot yet.
 
 ## Architecture
 
@@ -209,6 +208,7 @@ are recorded per entry and shown in the debugger when a ROM is loaded.
 | [Coquiman](https://github.com/pmprog/coquiman_jam) | PMProg, Nikku4211 | GBA Winter Jam '23 | MIT |
 | [GBArcade](https://github.com/emmabritton/gba_gbarcade) | Emma Britton | — | MIT |
 | [Nonogram Advance](https://github.com/emmabritton/gba_nonogram_advance) | Emma Britton | — | MIT |
+| [MeteoRain](https://github.com/drludos/meteorain-gba) | Dr. Ludos | GBA Jam 2021 | MIT code; music "Overmode" by Warlord is CC BY-NC-SA |
 | [gba-tests](https://github.com/jsmolka/gba-tests) arm / thumb / memory / bios | jsmolka | — | MIT |
 | [mGBA test suite](https://github.com/mgba-emu/suite) | endrift | — | MIT |
 | hello, lifegame | bokuweb | — | this repository |

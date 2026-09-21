@@ -281,15 +281,19 @@ pub fn exec_thumb_sbc<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
     let rd = dec.get_Rd2_0() as usize;
     let rm = dec.get_Rm5_3() as usize;
 
-    let borrow_in = u32::from(!cpsr.get_C());
-    let d = gpr[rd].wrapping_sub(gpr[rm]).wrapping_sub(borrow_in);
-    cpsr.set_N_from(d);
-    cpsr.set_Z_from(d);
-    // C = NOT borrow: set when rd >= rm + borrow_in (in 64-bit, like ARM SBC).
-    cpsr.set_C(gpr[rd] as u64 >= gpr[rm] as u64 + borrow_in as u64);
-    let (_, v) = (gpr[rd] as i32).overflowing_sub((gpr[rm] as i32).wrapping_add(borrow_in as i32));
-    cpsr.set_V(v);
-    gpr[rd] = d;
+    // Rd = Rd - Rm - NOT(C). Like SUB, C is set when the subtraction does
+    // *not* borrow (unsigned Rd >= Rm + NOT(C)); V is the signed overflow of
+    // the full three-operand result, so it is evaluated in 64 bits rather
+    // than by folding the borrow into Rm first (which mis-flags Rm=0x7FFFFFFF).
+    let borrow = u64::from(!cpsr.get_C());
+    let m = u64::from(gpr[rm]) + borrow;
+    let d = u64::from(gpr[rd]).wrapping_sub(m);
+    let signed = i64::from(gpr[rd] as i32) - i64::from(gpr[rm] as i32) - borrow as i64;
+    cpsr.set_N_from(d as u32);
+    cpsr.set_Z_from(d as u32);
+    cpsr.set_C(u64::from(gpr[rd]) >= m);
+    cpsr.set_V(signed != i64::from(signed as i32));
+    gpr[rd] = d as u32;
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
 }
@@ -327,14 +331,16 @@ pub fn exec_thumb_tst<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
 }
 
 pub fn exec_thumb_neg<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
-    let s = gpr[dec.get_Rm5_3() as usize] as i32;
-    let d = s.wrapping_neg();
-    cpsr.set_Z_from(d as u32);
-    cpsr.set_N_from(d as u32);
-    // NEG is RSB Rd, Rs, #0: C = NOT borrow of (0 - Rs), i.e. set only for Rs == 0.
-    cpsr.set_C(s == 0);
-    cpsr.set_V(0_i32.overflowing_sub(s).1);
-    gpr[dec.get_Rd2_0() as usize] = d as u32;
+    // NEG Rd, Rm is RSBS Rd, Rm, #0: flags follow the subtraction 0 - Rm.
+    // C is "no borrow", which for 0 - Rm only holds when Rm == 0; V is set
+    // only for Rm == 0x8000_0000 (the one value whose negation overflows).
+    let m = gpr[dec.get_Rm5_3() as usize];
+    let d = 0_u32.wrapping_sub(m);
+    cpsr.set_Z_from(d);
+    cpsr.set_N_from(d);
+    cpsr.set_C(m == 0);
+    cpsr.set_V(m == 0x8000_0000);
+    gpr[dec.get_Rd2_0() as usize] = d;
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
     (s, PipelineStatus::Continue)
 }
@@ -396,8 +402,12 @@ pub fn exec_thumb4_adc<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     let rd = gpr[dec.get_Rd2_0() as usize];
     let rs = gpr[dec.get_Rs() as usize];
     let c: u32 = cpsr.get_C().into();
-    let (_, v) = (rd as i32).overflowing_add(rs as i32 + c as i32);
-    let d = (rd as u64).wrapping_add(rs as u64 + c as u64);
+    // Evaluate the signed sum in 64 bits: `rs + c` alone can overflow i32
+    // (rs = 0x7FFF_FFFF with C set), which would both panic in debug builds
+    // and misreport V.
+    let signed = i64::from(rd as i32) + i64::from(rs as i32) + i64::from(c);
+    let v = signed != i64::from(signed as i32);
+    let d = u64::from(rd) + u64::from(rs) + u64::from(c);
     gpr[dec.get_Rd2_0() as usize] = d as u32;
     cpsr.set_N_from(d as u32);
     cpsr.set_Z_from(d as u32);
