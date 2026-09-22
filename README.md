@@ -7,9 +7,11 @@ A Game Boy Advance emulator written in Rust. One core, two frontends:
 
 * **native** — an SDL2 window (`cargo run -- rom.gba`)
 * **web** — a WASM build wrapped in a No$gba-style debugger, with a built-in
-  library of 15 open-source homebrew games
+  library of 29 open-source homebrew games
 
-**▶ Try it in the browser: https://bokuweb.github.io/rgba/**
+**▶ Try it in the browser: https://bokuweb.github.io/rgba/** — it opens
+straight into [Flappy Bird](https://github.com/tullrich/flappybird-gba) (press
+**A** = <kbd>Z</kbd> to flap); pick anything else from the library dropdown.
 
 [![Homebrew running in rgba](docs/gallery.png)](https://bokuweb.github.io/rgba/)
 
@@ -182,6 +184,8 @@ are recorded per entry and shown in the debugger when a ROM is loaded.
 
 | ROM | Author | Event | License |
 |-----|--------|-------|---------|
+| [Flappy Bird](https://github.com/tullrich/flappybird-gba) (loaded by default) | Tim Ullrich | — | MIT code; original Flappy Bird art (© .GEARS, not open source) |
+| [Flappy Goose](https://github.com/mmailhot/FlappyGoose) | Marc Mailhot | — | MIT |
 | [Dungeon Master](https://github.com/Maksasj/dungeon_master) | Maksasj | GBA Jam 2022 | MIT |
 | [CASCADE7](https://github.com/mick-schroeder/gba-cascade7) | Mick Schroeder | — | MIT (name/logo trademarked) |
 | [Where is the ball?](https://github.com/johedan20012/WhereIsTheBall) | johedan20012 | GBA Jam 2021 | MIT |
