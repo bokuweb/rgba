@@ -396,7 +396,9 @@ async function loadLibrary() {
   }
 }
 
-async function loadLibraryRom(id) {
+// `deepLink: false` leaves the URL alone (used for the default ROM so a plain
+// visit doesn't grow a `?rom=` query string).
+async function loadLibraryRom(id, { deepLink = true } = {}) {
   const r = library.find((x) => x.id === id);
   if (!r) return;
   const sel = $('romSel');
@@ -426,7 +428,7 @@ async function loadLibraryRom(id) {
     setStatus(credit);
     setRunning(false);
     bootGba(romBytes);
-    history.replaceState(null, '', `?rom=${encodeURIComponent(id)}`);
+    if (deepLink) history.replaceState(null, '', `?rom=${encodeURIComponent(id)}`);
   } catch (e) {
     setStatus(`<span class="err">failed to load ${r.title}: ${e.message}</span>`);
   } finally {
@@ -465,8 +467,14 @@ await loadLibrary();
 console.log('rgba debugger ready — load a .gba to begin');
 
 // Deep link: ?rom=<id> picks a library ROM on load (e.g. ?rom=dungeon-master).
+// Without one, the manifest's `default: true` entry (Flappy Bird) is loaded
+// and started so the page never opens on an empty screen.
 const wanted = new URLSearchParams(location.search).get('rom');
+const fallback = library.find((r) => r.default);
 if (wanted && library.some((r) => r.id === wanted)) {
   $('romSel').value = wanted;
   loadLibraryRom(wanted);
+} else if (fallback) {
+  $('romSel').value = fallback.id;
+  loadLibraryRom(fallback.id, { deepLink: false }).then(() => { if (gba) setRunning(true); });
 }
