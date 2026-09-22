@@ -1,9 +1,22 @@
 {
-  "_comment": "ROM library for the web debugger. Every entry is open source; `file` is served from web/roms/ (populated by web/fetch-roms.py, which also verifies `sha256`). Entries with `fixture` are copied from this repository; the rest are downloaded from the author's GitHub release or, when there is none, from a pinned commit of the gbadev Homebrew Hub database (github.com/gbadev-org/games).",
+  "_comment": "ROM library for the web debugger. Every entry is open source; `file` is served from web/roms/ (populated by web/fetch-roms.py, which also verifies `sha256`). Entries with `fixture` are copied from this repository; the rest are downloaded from the author's GitHub release or, when there is none, from a pinned commit of the gbadev Homebrew Hub database (github.com/gbadev-org/games). The entry marked `default: true` is loaded automatically when the debugger opens without a `?rom=` deep link.",
   "groups": [
     {
       "name": "Homebrew games",
       "roms": [
+        {
+          "id": "flappy-goose",
+          "title": "Flappy Goose",
+          "file": "flappy-goose.gba",
+          "author": "Marc Mailhot",
+          "license": "MIT",
+          "source": "https://github.com/mmailhot/FlappyGoose",
+          "url": "https://raw.githubusercontent.com/mmailhot/FlappyGoose/a29a62da0e765cceca35d0e2bf5d9e0ccbef6e5f/docs/FlappyGoose.gba",
+          "sha256": "0e84eb2c21e0b941e4872c051407ac3bdf00747ac4bebe36d54c0cf39c93f600",
+          "size": 118396,
+          "note": "Flappy Bird-style one-button game written in Rust (based on exoticorn's gba-rust). Press A to flap. Loaded by default when the debugger opens.",
+          "default": true
+        },
         {
           "id": "dungeon-master",
           "title": "Dungeon Master",
