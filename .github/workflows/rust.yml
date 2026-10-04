@@ -2,6 +2,9 @@ name: Continuous Integration
 
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -16,13 +19,7 @@ jobs:
           toolchain: stable
           override: true
           components: clippy
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - uses: jdx/mr-boxington-action@v1
       - name: install_dependencies
         run: |
           sudo add-apt-repository -y "deb http://archive.ubuntu.com/ubuntu `lsb_release -sc` main universe restricted multiverse"
@@ -34,6 +31,6 @@ jobs:
         # Lint levels (deny clippy::all + clippy::pedantic, warn on nursery) are
         # configured in Cargo.toml's [lints] table, so any all/pedantic finding
         # fails the build. --all-targets also lints the test code.
-        run: cargo clippy --all-targets
+        run: mbx clippy --all-targets
       - name: test
-        run: cargo test
+        run: mbx test
