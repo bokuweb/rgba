@@ -1091,7 +1091,7 @@ mod tests {
         // Run ~1/60s and confirm the output isn't all silence.
         apu.tick(CPU_HZ / 60);
         let s = apu.take_samples();
-        assert!(!s.is_empty());
+        assert_ne!(s.len(), 0, "no samples were produced");
         assert!(s.iter().any(|&v| v != 0), "square channel produced only silence");
     }
 
@@ -1134,7 +1134,7 @@ mod tests {
         apu.write_register(0x0400_0084, 0x80); // master on, but no channels enabled
         apu.tick(CPU_HZ / 100);
         let s = apu.take_samples();
-        assert!(!s.is_empty());
+        assert_ne!(s.len(), 0, "no samples were produced");
         assert!(s.iter().all(|&v| v == 0), "silence is not centred on zero");
     }
 
@@ -1159,6 +1159,6 @@ mod tests {
         apu.on_timer_overflow(0, 4);
         apu.tick(CPU_HZ / 200);
         // No panic above means no overflow; values are i16 by construction.
-        assert!(!apu.take_samples().is_empty());
+        assert_ne!(apu.take_samples().len(), 0, "no samples were produced");
     }
 }

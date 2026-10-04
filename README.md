@@ -95,7 +95,7 @@ cargo run --release -- ./fixtures/hello/hello.gba
 | Area | Status |
 |------|--------|
 | CPU | ARM7TDMI — full ARM + THUMB instruction sets, all processor modes, IRQ, SWI, pipeline-accurate PC semantics, wait-state cycle table per memory region |
-| BIOS | `bios/bios.bin` is embedded at compile time and mapped at `0x0000_0000`; SWI system calls are implemented in HLE (`src/cpu/bios.rs`) |
+| BIOS | `bios/bios.bin` (a 220-byte open-source replacement BIOS from [endrift/gbajs](https://github.com/endrift/gbajs), BSD-2-Clause) is embedded at compile time and mapped at `0x0000_0000`; SWI system calls are implemented in HLE (`src/cpu/bios.rs`). The official Nintendo BIOS is not needed |
 | Video | Modes 0–5, BG0–3 (text / affine), OBJ (incl. affine), windows, alpha blending, mosaic |
 | Audio | 4 PSG channels (square×2 with sweep/envelope, wave, noise) + 2 DirectSound FIFOs fed by DMA / timers, resampled to 32 768 Hz |
 | DMA / Timers | DMA0–3 (immediate / VBlank / HBlank / FIFO), Timer0–3 with count-up cascading |
@@ -123,7 +123,7 @@ src/
   interrupt/     IE / IF / IME
   memory/        RAM / ROM primitives
 web/             browser debugger (index.html, app.js, AudioWorklet, roms.json)
-bios/            GBA BIOS image (included at compile time)
+bios/            replacement GBA BIOS from gbajs (BSD-2-Clause, included at compile time)
 fixtures/        test ROMs and their sources
 docs/            README assets
 ```
@@ -219,6 +219,13 @@ are recorded per entry and shown in the debugger when a ROM is loaded.
 
 Thanks to all of the authors for publishing their work. If you'd like a ROM
 removed or the attribution corrected, please open an issue.
+
+## BIOS attribution
+
+`bios/bios.bin` is the replacement BIOS from
+[gbajs](https://github.com/endrift/gbajs) by Vicki Pfau (endrift), distributed
+under the BSD 2-Clause License. Dumps of the official Nintendo GBA BIOS are not
+redistributable and are ignored by `.gitignore`.
 
 ## References
 
