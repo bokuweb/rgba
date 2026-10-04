@@ -49,7 +49,7 @@ jobs:
         # ROM library. static-server.js / fetch-roms.py are dev helpers.
         run: |
           mkdir -p dist
-          cp web/index.html web/app.js web/audio-processor.js web/roms.json dist/
+          cp web/index.html web/app.js web/play.html web/play.js web/audio-processor.js web/roms.json dist/
           cp -r web/pkg dist/pkg
           cp -r web/roms dist/roms
           rm -f dist/pkg/.gitignore dist/pkg/package.json

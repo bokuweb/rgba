@@ -14,6 +14,20 @@ A browser frontend for the emulator core, No$gba-style:
 * **disassemble** (bin → asm) and **assemble** (asm → bin) ARM into memory;
 * **audio** via an AudioWorklet (`web/audio-processor.js`).
 
+## Play mode
+
+[`play.html`](play.html) ([hosted](https://bokuweb.github.io/rgba/play.html))
+is a play-only page: the same wasm core shown on the LCD of a front-view
+handheld drawn in HTML + CSS (no images). Every control on the device — D-pad
+(8 directions, slide between buttons), A/B, START/SELECT and L/R — is
+clickable / tappable, alongside keyboard and gamepad input. It also has sound,
+fullscreen, three shell colours and a POWER switch (off stops the core, on
+cold-boots the ROM). Emulation is paced at the GBA's 59.73 Hz regardless of
+display refresh rate.
+
+The **▶ play / ⚙ debug** switch in both toolbars jumps between the two pages
+and carries the current library ROM along (`?rom=<id>` works on both).
+
 ## ROM library
 
 The toolbar's **library** picker loads open-source ROMs listed in
@@ -69,6 +83,7 @@ Keys: `Z`=A `X`=B `Enter`=Start `Space`=Select arrows=D-Pad `A`=L `S`=R.
 | Disassembler (bin→asm) | `src/cpu/disasm.rs` (reuses the decoder) |
 | Assembler (asm→bin)    | `src/cpu/asm.rs` (two-pass, labels) |
 | UI / logic         | `web/index.html` + `web/app.js`        |
+| Play mode          | `web/play.html` + `web/play.js`        |
 | Audio              | `web/audio-processor.js` (AudioWorklet) |
 
 ## Notes

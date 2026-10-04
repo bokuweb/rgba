@@ -34,6 +34,15 @@
   ::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 2px; }
   ::-webkit-scrollbar-track { background: transparent; }
 
+  /* ---- play / debug mode switch ---- */
+  .modes { display: inline-flex; border: 1px solid var(--line2); border-radius: 4px; overflow: hidden; }
+  .modes a {
+    color: var(--dim); text-decoration: none; padding: 4px 10px; background: #0e141d;
+  }
+  .modes a + a { border-left: 1px solid var(--line2); }
+  .modes a:hover { color: var(--fg); }
+  .modes a[aria-current="page"] { color: var(--bg); background: var(--green); font-weight: 700; }
+
   /* ---- toolbar ---- */
   .toolbar {
     display: flex; align-items: center; gap: 14px;
@@ -217,6 +226,10 @@
 <body>
   <div class="toolbar">
     <div class="brand"><b>rgba</b> <span class="sub">// debugger</span></div>
+    <nav class="modes" aria-label="mode">
+      <a id="modePlay" href="./play.html">▶ play</a>
+      <a href="./index.html" aria-current="page">⚙ debug</a>
+    </nav>
     <select id="romSel" class="romsel" title="open-source ROM library (see roms.json for licenses)">
       <option value="">library…</option>
     </select>

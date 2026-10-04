@@ -360,6 +360,7 @@ $('rom').addEventListener('change', async (e) => {
   if (!file) return;
   romBytes = new Uint8Array(await file.arrayBuffer());
   $('romSel').value = '';
+  $('modePlay').href = './play.html';
   setStatus(`${file.name} · ${fmtSize(file.size)}`);
   setRunning(false);
   bootGba(romBytes);
@@ -429,6 +430,8 @@ async function loadLibraryRom(id, { deepLink = true } = {}) {
     setRunning(false);
     bootGba(romBytes);
     if (deepLink) history.replaceState(null, '', `?rom=${encodeURIComponent(id)}`);
+    // Keep the play/debug switch pointing at the same ROM.
+    $('modePlay').href = `./play.html?rom=${encodeURIComponent(id)}`;
   } catch (e) {
     setStatus(`<span class="err">failed to load ${r.title}: ${e.message}</span>`);
   } finally {
