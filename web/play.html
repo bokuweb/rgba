@@ -7,7 +7,7 @@
 <meta name="description" content="rgba play mode: the Rust GBA emulator running inside a front-view handheld drawn in HTML and CSS.">
 <title>rgba // play</title>
 <style>
-/* Device drawing based on gameboy-advance-front.html (front view, HTML + CSS
+/* Device drawing based on a front-view handheld study (HTML + CSS
    only). The CSS-art game scene is replaced by the emulator's canvas, and every
    control carries a data-key that play.js maps to GBA input. */
 /* The hardware uses em units; a container-query unit scales the entire device. */
@@ -221,13 +221,13 @@ h1 span { display: block; color: var(--accent); }
     repeating-conic-gradient(#1f103515 0% 25%,transparent 0% 50%) .12em .2em / .42em .42em;
   mix-blend-mode: soft-light;
 }
-.nintendo {
+.plate {
   position: absolute; left: 43.8em; top: 3.05em; width: 12.4em; height: 2.6em;
   display: grid; place-items: center; border: .16em solid var(--emboss-dark);
   border-radius: 2em; opacity: .62;
   box-shadow: 0 .12em .07em var(--emboss-light), inset 0 .12em .07em var(--emboss-light);
 }
-.nintendo span { font: bold 1.85em/1 Arial,sans-serif; letter-spacing: -.075em; color: var(--emboss-dark); text-shadow: 0 .075em .025em var(--emboss-light); }
+.plate span { font: bold 1.85em/1 Arial,sans-serif; letter-spacing: -.075em; color: var(--emboss-dark); text-shadow: 0 .075em .025em var(--emboss-light); }
 /* The lens is narrower at the top and gently bowed along the bottom. */
 .bezel {
   position: absolute; left: 22.1em; top: 6.5em; width: 55.8em; height: 44.5em;
@@ -263,8 +263,8 @@ h1 span { display: block; color: var(--accent); }
   color: #d9dcd3; text-shadow: .045em .08em .08em #060b07;
   white-space: nowrap; transform: scaleX(1.04);
 }
-.screen-logo .gameboy { font: 900 italic 2.9em/1 Arial,sans-serif; letter-spacing: -.06em; }
-.screen-logo .advance { font: 800 italic 2.48em/1 Arial,sans-serif; letter-spacing: -.065em; }
+.screen-logo .brand { font: 900 italic 2.9em/1 Arial,sans-serif; letter-spacing: -.06em; }
+.screen-logo .tag { font: 800 italic 2.48em/1 Arial,sans-serif; letter-spacing: -.065em; }
 /* The reference has light-gray controls, not black ones. */
 .dpad {
   position: absolute; top: 18.3em; left: 6.4em; width: 13.2em; height: 13.2em;
@@ -530,7 +530,7 @@ footer { width: 100%; max-width: 1450px; margin: 0 auto; padding: 25px 0 28px; b
       </div>
     </section>
 
-    <section class="product" id="stage" aria-label="HTMLとCSSで描いたGame Boy Advanceの正面ビュー（エミュレータ画面つき）">
+    <section class="product" id="stage" aria-label="HTMLとCSSで描いた携帯ゲーム機の正面ビュー（エミュレータ画面つき）">
       <div class="device-frame">
         <div class="device-stage">
           <div class="hardware" id="gba">
@@ -538,7 +538,7 @@ footer { width: 100%; max-width: 1450px; margin: 0 auto; padding: 25px 0 28px; b
             <button type="button" class="shoulder shoulder-r" data-key="8" aria-label="R"><span>R</span></button>
             <div class="rear-shell" aria-hidden="true"></div>
             <div class="shell" aria-hidden="true"></div>
-            <div class="nintendo" aria-hidden="true"><span>Nintendo</span></div>
+            <div class="plate" aria-hidden="true"><span>rgba</span></div>
             <div class="bezel">
               <div class="screen-well">
                 <div class="screen">
@@ -549,7 +549,7 @@ footer { width: 100%; max-width: 1450px; margin: 0 auto; padding: 25px 0 28px; b
                   <div class="screen-off" aria-hidden="true"></div>
                 </div>
               </div>
-              <div class="screen-logo" aria-hidden="true"><span class="gameboy">GAME BOY</span><span class="advance">ADVANCE</span></div>
+              <div class="screen-logo" aria-hidden="true"><span class="brand">rgba</span><span class="tag">PLAY</span></div>
             </div>
             <div class="dpad" role="group" aria-label="十字キー">
               <div class="dpad-base" aria-hidden="true"></div>
@@ -591,7 +591,7 @@ footer { width: 100%; max-width: 1450px; margin: 0 auto; padding: 25px 0 28px; b
   </main>
   <footer>
     <div class="materials"><span class="css-badge">HTML + CSS DEVICE</span><span class="footer-note">WASM EMULATOR CORE · NO IMAGES</span></div>
-    <span class="footer-credit">Unofficial fan-made study. Nintendo / GAME BOY ADVANCE are Nintendo trademarks.</span>
+    <span class="footer-credit">Unofficial fan-made study. Not affiliated with or endorsed by any console maker.</span>
   </footer>
 </div>
 <script type="module" src="./play.js"></script>
