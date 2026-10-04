@@ -6,3 +6,8 @@ log
 ._*
 web/roms/
 web/pkg/
+# Official GBA BIOS dumps are not redistributable; never commit them.
+# The bundled bios/bios.bin is the BSD-2 replacement from endrift/gbajs.
+/bios/*
+!/bios/bios.bin
+gba_bios.bin
