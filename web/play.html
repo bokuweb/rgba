@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f4f3f0">
+<meta name="description" content="rgba play mode: the Rust GBA emulator running inside a front-view handheld drawn in HTML and CSS.">
+<title>rgba // play</title>
+<style>
+/* Device drawing based on gameboy-advance-front.html (front view, HTML + CSS
+   only). The CSS-art game scene is replaced by the emulator's canvas, and every
+   control carries a data-key that play.js maps to GBA input. */
+/* The hardware uses em units; a container-query unit scales the entire device. */
+:root {
+  color-scheme: light;
+  --paper: #f4f3f0;
+  --ink: #292735;
+  --muted: #89868e;
+  --accent: #71629d;
+  font-family: Arial, "Helvetica Neue", "Noto Sans CJK JP", sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); }
+button, input { font: inherit; }
+button, label { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+button { cursor: pointer; }
+button:focus-visible, label:has(input:focus-visible) { outline: 3px solid #a6d9c1; outline-offset: 5px; }
+::selection { background: #d9d1ed; }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0;
+  margin: -1px; overflow: hidden; clip: rect(0,0,0,0);
+  white-space: nowrap; border: 0;
+}
+.exhibit {
+  --body-light: #7560ac;
+  --body: #6a54a0;
+  --body-dark: #53427d;
+  --edge: #4d3d77;
+  --highlight: #b3a2d1;
+  --emboss-light: #9a85c4;
+  --emboss-dark: #5b458d;
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 5.1vw;
+  overflow: hidden;
+}
+.exhibit:has(#platinum:checked) {
+  --body-light: #e1e2e2; --body: #b7bbc1;
+  --body-dark: #8b8f9a; --edge: #818590;
+  --highlight: #f6f7f6; --emboss-light: #f2f3f2; --emboss-dark: #818792;
+}
+.exhibit:has(#glacier:checked) {
+  --body-light: #b5d5dc; --body: #92b7c9;
+  --body-dark: #6c8ba5; --edge: #69869d;
+  --highlight: #dfedf0; --emboss-light: #deedf0; --emboss-dark: #63879e;
+}
+.topbar {
+  max-width: 1450px; width: 100%; height: 108px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid #dddcd9;
+}
+.wordmark { display: flex; align-items: center; gap: 11px; font-size: 17px; font-weight: 800; letter-spacing: -.7px; }
+.brand-symbol { width: 20px; height: 20px; position: relative; }
+.brand-symbol::before, .brand-symbol::after { content: ""; position: absolute; background: var(--ink); border-radius: 1px; }
+.brand-symbol::before { width: 20px; height: 6px; top: 7px; }
+.brand-symbol::after { height: 20px; width: 6px; left: 7px; }
+.top-note { font: 10px/1.5 monospace; letter-spacing: 1.5px; color: #8c8991; }
+.edition { font: 11px/1.5 monospace; letter-spacing: 1px; }
+.edition span { color: #a19da5; }
+main {
+  max-width: 1450px; width: 100%; margin: auto;
+  display: grid; grid-template-columns: 340px minmax(0,1fr);
+  align-items: center; gap: 30px; padding: 25px 0 28px;
+  min-height: 650px;
+}
+.intro { position: relative; z-index: 2; padding-bottom: 2px; }
+.eyebrow { display: flex; align-items: center; gap: 12px; margin: 0 0 29px; font: 10px/1.5 monospace; letter-spacing: 1.5px; }
+.eyebrow::before { content: ""; width: 25px; height: 1px; background: var(--accent); }
+h1 { margin: 0; font-size: clamp(45px,3.6vw,56px); line-height: 1.03; font-weight: 600; letter-spacing: -.064em; }
+h1 span { display: block; color: var(--accent); }
+.description { margin: 26px 0 0; color: #77737f; font-size: 12px; line-height: 2.1; letter-spacing: .05em; }
+.configuration { margin-top: 47px; }
+.config-title { color: #8c8894; margin: 0 0 13px; font: 10px/1.5 monospace; letter-spacing: 1.4px; }
+.swatches { display: flex; align-items: center; gap: 12px; }
+.swatch {
+  display: grid; place-items: center; width: 31px; height: 31px;
+  border: 1px solid transparent; border-radius: 50%; cursor: pointer;
+  transition: border-color .2s, transform .2s;
+}
+.swatch:hover { transform: translateY(-2px); }
+.swatch:has(input:checked) { border-color: #766693; }
+.swatch::after { content: ""; width: 21px; height: 21px; border-radius: 50%; background: var(--swatch); box-shadow: inset 0 0 0 1px #0000000d; }
+.swatch.indigo { --swatch: #6a54a0; }
+.swatch.platinum { --swatch: #bfc3c8; }
+.swatch.glacier { --swatch: #a1c5d6; }
+.color-name { margin-left: 7px; font: 10px/1.5 monospace; letter-spacing: 1.4px; }
+.color-name::after { content: "INDIGO"; }
+.exhibit:has(#platinum:checked) .color-name::after { content: "PLATINUM"; }
+.exhibit:has(#glacier:checked) .color-name::after { content: "GLACIER"; }
+.power-control { margin-top: 29px; display: flex; align-items: center; gap: 12px; width: max-content; cursor: pointer; }
+.toggle { display: block; width: 31px; height: 17px; background: #b7b2be; border-radius: 20px; padding: 3px; transition: background .2s; }
+.toggle::after { content: ""; display: block; width: 11px; height: 11px; border-radius: 50%; background: white; box-shadow: 0 1px 3px #0002; transition: transform .2s; }
+.power-control:has(input:checked) .toggle { background: #716391; }
+.power-control:has(input:checked) .toggle::after { transform: translateX(14px); }
+.power-text { font: 10px/1.5 monospace; letter-spacing: 1.3px; }
+.power-text::after { content: "OFF"; color: var(--muted); }
+.power-control:has(input:checked) .power-text::after { content: "ON"; color: #625777; }
+
+.product { position: relative; min-width: 0; padding-top: 16px; }
+.device-frame { width: 100%; max-width: 840px; margin: 0 auto; container-type: inline-size; position: relative; }
+.device-stage { position: relative; width: 100%; aspect-ratio: 100 / 72; }
+.device-stage::before {
+  content: ""; position: absolute; width: 83%; height: 15%;
+  top: 72%; left: 8.5%; border-radius: 50%;
+  background: #463558; filter: blur(25px); opacity: .13;
+}
+.hardware {
+  /* Orthographic front view. No rotation, skew, or perspective on the device. */
+  position: absolute; width: 100em; height: 60em; top: 4.5em; left: 0;
+  font-size: 1cqw; transform: none;
+  filter: drop-shadow(0 1.3em 1em #2d213322);
+  isolation: isolate; user-select: none;
+  --shell-outline: polygon(
+      25.000% 0.517%, 75.000% 0.517%, 75.639% 0.543%, 76.230% 0.623%, 76.785% 0.760%,
+      77.316% 0.956%, 77.833% 1.215%, 78.348% 1.539%, 78.874% 1.931%, 79.420% 2.394%,
+      80.000% 2.931%, 81.403% 4.409%, 82.927% 5.749%, 84.544% 6.967%, 86.229% 8.078%,
+      87.953% 9.099%, 89.689% 10.045%, 91.410% 10.931%, 93.090% 11.773%, 94.700% 12.586%,
+      95.260% 12.919%, 95.747% 13.347%, 96.167% 13.876%, 96.527% 14.511%, 96.836% 15.259%,
+      97.100% 16.124%, 97.327% 17.112%, 97.525% 18.230%, 97.700% 19.483%, 97.971% 22.625%,
+      98.249% 26.098%, 98.528% 29.943%, 98.803% 34.195%, 99.069% 38.895%, 99.322% 44.080%,
+      99.557% 49.789%, 99.767% 56.060%, 99.950% 62.931%, 100.006% 65.174%, 100.032% 67.312%,
+      100.019% 69.355%, 99.954% 71.313%, 99.829% 73.195%, 99.631% 75.013%, 99.351% 76.775%,
+      98.978% 78.491%, 98.500% 80.172%, 97.885% 81.542%, 97.056% 82.791%, 96.033% 83.940%,
+      94.841% 85.008%, 93.500% 86.014%, 92.033% 86.980%, 90.463% 87.924%, 88.811% 88.866%,
+      87.100% 89.828%, 85.745% 90.604%, 84.404% 91.425%, 83.059% 92.273%, 81.695% 93.130%,
+      80.294% 93.977%, 78.841% 94.796%, 77.318% 95.567%, 75.710% 96.274%, 74.000% 96.897%,
+      71.053% 97.593%, 68.206% 98.192%, 65.444% 98.697%, 62.757% 99.113%, 60.132% 99.444%,
+      57.556% 99.693%, 55.016% 99.867%, 52.502% 99.967%, 50.000% 100.000%, 47.498% 99.967%,
+      44.984% 99.867%, 42.444% 99.693%, 39.868% 99.444%, 37.243% 99.113%, 34.556% 98.697%,
+      31.794% 98.192%, 28.947% 97.593%, 26.000% 96.897%, 24.290% 96.274%, 22.682% 95.567%,
+      21.159% 94.796%, 19.706% 93.977%, 18.305% 93.130%, 16.941% 92.273%, 15.596% 91.425%,
+      14.255% 90.604%, 12.900% 89.828%, 11.189% 88.866%, 9.537% 87.924%, 7.967% 86.980%,
+      6.500% 86.014%, 5.159% 85.008%, 3.967% 83.940%, 2.944% 82.791%, 2.115% 81.542%,
+      1.500% 80.172%, 1.022% 78.491%, 0.649% 76.775%, 0.369% 75.013%, 0.171% 73.195%,
+      0.046% 71.313%, -0.019% 69.355%, -0.032% 67.312%, -0.006% 65.174%, 0.050% 62.931%,
+      0.233% 56.060%, 0.443% 49.789%, 0.678% 44.080%, 0.931% 38.895%, 1.197% 34.195%,
+      1.472% 29.943%, 1.751% 26.098%, 2.029% 22.625%, 2.300% 19.483%, 2.475% 18.230%,
+      2.673% 17.112%, 2.900% 16.124%, 3.164% 15.259%, 3.473% 14.511%, 3.833% 13.876%,
+      4.253% 13.347%, 4.740% 12.919%, 5.300% 12.586%, 6.910% 11.773%, 8.590% 10.931%,
+      10.311% 10.045%, 12.047% 9.099%, 13.771% 8.078%, 15.456% 6.967%, 17.073% 5.749%,
+      18.597% 4.409%, 20.000% 2.931%, 20.580% 2.394%, 21.126% 1.931%, 21.652% 1.539%,
+      22.167% 1.215%, 22.684% 0.956%, 23.215% 0.760%, 23.770% 0.623%, 24.361% 0.543%,
+      25.000% 0.517%
+    );
+  --bezel-outline: polygon(
+      16.129% 4.494%, 22.582% 3.496%, 29.841% 2.747%, 37.674% 2.247%, 45.853% 1.998%,
+      54.147% 1.998%, 62.326% 2.247%, 70.159% 2.747%, 77.418% 3.496%, 83.871% 4.494%,
+      85.696% 4.780%, 87.343% 5.202%, 88.809% 5.776%, 90.090% 6.523%, 91.180% 7.460%,
+      92.075% 8.606%, 92.771% 9.980%, 93.264% 11.599%, 93.548% 13.483%, 94.093% 20.048%,
+      94.654% 26.968%, 95.234% 34.182%, 95.837% 41.629%, 96.464% 49.249%, 97.119% 56.979%,
+      97.806% 64.759%, 98.526% 72.528%, 99.283% 80.225%, 99.521% 83.011%, 99.514% 85.403%,
+      99.257% 87.441%, 98.742% 89.162%, 97.965% 90.605%, 96.920% 91.810%, 95.601% 92.815%,
+      94.001% 93.660%, 92.115% 94.382%, 85.509% 96.313%, 76.839% 97.761%, 66.693% 98.727%,
+      55.663% 99.209%, 44.337% 99.209%, 33.307% 98.727%, 23.161% 97.761%, 14.491% 96.313%,
+      7.885% 94.382%, 5.999% 93.660%, 4.399% 92.815%, 3.080% 91.810%, 2.035% 90.605%,
+      1.258% 89.162%, 0.743% 87.441%, 0.486% 85.403%, 0.479% 83.011%, 0.717% 80.225%,
+      1.474% 72.528%, 2.194% 64.759%, 2.881% 56.979%, 3.536% 49.249%, 4.163% 41.629%,
+      4.766% 34.182%, 5.346% 26.968%, 5.907% 20.048%, 6.452% 13.483%, 6.736% 11.599%,
+      7.229% 9.980%, 7.925% 8.606%, 8.820% 7.460%, 9.910% 6.523%, 11.191% 5.776%,
+      12.657% 5.202%, 14.304% 4.780%, 16.129% 4.494%
+    );
+  --shoulder-outline: polygon(
+      0.000% 75.862%, 0.145% 68.937%, 0.610% 62.046%, 1.440% 55.326%, 2.683% 48.912%,
+      4.382% 42.940%, 6.584% 37.548%, 9.335% 32.871%, 12.681% 29.045%, 16.667% 26.207%,
+      22.350% 22.884%, 28.253% 20.160%, 34.321% 17.867%, 40.498% 15.838%, 46.731% 13.906%,
+      52.963% 11.903%, 59.140% 9.661%, 65.208% 7.014%, 71.111% 3.793%, 75.077% 1.453%,
+      78.832% -0.521%, 82.387% -2.146%, 85.749% -3.438%, 88.929% -4.416%, 91.934% -5.096%,
+      94.775% -5.495%, 97.461% -5.629%, 100.000% -5.517%, 100.000% 100.000%, 0.000% 100.000%,
+      0.000% 75.862%
+    );
+  --cross-outline: polygon(35% 0,65% 0,68% 3%,68% 32%,97% 32%,100% 35%,100% 65%,97% 68%,68% 68%,68% 97%,65% 100%,35% 100%,32% 97%,32% 68%,3% 68%,0 65%,0 35%,3% 32%,32% 32%,32% 3%);
+}
+/* L/R shoulders are visible just behind the sculpted top edge. */
+.shoulder {
+  position: absolute; z-index: -2; top: 1.15em; width: 27em; height: 14.5em;
+  background: #a6aaa2; clip-path: var(--shoulder-outline);
+  border: 0;
+}
+.shoulder::before {
+  content: ""; position: absolute; inset: .15em .12em 0;
+  clip-path: var(--shoulder-outline);
+  background: linear-gradient(180deg,#eff0e8,#d8dbd1 23%,#b4b9af 70%,#93988d);
+}
+.shoulder-l { left: 1.4em; }
+.shoulder-r { right: 1.4em; transform: scaleX(-1); }
+.shoulder span { display: none; }
+.rear-shell {
+  position: absolute; z-index: -1; left: -.12em; top: 1.3em; width: 100.24em; height: 58.55em;
+  clip-path: var(--shell-outline);
+  background: linear-gradient(180deg,#dbddd5 4%,#b3b7ad 26%,#94948f 64%,#838288 95%,#acaab0);
+}
+.shell {
+  position: absolute; top: .8em; left: 0; width: 100em; height: 58em;
+  clip-path: var(--shell-outline);
+  background: linear-gradient(180deg,var(--highlight),var(--body) 13%,var(--edge) 83%,var(--body-dark));
+}
+.shell::before {
+  content: ""; position: absolute; inset: .25em .28em .78em;
+  clip-path: var(--shell-outline);
+  background:
+    radial-gradient(ellipse at 23% 7%,#ffffff0d,transparent 55%),
+    radial-gradient(ellipse at 50% 77%,#bfb0f60c,transparent 52%),
+    linear-gradient(166deg,var(--body-light),var(--body) 38%,var(--body) 75%,var(--body-dark) 118%);
+}
+.shell::after {
+  content: ""; position: absolute; inset: .28em .32em .84em; pointer-events: none;
+  clip-path: var(--shell-outline); opacity: .24;
+  background:
+    repeating-conic-gradient(#ffffff13 0% 25%,transparent 0% 50%) 0 0 / .36em .36em,
+    repeating-conic-gradient(#1f103515 0% 25%,transparent 0% 50%) .12em .2em / .42em .42em;
+  mix-blend-mode: soft-light;
+}
+.nintendo {
+  position: absolute; left: 43.8em; top: 3.05em; width: 12.4em; height: 2.6em;
+  display: grid; place-items: center; border: .16em solid var(--emboss-dark);
+  border-radius: 2em; opacity: .62;
+  box-shadow: 0 .12em .07em var(--emboss-light), inset 0 .12em .07em var(--emboss-light);
+}
+.nintendo span { font: bold 1.85em/1 Arial,sans-serif; letter-spacing: -.075em; color: var(--emboss-dark); text-shadow: 0 .075em .025em var(--emboss-light); }
+/* The lens is narrower at the top and gently bowed along the bottom. */
+.bezel {
+  position: absolute; left: 22.1em; top: 6.5em; width: 55.8em; height: 44.5em;
+  background: linear-gradient(160deg,#463d56,#3e354f 35%,#92819e 100%);
+  clip-path: var(--bezel-outline);
+  filter: drop-shadow(0 .2em .13em #ffffff33);
+}
+.bezel::before {
+  content: ""; position: absolute; inset: .28em .26em .27em;
+  clip-path: var(--bezel-outline);
+  background: linear-gradient(135deg,#4a4d44 0%,#30342f 13%,#2c302c 56%,#373a33 100%);
+}
+.bezel::after {
+  content: ""; position: absolute; inset: .52em .52em .53em;
+  clip-path: var(--bezel-outline); pointer-events: none;
+  background: linear-gradient(145deg,#fff7 0%,transparent 2%,transparent 96%,#afafa649 100%);
+  opacity: .18;
+}
+.screen-well {
+  position: absolute; left: 6.75em; top: 5.4em; width: 42.3em; height: 28.3em;
+  background: #232821; overflow: hidden;
+  box-shadow: 0 -.45em .3em #14181099, -.2em 0 .16em #1418108a,
+    .16em .16em .1em #a6aa9229, 0 0 0 .22em #252b2390;
+}
+.screen { position: absolute; inset: .15em; overflow: hidden; background: #777a71; isolation: isolate; }
+.scene { position: absolute; inset: 0; overflow: hidden; background: #0b0c0b; transition: opacity .35s, filter .35s; }
+.screen::before { content: ""; position: absolute; z-index: 7; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg,#203c3521 0px,#203c3521 1px,transparent 1px,transparent 3px),repeating-linear-gradient(90deg,#25443808 0px,#25443808 1px,transparent 1px,transparent 3px); opacity: .53; }
+.screen::after { content: ""; position: absolute; z-index: 8; inset: 0; pointer-events: none; background: linear-gradient(120deg,#fff2,transparent 38%,transparent 72%,#1429220a); box-shadow: inset .3em .4em .8em #111d2266; }
+.screen-off { position: absolute; inset: 0; background: linear-gradient(138deg,#787c71,#72786b 72%,#767c6f); opacity: 0; z-index: 6; transition: opacity .3s; }
+.screen-logo {
+  position: absolute; bottom: 3.55em; left: 0; right: 0;
+  display: flex; justify-content: center; align-items: baseline; gap: .35em;
+  color: #d9dcd3; text-shadow: .045em .08em .08em #060b07;
+  white-space: nowrap; transform: scaleX(1.04);
+}
+.screen-logo .gameboy { font: 900 italic 2.9em/1 Arial,sans-serif; letter-spacing: -.06em; }
+.screen-logo .advance { font: 800 italic 2.48em/1 Arial,sans-serif; letter-spacing: -.065em; }
+/* The reference has light-gray controls, not black ones. */
+.dpad {
+  position: absolute; top: 18.3em; left: 6.4em; width: 13.2em; height: 13.2em;
+  filter: drop-shadow(.12em .3em .22em #231b3799);
+}
+.dpad::before {
+  content: ""; position: absolute; inset: -.28em;
+  background: #3d354e; clip-path: var(--cross-outline);
+}
+.dpad-base {
+  position: absolute; inset: 0; clip-path: var(--cross-outline);
+  background: linear-gradient(140deg,#e6e9dd 5%,#b5b9b0 57%,#8e9389 100%);
+}
+.dpad-base::before {
+  content: ""; position: absolute; inset: .25em .27em .39em;
+  clip-path: var(--cross-outline);
+  background: linear-gradient(145deg,#dddfd5,#c7ccc1 56%,#b8bdb3);
+}
+.direction {
+  position: absolute; border: 0; padding: 0; background: transparent;
+  width: 4.22em; height: 4.22em; font-size: inherit; border-radius: .4em;
+}
+.direction:active { background: #858c8240; }
+.direction-up { top: .15em; left: 4.49em; box-shadow: inset 0 .14em .08em #fff7; }
+.direction-down { bottom: .12em; left: 4.49em; box-shadow: inset 0 -.14em .1em #888f8133; }
+.direction-left { top: 4.49em; left: .13em; box-shadow: inset .12em .14em .08em #fff5; }
+.direction-right { top: 4.49em; right: .13em; box-shadow: inset -.13em -.12em .1em #7e857626; }
+.dpad-center {
+  position: absolute; top: 5.26em; left: 5.26em; width: 2.68em; height: 2.68em;
+  border-radius: 50%; pointer-events: none;
+  background: linear-gradient(145deg,#b7bdb140,#c5cabe33);
+  box-shadow: inset .06em .12em .16em #8088752d, 0 .09em .09em #faffed39;
+}
+.actions { position: absolute; left: 77em; top: 19.5em; width: 17.4em; height: 10em; }
+.action {
+  position: absolute; width: 6.3em; height: 6.3em; border-radius: 50%; padding: 0;
+  border: .13em solid #b2b8ab; font-size: inherit; color: #c4c9bd;
+  background: radial-gradient(ellipse at 40% 30%,#d6dacd 0%,#cbd0c3 52%,#bcc3b4 100%);
+  box-shadow: .11em .39em .2em #281e3799, 0 0 0 .26em #453a5d70,
+    inset .13em .19em .13em #f5f9e99c, inset -.13em -.24em .18em #919a8766;
+  transition: transform .08s, box-shadow .08s;
+}
+.action span {
+  display: inline-block; font: 500 2.9em/1 Arial,sans-serif;
+  text-shadow: -.025em -.035em .025em #98a18a85, .04em .04em .025em #fbffefaa;
+  opacity: .8;
+}
+.button-a { top: 0; right: .7em; }
+.button-b { top: 3.4em; left: .5em; }
+.action:active {
+  transform: translateY(.22em);
+  box-shadow: .06em .13em .13em #281e3799, 0 0 0 .26em #453a5d70,
+    inset .06em .1em .18em #737d6a44;
+}
+.power-led {
+  position: absolute; left: 80.25em; top: 10.65em; width: 1.55em; height: 1.55em;
+  border-radius: 50%; background: #a4d55d; border: .18em solid #4b5541;
+  box-shadow: 0 0 .6em #b8ec6959, 0 .15em .12em #cbc0e66b, inset .09em .12em .12em #e6ffc4;
+  transition: background .2s, box-shadow .2s;
+}
+.power-led::after { content: ""; position: absolute; inset: .19em .2em .4em; background: #edffc977; border-radius: inherit; }
+.exhibit:has(#power:not(:checked)) .power-led {
+  background: #5a5f4d; border-color: #625879;
+  box-shadow: inset .12em .16em .2em #252e258c, 0 .13em .1em #bdb0d485;
+}
+.exhibit:has(#power:not(:checked)) .power-led::after { opacity: 0; }
+.power-label { position: absolute; top: 11.03em; left: 83.1em; width: 8em; }
+.power-label span {
+  font: 500 1.06em/1 Arial,sans-serif; letter-spacing: .08em;
+  color: var(--emboss-dark); text-shadow: 0 .12em .05em var(--emboss-light); opacity: .65;
+}
+/* START is above SELECT: molded angled wells with small round gray keys. */
+.small-controls { position: absolute; top: 35em; left: 9.35em; width: 11.4em; height: 10.8em; }
+.small-control {
+  position: absolute; left: 0; width: 10.1em; height: 3.65em;
+  border: .16em solid #37215a18; border-radius: 3em;
+  background: linear-gradient(170deg,#37235406,transparent);
+  box-shadow: inset .09em .14em .16em #34204c29, inset -.04em -.09em .12em #dac8fa39,
+    0 -.1em .07em #d4c0ef30;
+  rotate: 16deg;
+}
+.start-control { top: 0; }
+.select-control { top: 5.45em; }
+.small-key {
+  position: absolute; right: -.5em; top: .3em; display: block;
+  width: 3em; height: 3em; padding: 0; border-radius: 50%;
+  border: .1em solid #b5bdac; background: linear-gradient(140deg,#e0e6d4,#c4ceba 65%,#aab79f);
+  font-size: inherit; cursor: pointer;
+  box-shadow: .08em .26em .13em #2d244178, 0 0 0 .18em #4a3d6054,
+    inset .13em .13em .1em #f9ffebad, inset -.1em -.12em .12em #81937455;
+}
+.small-key:active { transform: translateY(.13em); }
+.small-control .key-label {
+  position: absolute; top: 1.09em; left: .85em;
+  font: 500 1.07em/1 Arial,sans-serif;
+  color: var(--emboss-dark); text-shadow: 0 .12em .04em var(--emboss-light);
+  letter-spacing: .035em; opacity: .72; pointer-events: none;
+}
+.small-key:has(input:focus-visible) { outline: .35em solid #c3e3b5; outline-offset: .3em; }
+/* Five equal-length slots; their slight diagonal is part of the front panel. */
+.speaker {
+  position: absolute; right: 9.9em; top: 36.3em; width: 11.8em; height: 8.55em;
+  rotate: -14deg; display: flex; flex-direction: column; justify-content: space-between;
+}
+.speaker i {
+  display: block; width: 100%; height: .55em; flex: 0 0 .55em; border-radius: 1em;
+  background: #3f2d60;
+  box-shadow: 0 .18em .1em #b7a5dc85, inset 0 .16em .12em #241734bd,
+    0 -.04em .12em #43276f7a;
+}
+.hardware-caption { display: flex; align-items: center; justify-content: center; gap: 13px; margin-top: 13px; font: 10px/1.5 monospace; letter-spacing: 1.4px; color: #88848e; }
+.hardware-caption::before,.hardware-caption::after { content: ""; width: 26px; height: 1px; background: #c9c5ce; }
+.interaction-hint { text-align: center; font-size: 10px; line-height: 1.8; color: #8d8993; margin: 14px 0 0; letter-spacing: .06em; }
+footer { width: 100%; max-width: 1450px; margin: 0 auto; padding: 25px 0 28px; border-top: 1px solid #dddcd9; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.materials { display: flex; align-items: center; gap: 15px; }
+.css-badge { border: 1px solid #d3cfd8; border-radius: 5px; padding: 6px 8px; font: bold 9px/1 monospace; letter-spacing: .6px; color: #71677f; }
+.footer-note { font: 9px/1.6 monospace; color: #99959d; letter-spacing: .9px; }
+.footer-credit { font-size: 9px; color: #99959d; letter-spacing: .04em; }
+
+/* ================================================================ rgba integration */
+.screen canvas {
+  position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+  image-rendering: pixelated; image-rendering: crisp-edges;
+}
+.screen::before { opacity: .22; } /* lighter LCD grid over real video */
+.pause-overlay { position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; background: #0d1a1a66; }
+.pause-overlay[hidden] { display: none; }
+.pause-overlay span { font: bold 2em/1 monospace; letter-spacing: .2em; color: #f5eabd; background: #254e4de0; padding: .7em 1em; border: .13em solid #ccdbb0; box-shadow: .2em .2em #254e4d; }
+.exhibit:has(#power:not(:checked)) .pause-overlay { display: none; }
+.hardware { touch-action: none; -webkit-touch-callout: none; }
+
+/* Presses from pointer / keyboard / gamepad mirror the :active styles. */
+.direction.pressed { background: #858c8240; }
+.action.pressed {
+  transform: translateY(.22em);
+  box-shadow: .06em .13em .13em #281e3799, 0 0 0 .26em #453a5d70,
+    inset .06em .1em .18em #737d6a44;
+}
+.small-key.pressed { transform: translateY(.13em); }
+.shoulder { cursor: pointer; padding: 0; transition: translate .06s; }
+.shoulder.pressed { translate: 0 .45em; }
+/* The visible shoulder strip is thin; these transparent zones over the top
+   corners make L/R easy to hit with a finger. */
+.shoulder-hit { position: absolute; z-index: 1; top: 0; width: 21em; height: 9em; padding: 0; border: 0; background: transparent; cursor: pointer; }
+.shoulder-hit-l { left: 0; border-top-left-radius: 9em 6em; }
+.shoulder-hit-r { right: 0; border-top-right-radius: 9em 6em; }
+
+/* ---- play / debug mode switch ---- */
+.modes { display: inline-flex; border: 1px solid #d3cfd8; border-radius: 5px; overflow: hidden; font: bold 10px/1 monospace; letter-spacing: 1px; }
+.modes a { padding: 8px 11px; color: #8c8991; text-decoration: none; }
+.modes a + a { border-left: 1px solid #d3cfd8; }
+.modes a:hover { color: var(--ink); }
+.modes a[aria-current="page"] { background: var(--ink); color: var(--paper); }
+
+/* ---- cartridge / transport controls ---- */
+.cartridge { margin-top: 0; }
+.rom-row, .transport { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.transport { margin-top: 9px; }
+.rom-row select, .ctl {
+  font: 10px/1.5 monospace; letter-spacing: 1px; color: var(--ink);
+  background: #ffffff8c; border: 1px solid #d3cfd8; border-radius: 5px; padding: 6px 10px;
+  cursor: pointer;
+}
+.rom-row select { flex: 1 1 170px; min-width: 0; max-width: 100%; }
+.rom-row select:hover, .ctl:hover { border-color: var(--accent); }
+.ctl:disabled { opacity: .45; cursor: default; }
+.ctl.on { color: var(--accent); border-color: var(--accent); }
+.ctl input[type="file"] { display: none; }
+.rom-status { margin-top: 12px; min-height: 1.7em; font: 10px/1.7 monospace; letter-spacing: .4px; color: #8c8894; }
+.rom-status a { color: var(--accent); }
+.rom-status .lic { color: var(--ink); }
+.rom-status .err { color: #b8433a; }
+.configuration { margin-top: 34px; }
+.interaction-hint kbd { font: 9px/1 monospace; color: var(--ink); border: 1px solid #d3cfd8; border-bottom-width: 2px; border-radius: 3px; padding: 1px 4px; }
+
+.product:fullscreen { background: var(--paper); display: flex; flex-direction: column; justify-content: center; padding: 2vh 4vw; }
+.product:fullscreen .device-frame { max-width: min(100%, calc((100vh - 110px) * 100 / 72)); }
+
+@media (max-width: 900px) {
+  .cartridge { margin-top: 0; }
+  .rom-row, .transport { justify-content: center; }
+  .rom-status { text-align: center; }
+  .configuration { margin-top: 20px; }
+  .modes a { padding: 7px 9px; }
+}
+
+@media (min-width: 1600px) { main { grid-template-columns: 380px minmax(0,1fr); gap: 65px; } }
+@media (max-width: 1100px) and (min-width: 901px) { main { grid-template-columns: 270px minmax(0,1fr); gap: 16px; min-height: 580px; } h1 { font-size: 43px; } .description { font-size: 11px; } }
+@media (max-width: 900px) {
+  .exhibit { padding: 0 6vw; }
+  .topbar { height: 77px; }
+  .top-note { display: none; }
+  .wordmark { font-size: 15px; }
+  .edition { font-size: 10px; }
+  main { grid-template-columns: 1fr; gap: 25px; padding: 40px 0 36px; min-height: auto; }
+  .intro { text-align: center; }
+  .eyebrow { justify-content: center; font-size: 9px; margin-bottom: 20px; }
+  h1 { font-size: clamp(43px,8.3vw,64px); line-height: 1.04; }
+  .description { margin-top: 16px; font-size: 11px; line-height: 1.9; }
+  .configuration { display: flex; justify-content: center; align-items: center; gap: 24px; margin-top: 25px; }
+  .config-title { display: none; }
+  .swatches { gap: 7px; }
+  .color-name { font-size: 9px; width: 65px; text-align: left; margin-left: 3px; }
+  .power-control { margin-top: 0; gap: 7px; }
+  .power-text { font-size: 9px; }
+  .product { padding-top: 1px; }
+  .device-stage::before { filter: blur(20px); }
+  .hardware-caption { font-size: 8px; margin-top: 3px; }
+  .interaction-hint { font-size: 9px; margin-top: 10px; }
+  footer { flex-wrap: wrap; justify-content: center; padding: 20px 0; gap: 13px; }
+  .footer-note { font-size: 8px; }
+  .footer-credit { font-size: 8px; }
+}
+@media (max-width: 360px) { .configuration { gap: 10px; } .swatches { gap: 3px; } .color-name { width: 55px; } }
+@media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="exhibit" id="exhibit">
+  <header class="topbar">
+    <div class="wordmark"><span class="brand-symbol" aria-hidden="true"></span> rgba</div>
+    <nav class="modes" aria-label="mode">
+      <a href="./play.html" aria-current="page">▶ PLAY</a>
+      <a id="modeDebug" href="./index.html">⚙ DEBUG</a>
+    </nav>
+    <div class="edition"><span>MODE</span> &nbsp; PLAY / GBA</div>
+  </header>
+  <main>
+    <section class="intro" aria-labelledby="intro-title">
+      <p class="eyebrow" id="intro-title">RGBA EMULATOR / PLAY MODE</p>
+
+      <div class="cartridge">
+        <p class="config-title">CARTRIDGE</p>
+        <div class="rom-row">
+          <select id="romSel" title="open-source ROM library (see roms.json for licenses)">
+            <option value="">library…</option>
+          </select>
+          <label class="ctl">LOAD ROM<input type="file" id="rom" accept=".gba,.bin"></label>
+        </div>
+        <div class="transport">
+          <button type="button" class="ctl" id="pause" disabled>PAUSE</button>
+          <button type="button" class="ctl" id="reset" disabled>RESET</button>
+          <button type="button" class="ctl" id="sound" title="sound starts after your first tap / key press">SOUND ON</button>
+          <button type="button" class="ctl" id="full" title="fullscreen">FULLSCREEN</button>
+        </div>
+        <div class="rom-status" id="romStatus"></div>
+      </div>
+
+      <div class="configuration">
+        <div class="color-control">
+          <p class="config-title" id="color-label">CHOOSE YOUR COLOR</p>
+          <div class="swatches" role="group" aria-labelledby="color-label">
+            <label class="swatch indigo" title="Indigo"><input class="visually-hidden" id="indigo" type="radio" name="color" value="indigo" checked aria-label="インディゴ"></label>
+            <label class="swatch platinum" title="Platinum"><input class="visually-hidden" id="platinum" type="radio" name="color" value="platinum" aria-label="プラチナ"></label>
+            <label class="swatch glacier" title="Glacier"><input class="visually-hidden" id="glacier" type="radio" name="color" value="glacier" aria-label="グレイシャー"></label>
+            <span class="color-name" aria-hidden="true"></span>
+          </div>
+        </div>
+        <label class="power-control">
+          <input class="visually-hidden" type="checkbox" id="power" checked aria-label="電源">
+          <span class="toggle" aria-hidden="true"></span><span class="power-text" aria-hidden="true">POWER &nbsp;</span>
+        </label>
+      </div>
+    </section>
+
+    <section class="product" id="stage" aria-label="HTMLとCSSで描いたGame Boy Advanceの正面ビュー（エミュレータ画面つき）">
+      <div class="device-frame">
+        <div class="device-stage">
+          <div class="hardware" id="gba">
+            <button type="button" class="shoulder shoulder-l" data-key="9" aria-label="L"><span>L</span></button>
+            <button type="button" class="shoulder shoulder-r" data-key="8" aria-label="R"><span>R</span></button>
+            <div class="rear-shell" aria-hidden="true"></div>
+            <div class="shell" aria-hidden="true"></div>
+            <div class="nintendo" aria-hidden="true"><span>Nintendo</span></div>
+            <div class="bezel">
+              <div class="screen-well">
+                <div class="screen">
+                  <div class="scene">
+                    <canvas id="screen" width="240" height="160" aria-label="game screen"></canvas>
+                    <div class="pause-overlay" id="overlay"><span>LOADING</span></div>
+                  </div>
+                  <div class="screen-off" aria-hidden="true"></div>
+                </div>
+              </div>
+              <div class="screen-logo" aria-hidden="true"><span class="gameboy">GAME BOY</span><span class="advance">ADVANCE</span></div>
+            </div>
+            <div class="dpad" role="group" aria-label="十字キー">
+              <div class="dpad-base" aria-hidden="true"></div>
+              <button type="button" class="direction direction-up" data-key="6" aria-label="上"></button>
+              <button type="button" class="direction direction-down" data-key="7" aria-label="下"></button>
+              <button type="button" class="direction direction-left" data-key="5" aria-label="左"></button>
+              <button type="button" class="direction direction-right" data-key="4" aria-label="右"></button>
+              <div class="dpad-center" aria-hidden="true"></div>
+            </div>
+            <div class="actions" role="group" aria-label="アクションボタン">
+              <button type="button" class="action button-a" data-key="0" aria-label="A"><span>A</span></button>
+              <button type="button" class="action button-b" data-key="1" aria-label="B"><span>B</span></button>
+            </div>
+            <div class="power-led" aria-hidden="true"></div>
+            <div class="power-label" aria-hidden="true"><span>POWER</span></div>
+            <div class="small-controls">
+              <div class="small-control start-control">
+                <button type="button" class="small-key" data-key="3" aria-label="START"></button>
+                <span class="key-label" aria-hidden="true">START</span>
+              </div>
+              <div class="small-control select-control">
+                <button type="button" class="small-key" data-key="2" aria-label="SELECT"></button>
+                <span class="key-label" aria-hidden="true">SELECT</span>
+              </div>
+            </div>
+            <button type="button" class="shoulder-hit shoulder-hit-l" data-key="9" tabindex="-1" aria-hidden="true"></button>
+            <button type="button" class="shoulder-hit shoulder-hit-r" data-key="8" tabindex="-1" aria-hidden="true"></button>
+            <div class="speaker" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+          </div>
+        </div>
+      </div>
+      <p class="hardware-caption">RGBA · WASM CORE · FRONT VIEW</p>
+      <p class="interaction-hint">
+        <kbd>Z</kbd> A · <kbd>X</kbd> B · <kbd>A</kbd> L · <kbd>S</kbd> R ·
+        <kbd>Enter</kbd> START · <kbd>Space</kbd> SELECT · 矢印 十字キー ·
+        <kbd>P</kbd> 一時停止 · ゲームパッド対応
+      </p>
+    </section>
+  </main>
+  <footer>
+    <div class="materials"><span class="css-badge">HTML + CSS DEVICE</span><span class="footer-note">WASM EMULATOR CORE · NO IMAGES</span></div>
+    <span class="footer-credit">Unofficial fan-made study. Nintendo / GAME BOY ADVANCE are Nintendo trademarks.</span>
+  </footer>
+</div>
+<script type="module" src="./play.js"></script>
+</body>
+</html>
