@@ -13,6 +13,23 @@ impl Rom {
     pub const fn len(&self) -> usize {
         self.0.len()
     }
+
+    /// Grow the image to `size` bytes (zero-filled) so the whole range is
+    /// backed by storage, as on a flash cart whose PSRAM holds the ROM.
+    pub fn extend_to(&mut self, size: usize) {
+        if self.0.len() < size {
+            self.0.resize(size, 0);
+        }
+    }
+
+    /// Store `bytes` at `addr`. Only reachable when the cart exposes its ROM
+    /// as writable PSRAM; accesses past the end of the image are dropped.
+    pub fn write(&mut self, addr: u32, bytes: &[u8]) {
+        let start = addr as usize;
+        if let Some(dst) = self.0.get_mut(start..start + bytes.len()) {
+            dst.copy_from_slice(bytes);
+        }
+    }
 }
 
 impl Raw for Rom {
@@ -51,6 +68,18 @@ impl WordReadable for Rom {
         let b3 = self.0[(i + 3) % len] as u32;
         b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)
     }
+}
+
+#[test]
+fn rom_write_after_extend() {
+    let mut rom = Rom::new(4, &[0x01, 0x02, 0x03, 0x04]);
+    rom.extend_to(8);
+    rom.write(4, &0x1234_5678u32.to_le_bytes());
+    assert_eq!(rom.read_word(0), 0x0403_0201);
+    assert_eq!(rom.read_word(4), 0x1234_5678);
+    // Out-of-range writes are dropped rather than panicking.
+    rom.write(6, &0xFFFF_FFFFu32.to_le_bytes());
+    assert_eq!(rom.read_word(4), 0x1234_5678);
 }
 
 #[test]

@@ -184,6 +184,9 @@ pub struct CpuBus {
     /// valid (not "invalid write" warnings) and the log is observable.
     mgba_log_buffer: [u8; 256],
     mgba_log_enabled: bool,
+    /// Flash-cart PSRAM mode: the GamePak ROM area is backed by writable RAM
+    /// (as on EZ-Flash / EverDrive style carts), so CPU and DMA stores land.
+    psram: bool,
 }
 
 impl BusAccessor for CpuBus {
@@ -515,6 +518,7 @@ impl BusAccessor for CpuBus {
             0x0700_0000..=0x07FF_FFFF => {
                 // ignore
             }
+            0x0800_0000..=0x0DFF_FFFF if self.psram => self.psram_write(addr, &[data]),
             0x0E00_0000..=0x0E00_FFFF => {
                 // SRAM / Flash save memory (byte access only)
                 self.backup.write(addr, data);
@@ -645,6 +649,7 @@ impl BusAccessor for CpuBus {
                     e.write_bit(data);
                 }
             }
+            0x0800_0000..=0x0DFF_FFFF if self.psram => self.psram_write(addr, &data.to_le_bytes()),
             0x0E00_0000..=0x0E00_FFFF => {
                 tracing::warn!("Invalid halfword write to SRAM at 0x{addr:08x} = 0x{data:04x} (SRAM is byte-access only, ignored)");
             }
@@ -806,6 +811,7 @@ impl BusAccessor for CpuBus {
             }
             // Fix(006): OAM 1KB mirror (32-bit write)
             0x0700_0000..=0x07FF_FFFF => self.oam.write_word((addr - 0x0700_0000) & 0x3FF, data),
+            0x0800_0000..=0x0DFF_FFFF if self.psram => self.psram_write(addr, &data.to_le_bytes()),
             0x0E00_0000..=0x0E00_FFFF => {
                 tracing::warn!("Invalid word write to SRAM at 0x{addr:08x} = 0x{data:08x} (SRAM is byte-access only, ignored)");
             }
@@ -880,6 +886,7 @@ impl CpuBus {
             trace_dma: std::env::var("AGB_TRACE_DMA").ok().as_deref() == Some("1"),
             mgba_log_buffer: [0; 256],
             mgba_log_enabled: false,
+            psram: false,
         }
     }
 
@@ -920,6 +927,18 @@ impl CpuBus {
             0x04FF_F701..=0x04FF_F7FF => true, // reserved control bytes; accept silently
             _ => false,
         }
+    }
+
+    /// Back the whole 32MB GamePak window with writable PSRAM, like a flash
+    /// cart that runs the game out of PSRAM. Homebrew can then use the ROM
+    /// area as a large (slow) RAM.
+    pub(crate) fn enable_psram(&mut self) {
+        self.rom.extend_to(0x0200_0000);
+        self.psram = true;
+    }
+
+    fn psram_write(&mut self, addr: Word, bytes: &[u8]) {
+        self.rom.write(Self::map_gamepak_offset(addr), bytes);
     }
 
     pub(crate) fn update_key(&mut self, key: io::Key) {
@@ -1560,6 +1579,7 @@ impl CpuBus {
         match addr {
             0x0400_00A0 => self.apu.push_fifo_a(data),
             0x0400_00A4 => self.apu.push_fifo_b(data),
+            0x0800_0000..=0x0DFF_FFFF if self.psram => self.psram_write(addr, &data.to_le_bytes()),
             // GamePak ROM/EEPROM area: writes are typically ignored by ROM,
             // and EEPROM uses serial protocol (not modeled here yet).
             0x0800_0000..=0x0DFF_FFFF => {
@@ -1597,6 +1617,7 @@ impl CpuBus {
         match addr {
             0x0400_00A0 => self.apu.push_fifo_a(data as u32),
             0x0400_00A4 => self.apu.push_fifo_b(data as u32),
+            0x0800_0000..=0x0DFF_FFFF if self.psram => self.psram_write(addr, &data.to_le_bytes()),
             // GamePak ROM/EEPROM area: treat as no-op for now.
             0x0800_0000..=0x0DFF_FFFF => {
                 let _ = data;
