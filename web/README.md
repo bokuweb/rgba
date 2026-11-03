@@ -31,7 +31,7 @@ and carries the current library ROM along (`?rom=<id>` works on both).
 ## ROM library
 
 The toolbar's **library** picker loads open-source ROMs listed in
-[`roms.json`](roms.json): 28 open-source homebrew games (Flappy Goose, Dungeon Master,
+[`roms.json`](roms.json): 35 open-source homebrew games (Flappy Goose, Dungeon Master,
 CASCADE7, Skyland, Minicraft, µCity Advance, Hero Core, Blind Jump, the agb
 titles, several GBA Jam entries, …) plus the jsmolka `gba-tests` and mGBA test
 suites. Each entry records author, license and a
