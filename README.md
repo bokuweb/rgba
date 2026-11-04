@@ -7,7 +7,7 @@ A Game Boy Advance emulator written in Rust. One core, two frontends:
 
 * **native** — an SDL2 window (`cargo run -- rom.gba`)
 * **web** — a WASM build wrapped in a No$gba-style debugger, with a built-in
-  library of 35 open-source homebrew games
+  library of 38 open-source homebrew games and demos
 
 **▶ Try it in the browser: https://bokuweb.github.io/rgba/** — it opens
 straight into [Flappy Goose](https://github.com/mmailhot/FlappyGoose) (press
@@ -219,6 +219,9 @@ are recorded per entry and shown in the debugger when a ROM is loaded.
 | [Gerbil Space Program](https://github.com/gbajam22/GSP) | n67094 | GBA Jam 2022 | MPL-2.0 |
 | [notenogram](https://github.com/gbajam22/notenogram) | kva64 · music by congusbongus | GBA Jam 2022 | Zlib code; CC BY 4.0 art & SFX; CC0 music |
 | [The Dungeon Puzzler's Lament](https://github.com/agbrs/agb/tree/master/examples/the-dungeon-puzzlers-lament) | agb team | — | MPL-2.0 |
+| [Karloff](https://github.com/olymp14n/spectrox-karloff) (demo) | Olympian / Spectrox, Grimnir, Virgill | MountainBytes 2026 | CC0-1.0 |
+| [Toxic](https://github.com/olymp14n/spectrox-toxic) (demo) | Olympian / Spectrox, W.O.T.W, Motion | — | CC0-1.0 |
+| [Dustline](https://github.com/abhuva/dustline) | abhuva | — | CC BY-SA 4.0 |
 | [gba-tests](https://github.com/jsmolka/gba-tests) arm / thumb / memory / bios | jsmolka | — | MIT |
 | [mGBA test suite](https://github.com/mgba-emu/suite) | endrift | — | MIT |
 | hello, lifegame | bokuweb | — | this repository |
