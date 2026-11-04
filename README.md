@@ -7,7 +7,7 @@ A Game Boy Advance emulator written in Rust. One core, two frontends:
 
 * **native** — an SDL2 window (`cargo run -- rom.gba`)
 * **web** — a WASM build wrapped in a No$gba-style debugger, with a built-in
-  library of 28 open-source homebrew games
+  library of 38 open-source homebrew games and demos
 
 **▶ Try it in the browser: https://bokuweb.github.io/rgba/** — it opens
 straight into [Flappy Goose](https://github.com/mmailhot/FlappyGoose) (press
@@ -212,6 +212,16 @@ are recorded per entry and shown in the debugger when a ROM is loaded.
 | [GBArcade](https://github.com/emmabritton/gba_gbarcade) | Emma Britton | — | MIT |
 | [Nonogram Advance](https://github.com/emmabritton/gba_nonogram_advance) | Emma Britton | — | MIT |
 | [MeteoRain](https://github.com/drludos/meteorain-gba) | Dr. Ludos | GBA Jam 2021 | MIT code; music "Overmode" by Warlord is CC BY-NC-SA |
+| [Attack on Voxelburg](https://github.com/MutantStargoat/voxelburg) | John Tsiombikas (Mutant Stargoat) | GBA Jam 2022 | GPL-3.0-or-later |
+| [Noonlight Paradox](https://github.com/zegalur/noonlight-paradox-gba) | Pavlo Savchuk (zegalur) | GBA Jam 2026 | MIT code; CC BY assets; fonts OFL 1.1 / M+ |
+| [Hyperspace Roll](https://github.com/agbrs/agb/tree/master/examples/hyperspace-roll) | agb team | GMTK Game Jam 2022 | MPL-2.0; font "Pixelated" by Greenma201, CC BY-SA 3.0 |
+| [Lander Advance](https://github.com/edefelice/lander-advance) | Ernesto De Felice, Pierluca De Felice, Raffaele Colamarino, Raffaele Aucelli | GBA Jam 2026 | MIT code; CC BY 4.0 art & SFX; jam logo CC BY-NC 4.0 |
+| [Gerbil Space Program](https://github.com/gbajam22/GSP) | n67094 | GBA Jam 2022 | MPL-2.0 |
+| [notenogram](https://github.com/gbajam22/notenogram) | kva64 · music by congusbongus | GBA Jam 2022 | Zlib code; CC BY 4.0 art & SFX; CC0 music |
+| [The Dungeon Puzzler's Lament](https://github.com/agbrs/agb/tree/master/examples/the-dungeon-puzzlers-lament) | agb team | — | MPL-2.0 |
+| [Karloff](https://github.com/olymp14n/spectrox-karloff) (demo) | Olympian / Spectrox, Grimnir, Virgill | MountainBytes 2026 | CC0-1.0 |
+| [Toxic](https://github.com/olymp14n/spectrox-toxic) (demo) | Olympian / Spectrox, W.O.T.W, Motion | — | CC0-1.0 |
+| [Dustline](https://github.com/abhuva/dustline) | abhuva | — | CC BY-SA 4.0 |
 | [gba-tests](https://github.com/jsmolka/gba-tests) arm / thumb / memory / bios | jsmolka | — | MIT |
 | [mGBA test suite](https://github.com/mgba-emu/suite) | endrift | — | MIT |
 | hello, lifegame | bokuweb | — | this repository |
