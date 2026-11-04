@@ -40,6 +40,26 @@ fn main() {
         .with_writer(std::io::stderr)
         .init();
 
+    // `RGBA_HEADLESS=<frames>` runs the emulator without a window or audio,
+    // as fast as possible (0 = forever). Handy for ROMs that only report
+    // through the mGBA debug log (`RUST_LOG=rgba::gba::bus=debug`).
+    if let Some(frames) = std::env::var("RGBA_HEADLESS").ok().and_then(|s| s.parse::<u64>().ok()) {
+        let mut gba = gba::GBA::new();
+        let mut n: u64 = 0;
+        let mut buf = Vec::new();
+        while frames == 0 || n < frames {
+            buf = gba.frame(false);
+            n += 1;
+        }
+        // `RGBA_SCREENSHOT=out.ppm` saves the last frame.
+        if let Ok(path) = std::env::var("RGBA_SCREENSHOT") {
+            let mut ppm = format!("P6 {WIDTH} {HEIGHT} 255\n").into_bytes();
+            ppm.extend(buf.chunks(4).flat_map(|px| px[..3].to_vec()));
+            std::fs::write(path, ppm).expect("failed to write screenshot");
+        }
+        return;
+    }
+
     let sdl_context = sdl2::init().unwrap();
     let mut event_pump = sdl_context.event_pump().unwrap();
     let video_subsystem = sdl_context.video().unwrap();

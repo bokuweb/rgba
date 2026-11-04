@@ -89,6 +89,12 @@ impl GBA {
         if is_eeprom {
             bus.attach_eeprom(Eeprom::new(&saved));
         }
+        // `RGBA_PSRAM=1` emulates a flash cart running the game from writable
+        // PSRAM (homebrew such as r2-gba uses the ROM area as extra RAM).
+        if env::var("RGBA_PSRAM").ok().as_deref() == Some("1") {
+            tracing::info!("GamePak PSRAM enabled (ROM area is writable)");
+            bus.enable_psram();
+        }
         let mut arm = cpu::ARM::new();
 
         arm.reset();
@@ -127,6 +133,12 @@ impl GBA {
         arm.reset();
 
         Self { cycles: 0, arm, bus, save_path: None, breakpoints: std::collections::HashSet::new() }
+    }
+
+    /// Make the GamePak ROM area writable, like a flash cart running the game
+    /// from PSRAM. See [`CpuBus::enable_psram`].
+    pub fn enable_psram(&mut self) {
+        self.bus.enable_psram();
     }
 
     // ---- Breakpoints ------------------------------------------------------
@@ -473,6 +485,9 @@ mod repro {
         let path = std::env::var("ROM").expect("ROM");
         let bin = std::fs::read(&path).expect("rom");
         let mut gba = GBA::from_rom(&bin);
+        if std::env::var("RGBA_PSRAM").ok().as_deref() == Some("1") {
+            gba.enable_psram();
+        }
         let total: usize = std::env::var("FRAMES").ok().and_then(|s| s.parse().ok()).unwrap_or(120);
         let mut hist: std::collections::HashMap<u32, u64> = std::collections::HashMap::new();
         let mut swis: std::collections::VecDeque<(u32, u32, u32, u32)> = std::collections::VecDeque::new();
