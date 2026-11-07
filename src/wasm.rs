@@ -58,13 +58,13 @@ impl GbaHandle {
         self.gba.step_instruction()
     }
 
-    /// Run until the next frame boundary OR a breakpoint is hit. Returns `true`
-    /// if it stopped on a breakpoint. The caller then reads `framebuffer()`,
-    /// `pc()` and `takeAudioF32()`.
+    /// Run one frame, stopping on a running instruction during VBlank, OR until a
+    /// breakpoint is hit. Returns `true` if it stopped on a breakpoint. The caller
+    /// then reads `framebuffer()`, `pc()` and `takeAudioF32()`.
     #[wasm_bindgen(js_name = runUntilBreak)]
     pub fn run_until_break(&mut self) -> bool {
         self.gba.update_key(self.key);
-        self.gba.run_frame_or_break()
+        self.gba.run_frame_to_live_point()
     }
 
     // ---- Breakpoints ------------------------------------------------------

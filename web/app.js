@@ -55,8 +55,7 @@ function paint(buf) {
 function refreshStatus() {
   $('pcval').textContent = hex(gba.pc());
   $('modeval').textContent = gba.isThumb() ? 'THUMB' : 'ARM';
-  // Monotonic cycle count — visible proof the core is advancing even when the
-  // PC is parked in a VBlank-wait loop at frame boundaries.
+  // Monotonic cycle count — visible proof the core is advancing.
   $('cycval').textContent = 'cyc ' + Math.round(gba.cycles()).toLocaleString();
   const m = gba.videoMode();
   $('vmodeval').textContent = `MODE ${m} · ${MODE_KIND[m] || '?'}`;
