@@ -127,7 +127,7 @@
   input.addr:focus { outline: none; border-color: var(--cyan); box-shadow: 0 0 0 1px rgba(56,189,248,.25); }
 
   /* ---- disassembly ---- */
-  #disasmBody { height: 440px; }
+  #disasmBody { height: 340px; }
   .dline { position: relative; display: grid; grid-template-columns: 16px 78px 76px 1fr;
            align-items: center; gap: 8px; padding: 1px 6px; padding-right: 22px;
            border-radius: 2px; white-space: pre; cursor: pointer; }
@@ -219,7 +219,7 @@
   .mrow .masc { color: var(--dim); }
 
   /* ---- assembler ---- */
-  #asm .body { display: flex; flex-direction: column; gap: 8px; height: 220px; }
+  #asm .body { display: flex; flex-direction: column; gap: 8px; height: 180px; }
   #asmSrc {
     flex: 1; min-height: 110px; resize: none;
     font-family: var(--mono); font-size: 12.5px; line-height: 1.55;
@@ -267,6 +267,21 @@
         <div class="body" id="disasmBody"></div>
       </section>
 
+      <section class="panel" id="regs">
+        <h2>registers</h2>
+        <div class="body">
+          <div class="reggrid" id="reggrid"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="cpsr">
+        <h2>cpsr / flags</h2>
+        <div class="body">
+          <div class="flags" id="flags"></div>
+          <div class="psr" id="psr"></div>
+        </div>
+      </section>
+
       <section class="panel" id="memory">
         <h2>memory
           <span class="tools">
@@ -277,6 +292,29 @@
           </span>
         </h2>
         <div class="body" id="memBody"></div>
+      </section>
+
+      <section class="panel" id="asm">
+        <h2>assembler (arm)
+          <span class="tools">
+            <span class="hint">@</span>
+            <input class="addr" id="asmAddr" value="0x02000000" spellcheck="false" />
+          </span>
+        </h2>
+        <div class="body">
+          <textarea id="asmSrc" spellcheck="false">start:
+  mov r0, #0
+  add r0, r0, #1
+  cmp r0, #5
+  blt start
+  b   start</textarea>
+          <div class="row">
+            <button id="asmBtn" class="accent">assemble → mem</button>
+            <button id="asmRun">↳ set pc &amp; run</button>
+            <span class="hint">keys: Z=A X=B ⏎=Start ␣=Sel ↕↔=D-Pad A=L S=R</span>
+          </div>
+          <div id="asmOut"></div>
+        </div>
       </section>
     </div>
 
@@ -339,43 +377,6 @@
         </div>
       </section>
 
-      <section class="panel" id="regs">
-        <h2>registers</h2>
-        <div class="body">
-          <div class="reggrid" id="reggrid"></div>
-        </div>
-      </section>
-
-      <section class="panel" id="cpsr">
-        <h2>cpsr / flags</h2>
-        <div class="body">
-          <div class="flags" id="flags"></div>
-          <div class="psr" id="psr"></div>
-        </div>
-      </section>
-
-      <section class="panel" id="asm">
-        <h2>assembler (arm)
-          <span class="tools">
-            <span class="hint">@</span>
-            <input class="addr" id="asmAddr" value="0x02000000" spellcheck="false" />
-          </span>
-        </h2>
-        <div class="body">
-          <textarea id="asmSrc" spellcheck="false">start:
-  mov r0, #0
-  add r0, r0, #1
-  cmp r0, #5
-  blt start
-  b   start</textarea>
-          <div class="row">
-            <button id="asmBtn" class="accent">assemble → mem</button>
-            <button id="asmRun">↳ set pc &amp; run</button>
-            <span class="hint">keys: Z=A X=B ⏎=Start ␣=Sel ↕↔=D-Pad A=L S=R</span>
-          </div>
-          <div id="asmOut"></div>
-        </div>
-      </section>
     </div>
   </div>
 
