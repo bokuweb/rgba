@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draws all of Flappy Hopper's art and sound from code and writes them as a C
+"""Draws all of Flappy Robin's art and sound from code and writes them as a C
 source file. Nothing here comes from another game. Usage: gen_assets.py OUTDIR"""
 import math
 import random
@@ -218,73 +218,49 @@ def columns():
     return out
 
 
-# ---------------------------------------------------------------- treehopper
-HOPPER_PAL = [rgb(c) for c in ["#000000", "#1f2a1a", "#c6e85a", "#86c63e", "#4f8f34", "#d8432e", "#f3df62", "#ffffff", "#d8f2ee", "#9cc8c4", "#3a3a24"]]
-BODY_LIGHT, BODY, BODY_DARK, STRIPE, HORN_TIP, EYE_SHINE, WING, WING_VEIN, LEG = 2, 3, 4, 5, 6, 7, 8, 9, 10
+# --------------------------------------------------------------------- robin
+ROBIN_PAL = [rgb(c) for c in ["#000000", "#2a1f2a", "#8a6a44", "#6b4f33", "#e8572a", "#f6853e", "#f6eedc", "#f2c14e", "#ffffff", "#50392a", "#a9875a"]]
 
 
-def fill_polygon(img, points, color):
-    """Scanline fill. Returns the (x, y) pixels it painted."""
-    painted = []
-    ys = [p[1] for p in points]
-    for y in range(min(ys), max(ys) + 1):
-        crossings = []
-        for (x0, y0), (x1, y1) in zip(points, points[1:] + points[:1]):
-            if y0 != y1 and min(y0, y1) <= y < max(y0, y1):
-                crossings.append(x0 + (y - y0) * (x1 - x0) / (y1 - y0))
-        crossings.sort()
-        for a, b in zip(crossings[::2], crossings[1::2]):
-            for x in range(round(a), round(b) + 1):
-                img[y][x] = color
-                painted.append((x, y))
-    return painted
-
-
-def treehopper(wing):
-    """A thorn-backed treehopper in profile, facing right."""
+def robin(wing):
     img = canvas(32, 32)
-    wings = {
-        "up": ([(16, 14), (7, 3), (3, 5), (9, 15)], [(14, 13), (6, 5)]),
-        "mid": ([(15, 14), (3, 9), (1, 13), (9, 17)], [(13, 14), (3, 11)]),
-        "down": ([(15, 16), (8, 16), (2, 24), (6, 27)], [(12, 17), (5, 25)]),
+    cx, cy = 15.5, 16.0
+    for y in range(32):
+        for x in range(32):
+            nx, ny = (x - cx) / 9.0, (y - cy) / 8.0
+            if nx * nx + ny * ny > 1:
+                continue
+            if nx > -0.05 and ny > -0.45 and ny < 0.55:
+                c = 5 if nx > 0.25 and ny < 0.1 else 4
+            elif ny >= 0.55 or (nx > 0 and ny >= 0.4):
+                c = 6
+            else:
+                c = 2 if ny < -0.4 else 3
+            img[y][x] = c
+    for x in range(4, 8):  # tail
+        for y in range(14 + (7 - x) // 2, 18):
+            img[y][x] = 3
+    for x, y in [(19, 11), (20, 11), (19, 12), (20, 12), (19, 13), (20, 13)]:  # eye
+        img[y][x] = 1
+    img[11][20] = 8
+    for y, x0, x1 in [(14, 24, 27), (15, 24, 26)]:  # beak
+        for x in range(x0, x1 + 1):
+            img[y][x] = 7
+    shapes = {
+        "up": [(16, 9, 15), (15, 9, 15), (14, 8, 14), (13, 7, 13), (12, 6, 11), (11, 6, 9), (10, 7, 8)],
+        "mid": [(14, 8, 15), (15, 7, 15), (16, 7, 15), (17, 7, 14), (18, 8, 12)],
+        "down": [(15, 9, 15), (16, 8, 15), (17, 7, 14), (18, 6, 13), (19, 6, 11), (20, 6, 9), (21, 7, 8)],
     }
-    outline_points, (vein_a, vein_b) = wings[wing]
-    fill_polygon(img, outline_points, WING)
-    steps = max(abs(vein_b[0] - vein_a[0]), abs(vein_b[1] - vein_a[1]))
-    for i in range(steps + 1):
-        img[vein_a[1] + (vein_b[1] - vein_a[1]) * i // steps][vein_a[0] + (vein_b[0] - vein_a[0]) * i // steps] = WING_VEIN
-    for points in ([(13, 22), (11, 26)], [(18, 22), (17, 26)], [(23, 21), (25, 25)]):  # legs
-        (x0, y0), (x1, y1) = points
-        for i in range(5):
-            img[y0 + (y1 - y0) * i // 4][x0 + (x1 - x0) * i // 4] = LEG
-    body = [(28, 16), (26, 11), (22, 9), (19, 2), (17, 9), (12, 12), (7, 15), (3, 20), (9, 22), (16, 23), (23, 22), (27, 20)]
-    pixels = fill_polygon(img, body, BODY)
-    tops, bottoms = {}, {}
-    for x, y in pixels:
-        tops[x] = min(tops.get(x, y), y)
-        bottoms[x] = max(bottoms.get(x, y), y)
-    for x, y in pixels:
-        if y <= 6:
-            c = HORN_TIP if y <= 4 else STRIPE
-        elif 21 <= x + y <= 23 or 31 <= x + y <= 33:
-            c = STRIPE
-        elif y - tops[x] <= 1:
-            c = BODY_LIGHT
-        elif bottoms[x] - y <= 2:
-            c = BODY_DARK
-        else:
-            c = BODY
-        img[y][x] = c
-    for x, y in [(24, 15), (25, 15), (24, 16), (25, 16)]:  # eye
-        img[y][x] = STRIPE
-    img[15][25] = EYE_SHINE
+    for i, (y, x0, x1) in enumerate(shapes[wing]):
+        for x in range(x0, x1 + 1):
+            img[y][x] = 10 if i == 0 else 9 if x == x0 else 3
     return outline(img, 1)
 
 
-def hopper_sheet():
+def robin_sheet():
     out = canvas(128, 32)
     for i, wing in enumerate(["mid", "up", "mid", "down"]):
-        blit(out, treehopper(wing), i * 32, 0)
+        blit(out, robin(wing), i * 32, 0)
     return out
 
 
@@ -295,7 +271,6 @@ FONT = {
     "E": "11111 10000 10000 11110 10000 10000 11111",
     "F": "11111 10000 10000 11110 10000 10000 10000",
     "G": "01111 10000 10000 10111 10001 10001 01111",
-    "H": "10001 10001 10001 11111 10001 10001 10001",
     "I": "11111 00100 00100 00100 00100 00100 11111",
     "L": "10000 10000 10000 10000 10000 10000 11111",
     "M": "10001 11011 10101 10101 10001 10001 10001",
@@ -445,13 +420,13 @@ def main():
     emit("groundTiles", fg_tiles)
     emit("groundMap", fg_map)
     emit("groundPal", GROUND_PAL)
-    emit("hopperTiles", sprite_blocks(hopper_sheet(), 32))
-    emit("hopperPal", HOPPER_PAL)
+    emit("robinTiles", sprite_blocks(robin_sheet(), 32))
+    emit("robinPal", ROBIN_PAL)
     emit("columnTiles", sprite_blocks(columns(), 32))
     emit("columnPal", COLUMN_PAL)
     emit("buttonTiles", sprite_blocks(button(), 16))
     emit("buttonPal", BUTTON_PAL)
-    text = sprite_blocks(banner("FLAPPY", "HOPPER", 2), 32) + sprite_blocks(banner("GAME", "OVER", 1), 32)
+    text = sprite_blocks(banner("FLAPPY", "ROBIN", 2), 32) + sprite_blocks(banner("GAME", "OVER", 1), 32)
     for d in range(10):
         text += sprite_tiles(digit(d))
     emit("textTiles", text)

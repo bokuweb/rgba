@@ -1,6 +1,6 @@
-# Flappy Hopper
+# Flappy Robin
 
-A one-button game for the Game Boy Advance in which a treehopper flies through stone columns. It is the default ROM of the web debugger. Press **A** or **B** to flap and **Start** to pause.
+A one-button flyer for the Game Boy Advance, and the default ROM of the web debugger. Press **A** or **B** to flap and **Start** to pause.
 
 The code is adapted from Tim Ullrich's [flappybird-gba](https://github.com/tullrich/flappybird-gba) (MIT, see [`LICENSE.txt`](LICENSE.txt)). That project ships the original game's sprites and sound effects, and none of them are used here. All art and sound are drawn by [`tools/gen_assets.py`](tools/gen_assets.py) and released under the same MIT terms.
 

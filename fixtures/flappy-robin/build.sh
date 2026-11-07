@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds flappy-hopper.gba with LLVM. devkitARM is not needed.
+# Builds flappy-robin.gba with LLVM. devkitARM is not needed.
 set -e
 cd "$(dirname "$0")"
 LLVM="${LLVM:-/opt/homebrew/opt/llvm@21/bin}"
@@ -23,7 +23,7 @@ for src in src/systemcall.s rt/crt0.s; do
     "$LLVM/clang" --target=armv4t-none-eabi -c "$src" -o "$obj"
     objs="$objs $obj"
 done
-"$LLD/ld.lld" -T rt/gba.ld -o build/flappy-hopper.elf $objs
-"$LLVM/llvm-objcopy" -O binary build/flappy-hopper.elf flappy-hopper.gba
-python3 tools/fixrom.py flappy-hopper.gba ../hello/hello.gba
-ls -l flappy-hopper.gba
+"$LLD/ld.lld" -T rt/gba.ld -o build/flappy-robin.elf $objs
+"$LLVM/llvm-objcopy" -O binary build/flappy-robin.elf flappy-robin.gba
+python3 tools/fixrom.py flappy-robin.gba ../hello/hello.gba
+ls -l flappy-robin.gba
