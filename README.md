@@ -15,7 +15,7 @@ flap); pick anything else from the library dropdown.
 
 [![Homebrew running in rgba](docs/gallery.png)](https://bokuweb.github.io/rgba/)
 
-<sub>Sleepyheads · CASCADE7 · GBA Microjam '23 · BeatBeast · Skyland · Minicraft · µCity Advance · Hero Core · Collie Defense · The Hat Chooses the Wizard · mGBA test suite — all rendered by rgba.</sub>
+<sub>Flappy Robin · Sleepyheads · CASCADE7 · GBA Microjam '23 · BeatBeast · Skyland · Minicraft · µCity Advance · Hero Core · Collie Defense · The Hat Chooses the Wizard — all rendered by rgba.</sub>
 
 ## Contents
 
