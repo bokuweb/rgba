@@ -39,6 +39,7 @@ WebAssembly and adds an inspection UI around it:
 | ROM library | pick from bundled open-source ROMs (see [below](#rom-library--licenses)) or load any `.gba` file; `?rom=<id>` deep-links an entry |
 | Disassembly | follows the PC; click a line to toggle a **breakpoint** (run stops on hit) |
 | Screen | 240×160 canvas, current video mode, FPS, per-layer **isolate** toggles for BG0–3 / OBJ |
+| VRAM tiles | BG / OBJ tile sheets at 4bpp or 8bpp and both palettes, live; each tile takes its palette bank from OAM or the BG maps, and clicking a tile opens it in memory |
 | Registers / CPSR | r0–r15 (changed registers flash), N Z C V flags, mode bits |
 | Memory | hex + ASCII dump, goto address, follow SP, inline byte editing |
 | Assembler | type ARM asm, assemble into memory, optionally set PC and run |
