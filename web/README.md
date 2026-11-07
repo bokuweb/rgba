@@ -31,13 +31,13 @@ and carries the current library ROM along (`?rom=<id>` works on both).
 ## ROM library
 
 The toolbar's **library** picker loads ROMs listed in
-[`roms.json`](roms.json): 38 open-source homebrew games and demos (Flappy Goose, Dungeon Master,
+[`roms.json`](roms.json): 39 open-source homebrew games and demos (Flappy Robin, Flappy Goose, Dungeon Master,
 CASCADE7, Skyland, Minicraft, µCity Advance, Hero Core, Blind Jump, the agb
 titles, several GBA Jam entries, …) plus the jsmolka `gba-tests` and mGBA test
 suites. Each entry records author, license and a
 source link, which are shown next to the picker once loaded. `?rom=<id>` in the
 URL deep-links to an entry (e.g. [`?rom=dungeon-master`](https://bokuweb.github.io/rgba/?rom=dungeon-master));
-without one, the entry marked `default: true` (Sleepyheads) is loaded and
+without one, the entry marked `default: true` (Flappy Robin) is loaded and
 started automatically.
 
 The files themselves are not committed; `fetch-roms.py` downloads them from
