@@ -1,4 +1,5 @@
 import init, { GbaHandle } from './pkg/rgba.js';
+import { initVramViewer } from './vram.js';
 
 // ---------------------------------------------------------------- helpers
 const $ = (id) => document.getElementById(id);
@@ -124,11 +125,17 @@ function refreshMem() {
   $('memBody').innerHTML = html;
 }
 
+const vramViewer = initVramViewer(() => gba, (addr) => {
+  $('memAddr').value = '0x' + hex(addr);
+  if (gba) refreshMem();
+});
+
 function refreshAll() {
   refreshStatus();
   refreshRegs();
   refreshDisasm();
   refreshMem();
+  vramViewer.refresh();
 }
 
 // ---------------------------------------------------------------- run loop
@@ -152,6 +159,7 @@ function loop() {
   refreshRegs();
   refreshDisasm();
   if (!memEditing) refreshMem();
+  vramViewer.tick();
   if (hitBp) { setRunning(false); flashBreak(); return; }
   rafId = requestAnimationFrame(loop);
 }
