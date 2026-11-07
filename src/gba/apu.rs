@@ -833,12 +833,13 @@ impl Apu {
     }
 
     /// Write a sound I/O register byte. `addr` is the absolute bus address.
-    /// While the APU master is disabled, all registers except SOUNDCNT_X and
-    /// wave RAM ignore writes, matching hardware.
+    /// While the APU master is disabled the PSG registers (0x60..=0x81) ignore
+    /// writes, matching hardware. SOUNDCNT_H, SOUNDCNT_X, SOUNDBIAS, wave RAM and
+    /// the FIFOs stay writable, so a game may set up DirectSound before it turns
+    /// the master on.
     pub fn write_register(&mut self, addr: u32, data: u8) {
         let off = addr & 0xFF;
-        // With the master disabled, only SOUNDCNT_X and wave RAM are writable.
-        if !self.master_enable && off != 0x84 && !(0x90..=0x9F).contains(&off) {
+        if !self.master_enable && (0x60..=0x81).contains(&off) {
             return;
         }
         match off {
@@ -1061,6 +1062,17 @@ impl Noise {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn master_off_blocks_psg_but_not_directsound_setup() {
+        let mut apu = Apu::new();
+        apu.write_register(0x0400_0080, 0x77); // SOUNDCNT_L: PSG, ignored
+        apu.write_register(0x0400_0083, 0b0000_0011); // SOUNDCNT_H: FIFO A L/R
+        apu.write_register(0x0400_0089, 0x42); // SOUNDBIAS high byte
+        assert_eq!(apu.read_register(0x0400_0080), 0);
+        assert!(apu.fifo_a.enable_left && apu.fifo_a.enable_right);
+        assert_eq!(apu.soundbias >> 8, 0x42);
+    }
 
     #[test]
     fn fifo_push_and_timer_pop() {
