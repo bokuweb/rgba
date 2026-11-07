@@ -7,11 +7,11 @@ A Game Boy Advance emulator written in Rust. One core, two frontends:
 
 * **native** — an SDL2 window (`cargo run -- rom.gba`)
 * **web** — a WASM build wrapped in a No$gba-style debugger, with a built-in
-  library of 38 open-source homebrew games and demos, plus Sleepyheads
+  library of 39 open-source homebrew games and demos, plus Sleepyheads
 
 **▶ Try it in the browser: https://bokuweb.github.io/rgba/** — it opens
-straight into [Sleepyheads](https://vhaugan.itch.io/sleepyheads-advance) (**A** =
-<kbd>Z</kbd> to jump); pick anything else from the library dropdown.
+straight into [Flappy Robin](fixtures/flappy-robin) (**A** = <kbd>Z</kbd> to
+flap); pick anything else from the library dropdown.
 
 [![Homebrew running in rgba](docs/gallery.png)](https://bokuweb.github.io/rgba/)
 
@@ -173,20 +173,21 @@ from the root `Dockerfile`).
 ## ROM library & licenses
 
 The web debugger ships a small library of **open-source** ROMs so there is
-something to run without hunting for files. They are not committed to this
-repository; the Pages build downloads each one from its author's GitHub release
+something to run without hunting for files. Except for the fixtures built
+in this repository, they are not committed; the Pages build downloads each one from its author's GitHub release
 (or, where there is none, from a pinned commit of the
 [gbadev Homebrew Hub](https://github.com/gbadev-org/games) database or the jam archive) and
 verifies a pinned sha256 (see [`web/roms.json`](web/roms.json) and
 [`web/fetch-roms.py`](web/fetch-roms.py)). Several titles are copyleft
 (GPL / MPL / CC BY-SA) or carry non-commercial asset licenses — the exact terms
 are recorded per entry and shown in the debugger when a ROM is loaded.
-The exception is the default ROM, Sleepyheads: a free download from the GBA Jam 2026
+The exception is Sleepyheads: a free download from the GBA Jam 2026
 entries archive with no stated license, so it is not open source.
 
 | ROM | Author | Event | License |
 |-----|--------|-------|---------|
-| [Sleepyheads](https://vhaugan.itch.io/sleepyheads-advance) (loaded by default) | Victor Haugan (VHaugan) | GBA Jam 2026 | No license stated: free download, not open source; jam logo CC BY-NC |
+| [Flappy Robin](fixtures/flappy-robin) (loaded by default) | Tim Ullrich (code), this repository (art, sound) | — | MIT |
+| [Sleepyheads](https://vhaugan.itch.io/sleepyheads-advance) | Victor Haugan (VHaugan) | GBA Jam 2026 | No license stated: free download, not open source; jam logo CC BY-NC |
 | [Flappy Goose](https://github.com/mmailhot/FlappyGoose) | Marc Mailhot | — | MIT |
 | [Dungeon Master](https://github.com/Maksasj/dungeon_master) | Maksasj | GBA Jam 2022 | MIT |
 | [CASCADE7](https://github.com/mick-schroeder/gba-cascade7) | Mick Schroeder | — | MIT (name/logo trademarked) |

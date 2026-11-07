@@ -5,6 +5,17 @@
       "name": "Homebrew games",
       "roms": [
         {
+          "id": "flappy-robin",
+          "title": "Flappy Robin",
+          "file": "flappy-robin.gba",
+          "fixture": "fixtures/flappy-robin/flappy-robin.gba",
+          "author": "Code by Tim Ullrich (flappybird-gba), adapted in this repository",
+          "license": "MIT · art and sound drawn by code in this repository",
+          "source": "https://github.com/bokuweb/rgba/tree/main/fixtures/flappy-robin",
+          "note": "One-button flyer through stone columns, with all art and sound made from scratch. Press A or B to flap, Start to pause. Loaded by default when the debugger opens.",
+          "default": true
+        },
+        {
           "id": "sleepyheads",
           "title": "Sleepyheads",
           "file": "sleepyheads.gba",
@@ -15,8 +26,7 @@
           "url": "https://raw.githubusercontent.com/gbadev-org/gbajam26-entries/dab4f20b8ee56cf7fcdf4725da392201da2172fc/entries/sleepyheads/SLEEPYHEADS_jam.gba",
           "sha256": "4ad50e3694eafe3fffec68eb21777c9f8d6a4358ff3e0a087bd3800065576c1e",
           "size": 2338700,
-          "note": "Dreamy platformer prototype: help a sleepy hippo through a palace in the sky. D-pad moves or aims, A jumps or opens the umbrella, B swings or throws the pillow, R aims. Loaded by default when the debugger opens. From the GBA Jam 2026 entries archive.",
-          "default": true
+          "note": "Dreamy platformer prototype: help a sleepy hippo through a palace in the sky. D-pad moves or aims, A jumps or opens the umbrella, B swings or throws the pillow, R aims. From the GBA Jam 2026 entries archive."
         },
         {
           "id": "flappy-goose",
