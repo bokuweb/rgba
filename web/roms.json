@@ -1,9 +1,23 @@
 {
-  "_comment": "ROM library for the web debugger. Every entry is open source; `file` is served from web/roms/ (populated by web/fetch-roms.py, which also verifies `sha256`). Entries with `fixture` are copied from this repository; the rest are downloaded from the author's GitHub release or, when there is none, from a pinned commit of the gbadev Homebrew Hub database (github.com/gbadev-org/games). The entry marked `default: true` is loaded automatically when the debugger opens without a `?rom=` deep link.",
+  "_comment": "ROM library for the web debugger. Every entry is open source except Sleepyheads, which is a free download with no stated license; `file` is served from web/roms/ (populated by web/fetch-roms.py, which also verifies `sha256`). Entries with `fixture` are copied from this repository; the rest are downloaded from the author's GitHub release or, when there is none, from a pinned commit of the gbadev Homebrew Hub database (github.com/gbadev-org/games) or another pinned source. The entry marked `default: true` is loaded automatically when the debugger opens without a `?rom=` deep link.",
   "groups": [
     {
       "name": "Homebrew games",
       "roms": [
+        {
+          "id": "sleepyheads",
+          "title": "Sleepyheads",
+          "file": "sleepyheads.gba",
+          "author": "Victor Haugan (VHaugan)",
+          "event": "GBA Jam 2026",
+          "license": "No license stated: free download, not open source · jam logo CC BY-NC by PyroPyro and kva64",
+          "source": "https://vhaugan.itch.io/sleepyheads-advance",
+          "url": "https://raw.githubusercontent.com/gbadev-org/gbajam26-entries/dab4f20b8ee56cf7fcdf4725da392201da2172fc/entries/sleepyheads/SLEEPYHEADS_jam.gba",
+          "sha256": "4ad50e3694eafe3fffec68eb21777c9f8d6a4358ff3e0a087bd3800065576c1e",
+          "size": 2338700,
+          "note": "Dreamy platformer prototype: help a sleepy hippo through a palace in the sky. D-pad moves or aims, A jumps or opens the umbrella, B swings or throws the pillow, R aims. Loaded by default when the debugger opens. From the GBA Jam 2026 entries archive.",
+          "default": true
+        },
         {
           "id": "flappy-goose",
           "title": "Flappy Goose",
@@ -14,8 +28,7 @@
           "url": "https://raw.githubusercontent.com/mmailhot/FlappyGoose/a29a62da0e765cceca35d0e2bf5d9e0ccbef6e5f/docs/FlappyGoose.gba",
           "sha256": "0e84eb2c21e0b941e4872c051407ac3bdf00747ac4bebe36d54c0cf39c93f600",
           "size": 118396,
-          "note": "Flappy Bird-style one-button game with original art, written in Rust (based on exoticorn's gba-rust). Press A to flap. Loaded by default when the debugger opens.",
-          "default": true
+          "note": "Flappy Bird-style one-button game with original art, written in Rust (based on exoticorn's gba-rust). Press A to flap."
         },
         {
           "id": "dungeon-master",

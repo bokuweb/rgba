@@ -367,7 +367,7 @@ $('rom').addEventListener('change', async (e) => {
 });
 
 // ---------------------------------------------------------------- ROM library
-// `roms.json` lists open-source ROMs served from ./roms/ (populated by
+// `roms.json` lists ROMs served from ./roms/ (populated by
 // web/fetch-roms.py). Each entry carries its license + source link, which we
 // show next to the picker so credit is always visible.
 const fmtSize = (n) => n >= 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`;
@@ -470,7 +470,7 @@ await loadLibrary();
 console.log('rgba debugger ready — load a .gba to begin');
 
 // Deep link: ?rom=<id> picks a library ROM on load (e.g. ?rom=dungeon-master).
-// Without one, the manifest's `default: true` entry (Flappy Goose) is loaded
+// Without one, the manifest's `default: true` entry (Sleepyheads) is loaded
 // and started so the page never opens on an empty screen.
 const wanted = new URLSearchParams(location.search).get('rom');
 const fallback = library.find((r) => r.default);
