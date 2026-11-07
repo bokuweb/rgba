@@ -470,7 +470,7 @@ await loadLibrary();
 console.log('rgba debugger ready — load a .gba to begin');
 
 // Deep link: ?rom=<id> picks a library ROM on load (e.g. ?rom=dungeon-master).
-// Without one, the manifest's `default: true` entry (Flappy Robin) is loaded
+// Without one, the manifest's `default: true` entry (Flappy Hopper) is loaded
 // and started so the page never opens on an empty screen.
 const wanted = new URLSearchParams(location.search).get('rom');
 const fallback = library.find((r) => r.default);

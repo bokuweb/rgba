@@ -10,12 +10,12 @@ A Game Boy Advance emulator written in Rust. One core, two frontends:
   library of 39 open-source homebrew games and demos, plus Sleepyheads
 
 **▶ Try it in the browser: https://bokuweb.github.io/rgba/** — it opens
-straight into [Flappy Robin](fixtures/flappy-robin) (**A** = <kbd>Z</kbd> to
+straight into [Flappy Hopper](fixtures/flappy-hopper) (**A** = <kbd>Z</kbd> to
 flap); pick anything else from the library dropdown.
 
 [![Homebrew running in rgba](docs/gallery.png)](https://bokuweb.github.io/rgba/)
 
-<sub>Flappy Robin · Sleepyheads · CASCADE7 · GBA Microjam '23 · BeatBeast · Skyland · Minicraft · µCity Advance · Hero Core · Collie Defense · The Hat Chooses the Wizard — all rendered by rgba.</sub>
+<sub>Flappy Hopper · Sleepyheads · CASCADE7 · GBA Microjam '23 · BeatBeast · Skyland · Minicraft · µCity Advance · Hero Core · Collie Defense · The Hat Chooses the Wizard — all rendered by rgba.</sub>
 
 ## Contents
 
@@ -186,7 +186,7 @@ entries archive with no stated license, so it is not open source.
 
 | ROM | Author | Event | License |
 |-----|--------|-------|---------|
-| [Flappy Robin](fixtures/flappy-robin) (loaded by default) | Tim Ullrich (code), this repository (art, sound) | — | MIT |
+| [Flappy Hopper](fixtures/flappy-hopper) (loaded by default) | Tim Ullrich (code), this repository (art, sound) | — | MIT |
 | [Sleepyheads](https://vhaugan.itch.io/sleepyheads-advance) | Victor Haugan (VHaugan) | GBA Jam 2026 | No license stated: free download, not open source; jam logo CC BY-NC |
 | [Flappy Goose](https://github.com/mmailhot/FlappyGoose) | Marc Mailhot | — | MIT |
 | [Dungeon Master](https://github.com/Maksasj/dungeon_master) | Maksasj | GBA Jam 2022 | MIT |

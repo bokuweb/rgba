@@ -159,8 +159,8 @@ static void init_foreground() {
 
 // Initialize Sprite VRAM (Charbocks 4/5)
 static void init_sprite_vram() {
-	dma3_copy(&tile_mem[4][BIRD_TILE_BASE], robinTiles, robinTilesLen/2, DMA_NOW);
-	memcpy(&sprite_pal16_mem[BIRD_PAL_IDX], robinPal, robinPalLen);
+	dma3_copy(&tile_mem[4][BIRD_TILE_BASE], hopperTiles, hopperTilesLen/2, DMA_NOW);
+	memcpy(&sprite_pal16_mem[BIRD_PAL_IDX], hopperPal, hopperPalLen);
 
 	dma3_copy(&tile_mem[4][PIPE_TILE_BASE], columnTiles, columnTilesLen/2, DMA_NOW);
 	memcpy(&sprite_pal16_mem[PIPE_PAL_IDX], columnPal, columnPalLen);
