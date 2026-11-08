@@ -451,7 +451,7 @@ mod repro {
 
     #[test]
     fn live_point_shows_changing_pc_and_keeps_frame_rate() {
-        let bin = include_bytes!("../../fixtures/flappy-robin/flappy-robin.gba");
+        let bin = include_bytes!("../../fixtures/flappy-enaga/flappy-enaga.gba");
         let mut live = GBA::from_rom(bin);
         let mut plain = GBA::from_rom(bin);
         let mut pcs = std::collections::HashSet::new();
