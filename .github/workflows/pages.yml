@@ -52,7 +52,7 @@ jobs:
         # the Makefile needs llvm-objcopy from llvm-tools.
         working-directory: r2/gba
         run: |
-          rustup component add llvm-tools
+          rustup toolchain install nightly --profile minimal --component rust-src,llvm-tools
           make
           mkdir -p ../../web/roms
           cp target/r2-gba.gba ../../web/roms/r2-linux.gba
