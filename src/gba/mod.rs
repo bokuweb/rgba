@@ -50,6 +50,12 @@ pub struct GBA {
     save_path: Option<PathBuf>,
     /// Instruction addresses the debugger should halt on before executing.
     breakpoints: std::collections::HashSet<u32>,
+    /// Running instructions seen so far in the current VBlank.
+    vblank_instrs: u32,
+    /// Running instructions seen in the last full VBlank.
+    live_window: u32,
+    /// Xorshift state that picks where [`GBA::run_frame_to_live_point`] stops.
+    live_rng: u32,
 }
 
 impl GBA {
@@ -99,7 +105,7 @@ impl GBA {
 
         arm.reset();
 
-        Self { cycles: 0, arm, bus, save_path: Some(save_path), breakpoints: std::collections::HashSet::new() }
+        Self { cycles: 0, arm, bus, save_path: Some(save_path), breakpoints: std::collections::HashSet::new(), vblank_instrs: 0, live_window: 0, live_rng: 0x9E37_79B9 }
     }
 
     /// Build a GBA directly from ROM bytes, with no filesystem or process
@@ -132,7 +138,7 @@ impl GBA {
         let mut arm = cpu::ARM::new();
         arm.reset();
 
-        Self { cycles: 0, arm, bus, save_path: None, breakpoints: std::collections::HashSet::new() }
+        Self { cycles: 0, arm, bus, save_path: None, breakpoints: std::collections::HashSet::new(), vblank_instrs: 0, live_window: 0, live_rng: 0x9E37_79B9 }
     }
 
     /// Make the GamePak ROM area writable, like a flash cart running the game
@@ -184,6 +190,65 @@ impl GBA {
                 return false;
             }
         }
+    }
+
+    /// [`GBA::run_frame_or_break`] for a live debugger view. Games sleep in
+    /// `VBlankIntrWait` until the frame boundary, so the CPU state there looks
+    /// the same every frame. This keeps going into VBlank and stops on a randomly
+    /// chosen instruction of the game's own code, so PC and registers show real,
+    /// changing state. The emulated timeline is unaffected: only the point where
+    /// the host regains control moves. The framebuffer is untouched until line 0.
+    /// Returns `true` if it stopped on a breakpoint.
+    pub fn run_frame_to_live_point(&mut self) -> bool {
+        let mut first = true;
+        let mut remaining = None;
+        loop {
+            if !first && !self.breakpoints.is_empty() && self.breakpoints.contains(&self.arm.gpr[15]) {
+                return true;
+            }
+            first = false;
+
+            let running = self.is_running_game_code();
+            let frame_done = self.step_instruction();
+            let in_vblank = self.bus.borrow_lcdc().read_halfword(0x0006) >= 160;
+            if running && in_vblank {
+                self.vblank_instrs += 1;
+            }
+
+            if frame_done {
+                self.live_window = std::mem::take(&mut self.vblank_instrs);
+                if self.live_window == 0 {
+                    return false;
+                }
+                remaining = Some(self.next_live_rand() % self.live_window);
+            } else if let Some(left) = remaining {
+                if !in_vblank {
+                    return false;
+                }
+                if running {
+                    if left == 0 && self.is_running_game_code() {
+                        return false;
+                    }
+                    remaining = Some(left.saturating_sub(1));
+                }
+            }
+        }
+    }
+
+    /// `false` while the CPU is halted or in a BIOS wait. An armed `IntrWait`
+    /// re-runs its SWI on every wake, which would otherwise count as running.
+    fn is_running_game_code(&self) -> bool {
+        use crate::cpu::bus::accessor::BusAccessor;
+        !self.bus.is_cpu_halted() && self.bus.intr_wait_mask().is_none()
+    }
+
+    fn next_live_rand(&mut self) -> u32 {
+        let mut x = self.live_rng;
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        self.live_rng = x;
+        x
     }
 
     // ---- Debugger surface -------------------------------------------------
@@ -394,6 +459,24 @@ mod repro {
             }
             f.write_all(&row).unwrap();
         }
+    }
+
+    #[test]
+    fn live_point_shows_changing_pc_and_keeps_frame_rate() {
+        let bin = include_bytes!("../../fixtures/flappy-enaga/flappy-enaga.gba");
+        let mut live = GBA::from_rom(bin);
+        let mut plain = GBA::from_rom(bin);
+        let mut pcs = std::collections::HashSet::new();
+        let mut parked = 0;
+        for _ in 0..40 {
+            assert!(!live.run_frame_to_live_point());
+            assert!(!plain.run_frame_or_break());
+            pcs.insert(live.registers()[15]);
+            parked += u32::from(!live.is_running_game_code());
+        }
+        assert!(pcs.len() > 5, "only {} distinct PCs", pcs.len());
+        assert!(parked <= 4, "{} of 40 stops were parked in a wait", parked);
+        assert_eq!(live.read_framebuffer(), plain.read_framebuffer());
     }
 
     #[test]

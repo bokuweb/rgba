@@ -1,4 +1,5 @@
 import init, { GbaHandle } from './pkg/rgba.js';
+import { initVramViewer } from './vram.js';
 
 // ---------------------------------------------------------------- helpers
 const $ = (id) => document.getElementById(id);
@@ -55,8 +56,7 @@ function paint(buf) {
 function refreshStatus() {
   $('pcval').textContent = hex(gba.pc());
   $('modeval').textContent = gba.isThumb() ? 'THUMB' : 'ARM';
-  // Monotonic cycle count — visible proof the core is advancing even when the
-  // PC is parked in a VBlank-wait loop at frame boundaries.
+  // Monotonic cycle count — visible proof the core is advancing.
   $('cycval').textContent = 'cyc ' + Math.round(gba.cycles()).toLocaleString();
   const m = gba.videoMode();
   $('vmodeval').textContent = `MODE ${m} · ${MODE_KIND[m] || '?'}`;
@@ -124,11 +124,17 @@ function refreshMem() {
   $('memBody').innerHTML = html;
 }
 
+const vramViewer = initVramViewer(() => gba, (addr) => {
+  $('memAddr').value = '0x' + hex(addr);
+  if (gba) refreshMem();
+});
+
 function refreshAll() {
   refreshStatus();
   refreshRegs();
   refreshDisasm();
   refreshMem();
+  vramViewer.refresh();
 }
 
 // ---------------------------------------------------------------- run loop
@@ -152,6 +158,7 @@ function loop() {
   refreshRegs();
   refreshDisasm();
   if (!memEditing) refreshMem();
+  vramViewer.tick();
   if (hitBp) { setRunning(false); flashBreak(); return; }
   rafId = requestAnimationFrame(loop);
 }
@@ -367,7 +374,7 @@ $('rom').addEventListener('change', async (e) => {
 });
 
 // ---------------------------------------------------------------- ROM library
-// `roms.json` lists open-source ROMs served from ./roms/ (populated by
+// `roms.json` lists ROMs served from ./roms/ (populated by
 // web/fetch-roms.py). Each entry carries its license + source link, which we
 // show next to the picker so credit is always visible.
 const fmtSize = (n) => n >= 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`;
@@ -470,7 +477,7 @@ await loadLibrary();
 console.log('rgba debugger ready — load a .gba to begin');
 
 // Deep link: ?rom=<id> picks a library ROM on load (e.g. ?rom=dungeon-master).
-// Without one, the manifest's `default: true` entry (Flappy Bird) is loaded
+// Without one, the manifest's `default: true` entry (Flappy Enaga) is loaded
 // and started so the page never opens on an empty screen.
 const wanted = new URLSearchParams(location.search).get('rom');
 const fallback = library.find((r) => r.default);

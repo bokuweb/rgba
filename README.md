@@ -7,15 +7,15 @@ A Game Boy Advance emulator written in Rust. One core, two frontends:
 
 * **native** — an SDL2 window (`cargo run -- rom.gba`)
 * **web** — a WASM build wrapped in a No$gba-style debugger, with a built-in
-  library of 29 open-source homebrew games
+  library of 39 open-source homebrew games and demos, plus Sleepyheads
 
 **▶ Try it in the browser: https://bokuweb.github.io/rgba/** — it opens
-straight into [Flappy Bird](https://github.com/tullrich/flappybird-gba) (press
-**A** = <kbd>Z</kbd> to flap); pick anything else from the library dropdown.
+straight into [Flappy Enaga](fixtures/flappy-enaga) (**A** = <kbd>Z</kbd> to
+flap); pick anything else from the library dropdown.
 
 [![Homebrew running in rgba](docs/gallery.png)](https://bokuweb.github.io/rgba/)
 
-<sub>Dungeon Master · CASCADE7 · GBA Microjam '23 · BeatBeast · Skyland · Minicraft · µCity Advance · Hero Core · Collie Defense · The Hat Chooses the Wizard · mGBA test suite — all rendered by rgba.</sub>
+<sub>Flappy Enaga · Sleepyheads · CASCADE7 · GBA Microjam '23 · BeatBeast · Skyland · Minicraft · µCity Advance · Hero Core · Collie Defense · The Hat Chooses the Wizard — all rendered by rgba.</sub>
 
 ## Contents
 
@@ -39,6 +39,7 @@ WebAssembly and adds an inspection UI around it:
 | ROM library | pick from bundled open-source ROMs (see [below](#rom-library--licenses)) or load any `.gba` file; `?rom=<id>` deep-links an entry |
 | Disassembly | follows the PC; click a line to toggle a **breakpoint** (run stops on hit) |
 | Screen | 240×160 canvas, current video mode, FPS, per-layer **isolate** toggles for BG0–3 / OBJ |
+| VRAM tiles | BG / OBJ tile sheets at 4bpp or 8bpp and both palettes, live; each tile takes its palette bank from OAM or the BG maps, and clicking a tile opens it in memory |
 | Registers / CPSR | r0–r15 (changed registers flash), N Z C V flags, mode bits |
 | Memory | hex + ASCII dump, goto address, follow SP, inline byte editing |
 | Assembler | type ARM asm, assemble into memory, optionally set PC and run |
@@ -173,18 +174,21 @@ from the root `Dockerfile`).
 ## ROM library & licenses
 
 The web debugger ships a small library of **open-source** ROMs so there is
-something to run without hunting for files. They are not committed to this
-repository; the Pages build downloads each one from its author's GitHub release
+something to run without hunting for files. Except for the fixtures built
+in this repository, they are not committed; the Pages build downloads each one from its author's GitHub release
 (or, where there is none, from a pinned commit of the
-[gbadev Homebrew Hub](https://github.com/gbadev-org/games) database) and
+[gbadev Homebrew Hub](https://github.com/gbadev-org/games) database or the jam archive) and
 verifies a pinned sha256 (see [`web/roms.json`](web/roms.json) and
 [`web/fetch-roms.py`](web/fetch-roms.py)). Several titles are copyleft
 (GPL / MPL / CC BY-SA) or carry non-commercial asset licenses — the exact terms
 are recorded per entry and shown in the debugger when a ROM is loaded.
+The exception is Sleepyheads: a free download from the GBA Jam 2026
+entries archive with no stated license, so it is not open source.
 
 | ROM | Author | Event | License |
 |-----|--------|-------|---------|
-| [Flappy Bird](https://github.com/tullrich/flappybird-gba) (loaded by default) | Tim Ullrich | — | MIT code; original Flappy Bird art (© .GEARS, not open source) |
+| [Flappy Enaga](fixtures/flappy-enaga) (loaded by default) | Tim Ullrich (code), this repository (art, sound) | — | MIT |
+| [Sleepyheads](https://vhaugan.itch.io/sleepyheads-advance) | Victor Haugan (VHaugan) | GBA Jam 2026 | No license stated: free download, not open source; jam logo CC BY-NC |
 | [Flappy Goose](https://github.com/mmailhot/FlappyGoose) | Marc Mailhot | — | MIT |
 | [Dungeon Master](https://github.com/Maksasj/dungeon_master) | Maksasj | GBA Jam 2022 | MIT |
 | [CASCADE7](https://github.com/mick-schroeder/gba-cascade7) | Mick Schroeder | — | MIT (name/logo trademarked) |
@@ -213,6 +217,16 @@ are recorded per entry and shown in the debugger when a ROM is loaded.
 | [GBArcade](https://github.com/emmabritton/gba_gbarcade) | Emma Britton | — | MIT |
 | [Nonogram Advance](https://github.com/emmabritton/gba_nonogram_advance) | Emma Britton | — | MIT |
 | [MeteoRain](https://github.com/drludos/meteorain-gba) | Dr. Ludos | GBA Jam 2021 | MIT code; music "Overmode" by Warlord is CC BY-NC-SA |
+| [Attack on Voxelburg](https://github.com/MutantStargoat/voxelburg) | John Tsiombikas (Mutant Stargoat) | GBA Jam 2022 | GPL-3.0-or-later |
+| [Noonlight Paradox](https://github.com/zegalur/noonlight-paradox-gba) | Pavlo Savchuk (zegalur) | GBA Jam 2026 | MIT code; CC BY assets; fonts OFL 1.1 / M+ |
+| [Hyperspace Roll](https://github.com/agbrs/agb/tree/master/examples/hyperspace-roll) | agb team | GMTK Game Jam 2022 | MPL-2.0; font "Pixelated" by Greenma201, CC BY-SA 3.0 |
+| [Lander Advance](https://github.com/edefelice/lander-advance) | Ernesto De Felice, Pierluca De Felice, Raffaele Colamarino, Raffaele Aucelli | GBA Jam 2026 | MIT code; CC BY 4.0 art & SFX; jam logo CC BY-NC 4.0 |
+| [Gerbil Space Program](https://github.com/gbajam22/GSP) | n67094 | GBA Jam 2022 | MPL-2.0 |
+| [notenogram](https://github.com/gbajam22/notenogram) | kva64 · music by congusbongus | GBA Jam 2022 | Zlib code; CC BY 4.0 art & SFX; CC0 music |
+| [The Dungeon Puzzler's Lament](https://github.com/agbrs/agb/tree/master/examples/the-dungeon-puzzlers-lament) | agb team | — | MPL-2.0 |
+| [Karloff](https://github.com/olymp14n/spectrox-karloff) (demo) | Olympian / Spectrox, Grimnir, Virgill | MountainBytes 2026 | CC0-1.0 |
+| [Toxic](https://github.com/olymp14n/spectrox-toxic) (demo) | Olympian / Spectrox, W.O.T.W, Motion | — | CC0-1.0 |
+| [Dustline](https://github.com/abhuva/dustline) | abhuva | — | CC BY-SA 4.0 |
 | [gba-tests](https://github.com/jsmolka/gba-tests) arm / thumb / memory / bios | jsmolka | — | MIT |
 | [mGBA test suite](https://github.com/mgba-emu/suite) | endrift | — | MIT |
 | hello, lifegame | bokuweb | — | this repository |
