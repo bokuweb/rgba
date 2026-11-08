@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Draws all of Flappy Robin's art and sound from code and writes them as a C
+"""Draws all of Flappy Enaga's art and sound from code and writes them as a C
 source file. Nothing here comes from another game. Usage: gen_assets.py OUTDIR"""
 import math
 import random
@@ -218,49 +218,63 @@ def columns():
     return out
 
 
-# --------------------------------------------------------------------- robin
-ROBIN_PAL = [rgb(c) for c in ["#000000", "#2a1f2a", "#8a6a44", "#6b4f33", "#e8572a", "#f6853e", "#f6eedc", "#f2c14e", "#ffffff", "#50392a", "#a9875a"]]
+# ----------------------------------------------------------------- shimaenaga
+ENAGA_PAL = [rgb(c) for c in ["#000000", "#3b3346", "#ffffff", "#e6e3ee", "#c9c3d8", "#26212c", "#5a4c58", "#c79a86", "#f4c9cf", "#140f16", "#8d7f95"]]
+OUT, WHITE, SHADE, SHADE2, BLACK, DARK, BROWN, PINK, EYE, GREY = range(1, 11)
 
 
-def robin(wing):
+def enaga(wing):
+    """A long-tailed tit (shimaenaga): a round white body and a long black tail."""
     img = canvas(32, 32)
-    cx, cy = 15.5, 16.0
+    for x in range(0, 11):  # tail, slightly raised, with a pale outer edge
+        top = 14 - (10 - x) // 4
+        for y in range(top, top + 2 + (x > 6)):
+            img[y][x] = BLACK
+        img[top + 2 + (x > 6)][x] = GREY if x < 9 else BLACK
+    cx, cy = 16.5, 16.5
     for y in range(32):
         for x in range(32):
-            nx, ny = (x - cx) / 9.0, (y - cy) / 8.0
-            if nx * nx + ny * ny > 1:
-                continue
-            if nx > -0.05 and ny > -0.45 and ny < 0.55:
-                c = 5 if nx > 0.25 and ny < 0.1 else 4
-            elif ny >= 0.55 or (nx > 0 and ny >= 0.4):
-                c = 6
-            else:
-                c = 2 if ny < -0.4 else 3
-            img[y][x] = c
-    for x in range(4, 8):  # tail
-        for y in range(14 + (7 - x) // 2, 18):
-            img[y][x] = 3
-    for x, y in [(19, 11), (20, 11), (19, 12), (20, 12), (19, 13), (20, 13)]:  # eye
-        img[y][x] = 1
-    img[11][20] = 8
-    for y, x0, x1 in [(14, 24, 27), (15, 24, 26)]:  # beak
-        for x in range(x0, x1 + 1):
-            img[y][x] = 7
-    shapes = {
-        "up": [(16, 9, 15), (15, 9, 15), (14, 8, 14), (13, 7, 13), (12, 6, 11), (11, 6, 9), (10, 7, 8)],
-        "mid": [(14, 8, 15), (15, 7, 15), (16, 7, 15), (17, 7, 14), (18, 8, 12)],
-        "down": [(15, 9, 15), (16, 8, 15), (17, 7, 14), (18, 6, 13), (19, 6, 11), (20, 6, 9), (21, 7, 8)],
-    }
-    for i, (y, x0, x1) in enumerate(shapes[wing]):
-        for x in range(x0, x1 + 1):
-            img[y][x] = 10 if i == 0 else 9 if x == x0 else 3
-    return outline(img, 1)
+            nx, ny = (x + 0.5 - cx) / 8.6, (y + 0.5 - cy) / 7.8
+            if nx * nx + ny * ny <= 1:
+                c = WHITE
+                if ny > 0.55 or (nx < -0.55 and ny > 0.1):
+                    c = SHADE
+                if ny > 0.8:
+                    c = SHADE2
+                img[y][x] = c
+    for x in range(9, 18):  # dark stripe over the back
+        for y in range(10 + abs(x - 13) // 3, 13 + (x < 12)):
+            if img[y][x]:
+                img[y][x] = DARK
+    for x, y in [(12, 20), (13, 20), (14, 21), (15, 21), (16, 21), (13, 21), (17, 21), (14, 20)]:  # pink flank
+        img[y][x] = PINK
+    # wing: a rounded ellipse hinged at the shoulder, tilted per frame
+    ang = {"up": 0.8, "mid": -0.1, "down": -0.8}[wing]
+    ca, sa = math.cos(ang), math.sin(ang)
+    for y in range(32):
+        for x in range(32):
+            dx, dy = x + 0.5 - 15.0, y + 0.5 - 15.5
+            u = -(dx * ca + dy * sa)
+            v = -dx * sa + dy * ca
+            if (u - 4.0) ** 2 / 5.2 ** 2 + v ** 2 / 2.8 ** 2 <= 1:
+                img[y][x] = GREY if v > 1.3 else BROWN if v > 0.4 and u < 4 else BLACK
+    img = outline(img, OUT)
+    for x in (21, 22):  # eye, 2x3, with a highlight
+        for y in (14, 15, 16):
+            img[y][x] = EYE
+    img[14][22] = WHITE
+    for x, y in [(25, 16), (25, 17), (26, 17)]:  # beak
+        img[y][x] = BLACK
+    for x, y in [(26, 16), (27, 17), (26, 18)]:
+        img[y][x] = OUT
+    img[18][22] = PINK  # blush
+    return img
 
 
-def robin_sheet():
+def enaga_sheet():
     out = canvas(128, 32)
     for i, wing in enumerate(["mid", "up", "mid", "down"]):
-        blit(out, robin(wing), i * 32, 0)
+        blit(out, enaga(wing), i * 32, 0)
     return out
 
 
@@ -420,13 +434,13 @@ def main():
     emit("groundTiles", fg_tiles)
     emit("groundMap", fg_map)
     emit("groundPal", GROUND_PAL)
-    emit("robinTiles", sprite_blocks(robin_sheet(), 32))
-    emit("robinPal", ROBIN_PAL)
+    emit("enagaTiles", sprite_blocks(enaga_sheet(), 32))
+    emit("enagaPal", ENAGA_PAL)
     emit("columnTiles", sprite_blocks(columns(), 32))
     emit("columnPal", COLUMN_PAL)
     emit("buttonTiles", sprite_blocks(button(), 16))
     emit("buttonPal", BUTTON_PAL)
-    text = sprite_blocks(banner("FLAPPY", "ROBIN", 2), 32) + sprite_blocks(banner("GAME", "OVER", 1), 32)
+    text = sprite_blocks(banner("FLAPPY", "ENAGA", 2), 32) + sprite_blocks(banner("GAME", "OVER", 1), 32)
     for d in range(10):
         text += sprite_tiles(digit(d))
     emit("textTiles", text)
