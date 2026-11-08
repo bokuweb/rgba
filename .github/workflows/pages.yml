@@ -40,6 +40,22 @@ jobs:
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - name: build wasm
         run: wasm-pack build --target web --out-dir web/pkg --no-typescript --release
+      - name: checkout r2 (Linux on the GBA)
+        uses: actions/checkout@v4
+        with:
+          repository: bokuweb/r2
+          # gba-port branch; pinned so the deployed ROM matches roms.json.
+          ref: 2907abd3b34bb4753a2dc3a2c9afbb3f27109316
+          path: r2
+      - name: build Linux ROM (r2-gba)
+        # r2/gba/rust-toolchain.toml selects nightly + rust-src (build-std);
+        # the Makefile needs llvm-objcopy from llvm-tools.
+        working-directory: r2/gba
+        run: |
+          rustup toolchain install nightly --profile minimal --component rust-src,llvm-tools
+          make
+          mkdir -p ../../web/roms
+          cp target/r2-gba.gba ../../web/roms/r2-linux.gba
       - name: fetch ROM library
         # Downloads the open-source ROMs listed in web/roms.json (pinned by
         # sha256) and copies the in-repo fixtures into web/roms/.

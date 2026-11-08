@@ -52,6 +52,27 @@ impl GbaHandle {
         self.framebuf.clone()
     }
 
+    /// Run `n` video frames back to back and return only the last framebuffer.
+    /// Used for fast-forward: skipping the per-frame copy to JS keeps the
+    /// emulator, not the bindings, as the bottleneck.
+    #[wasm_bindgen(js_name = runFrames)]
+    pub fn run_frames(&mut self, n: u32) -> Vec<u8> {
+        self.gba.update_key(self.key);
+        let mut buf = Vec::new();
+        for _ in 0..n.max(1) {
+            buf = self.gba.frame(false);
+        }
+        self.copy_framebuffer(&buf);
+        self.framebuf.clone()
+    }
+
+    /// Make the GamePak ROM area writable, as on flash carts that run the game
+    /// out of PSRAM (r2-gba keeps its guest RAM there). Call before running.
+    #[wasm_bindgen(js_name = enablePsram)]
+    pub fn enable_psram(&mut self) {
+        self.gba.enable_psram();
+    }
+
     /// Execute a single CPU instruction. Returns `true` if that step finished a
     /// video frame (so the caller may want to repaint).
     pub fn step(&mut self) -> bool {
