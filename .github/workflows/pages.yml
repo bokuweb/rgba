@@ -68,8 +68,6 @@ jobs:
           cp web/index.html web/app.js web/vram.js web/play.html web/play.js web/audio-processor.js web/roms.json dist/
           cp -r web/pkg dist/pkg
           cp -r web/roms dist/roms
-          # /linux/: the play page pinned to the r2-gba Linux ROM.
-          python3 web/make-linux-page.py dist/linux
           rm -f dist/pkg/.gitignore dist/pkg/package.json
           touch dist/.nojekyll
       - uses: actions/configure-pages@v5

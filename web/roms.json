@@ -531,7 +531,7 @@
           "psram": true,
           "turbo": true,
           "hint": "A uname -a · B ls / · L cpuinfo · R free · START uptime · SELECT ps",
-          "note": "bokuweb/r2's RISC-V (rv32ima) interpreter running on the GBA, booting Linux to a shell. Guest RAM lives in the GamePak window, so it needs flash-cart PSRAM emulation (`psram`). Not downloaded by fetch-roms.py: the Pages workflow builds it from bokuweb/r2 (`build`). Served at /linux/ with fast-forward on, since the boot takes several minutes of GBA time."
+          "note": "bokuweb/r2's RISC-V (rv32ima) interpreter running on the GBA, booting Linux to a shell. Guest RAM lives in the GamePak window, so it needs flash-cart PSRAM emulation (`psram`). Not downloaded by fetch-roms.py: the Pages workflow builds it from bokuweb/r2 (`build`). Fast-forward (`turbo`) starts on, since the boot takes several minutes of GBA time."
         }
       ]
     },

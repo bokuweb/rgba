@@ -21,9 +21,6 @@ let romId = null;
 let romEntry = null;
 // Fast-forward: run as many frames as fit in each display refresh.
 let turbo = false;
-// A page can pin its cartridge with <meta name="rgba-rom" content="<id>">
-// (the /linux/ page is play.html with that tag and <base href="../">).
-const PINNED = document.querySelector('meta[name="rgba-rom"]')?.content || null;
 let paused = false;
 // The POWER switch on the page; off stops the core, on cold-boots the ROM again.
 let powered = $('power').checked;
@@ -336,10 +333,7 @@ async function loadLibraryRom(id, { deepLink = true } = {}) {
     ].filter(Boolean).join(' · ') + (r.hint ? `<br>${r.hint}` : ''));
     setTurbo(!!r.turbo);
     boot(romBytes);
-    // Absolute path: a pinned page sets <base href="../">, which a bare
-    // `?rom=` would resolve against.
-    const link = deepLink && id !== PINNED ? `${location.pathname}?rom=${encodeURIComponent(id)}` : location.pathname;
-    history.replaceState(null, '', link);
+    history.replaceState(null, '', deepLink ? `?rom=${encodeURIComponent(id)}` : location.pathname);
     syncModeLink();
   } catch (e) {
     showOverlay('NO CARTRIDGE');
@@ -356,7 +350,7 @@ await init();
 await loadLibrary();
 
 const wanted = new URLSearchParams(location.search).get('rom');
-const fallback = library.find((r) => (PINNED ? r.id === PINNED : r.default));
+const fallback = library.find((r) => r.default);
 if (wanted && library.some((r) => r.id === wanted)) {
   $('romSel').value = wanted;
   loadLibraryRom(wanted);
