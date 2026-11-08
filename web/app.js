@@ -348,8 +348,12 @@ $('asmRun').addEventListener('click', () => {
 });
 
 // ---------------------------------------------------------------- transport
+// Library entries with `psram: true` (r2-gba's Linux) need the flash-cart
+// writable ROM window; uploaded files run as plain cartridges.
+let romPsram = false;
 function bootGba(bytes) {
   gba = new GbaHandle(bytes);
+  if (romPsram) gba.enablePsram();
   // re-apply breakpoints to the fresh instance
   for (const a of bps) gba.setBreakpoint(a);
   prevRegs = new Array(16).fill(-1); // force first-frame highlight off
@@ -367,6 +371,7 @@ $('rom').addEventListener('change', async (e) => {
   if (!file) return;
   romBytes = new Uint8Array(await file.arrayBuffer());
   $('romSel').value = '';
+  romPsram = false;
   $('modePlay').href = './play.html';
   setStatus(`${file.name} · ${fmtSize(file.size)}`);
   setRunning(false);
@@ -435,6 +440,7 @@ async function loadLibraryRom(id, { deepLink = true } = {}) {
     ].filter(Boolean).join(' · ');
     setStatus(credit);
     setRunning(false);
+    romPsram = !!r.psram;
     bootGba(romBytes);
     if (deepLink) history.replaceState(null, '', `?rom=${encodeURIComponent(id)}`);
     // Keep the play/debug switch pointing at the same ROM.

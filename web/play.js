@@ -16,6 +16,14 @@ const store = {
 let gba = null;
 let romBytes = null;
 let romId = null;
+// Library entry for the loaded ROM (null for an uploaded file): carries the
+// `psram` / `turbo` / `hint` flags from roms.json.
+let romEntry = null;
+// Fast-forward: run as many frames as fit in each display refresh.
+let turbo = false;
+// A page can pin its cartridge with <meta name="rgba-rom" content="<id>">
+// (the /linux/ page is play.html with that tag and <base href="../">).
+const PINNED = document.querySelector('meta[name="rgba-rom"]')?.content || null;
 let paused = false;
 // The POWER switch on the page; off stops the core, on cold-boots the ROM again.
 let powered = $('power').checked;
@@ -183,6 +191,16 @@ function loop(t) {
   if (!gba || paused || !powered) return;
   acc += dt;
   let fb = null, n = 0;
+  if (turbo) {
+    // Spend most of the refresh interval emulating; audio is dropped since it
+    // would play back far too fast.
+    const until = performance.now() + 12;
+    do { fb = gba.runFrames(4); gba.takeAudioF32(); } while (performance.now() < until);
+    if (fresh.size) { fresh.clear(); syncKeys(); }
+    acc = 0;
+    image.data.set(fb); ctx.putImageData(image, 0, 0);
+    return;
+  }
   // Fixed-step at the GBA's own rate so 120/144 Hz displays don't speed it up.
   while (acc >= FRAME_MS && n < 4) {
     fb = gba.runFrame();
@@ -211,6 +229,13 @@ function showOverlay(text) {
 }
 function togglePause() { if (gba) setPaused(!paused); }
 $('pause').addEventListener('click', togglePause);
+function setTurbo(on) {
+  turbo = on;
+  $('turbo').classList.toggle('on', on);
+  $('turbo').textContent = on ? 'TURBO ON' : 'TURBO';
+  acc = 0;
+}
+$('turbo').addEventListener('click', () => setTurbo(!turbo));
 $('reset').addEventListener('click', () => { if (romBytes) boot(romBytes); });
 document.addEventListener('visibilitychange', () => {
   if (document.hidden && gba && !paused) setPaused(true);
@@ -239,10 +264,11 @@ function setStatus(html) { $('romStatus').innerHTML = html; }
 
 function boot(bytes) {
   gba = new GbaHandle(bytes);
+  if (romEntry?.psram) gba.enablePsram();
   for (let i = 0; i < 10; i++) if (current[i]) gba.setKey(i, true);
   acc = 0;
   shell.classList.add('power');
-  for (const b of ['pause', 'reset']) $(b).disabled = false;
+  for (const b of ['pause', 'reset', 'turbo']) $(b).disabled = false;
   setPaused(false);
 }
 
@@ -256,6 +282,7 @@ $('rom').addEventListener('change', async (e) => {
   if (!file) return;
   romBytes = new Uint8Array(await file.arrayBuffer());
   romId = null;
+  romEntry = null;
   $('romSel').value = '';
   history.replaceState(null, '', location.pathname);
   syncModeLink();
@@ -299,15 +326,20 @@ async function loadLibraryRom(id, { deepLink = true } = {}) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     romBytes = new Uint8Array(await res.arrayBuffer());
     romId = id;
+    romEntry = r;
     setStatus([
       `<span class="lic">${r.title}</span>`,
       r.author ? `by ${r.author}` : '',
       r.event || '',
       r.license,
       r.source ? `<a href="${r.source}" target="_blank" rel="noopener">source</a>` : '',
-    ].filter(Boolean).join(' · '));
+    ].filter(Boolean).join(' · ') + (r.hint ? `<br>${r.hint}` : ''));
+    setTurbo(!!r.turbo);
     boot(romBytes);
-    history.replaceState(null, '', deepLink ? `?rom=${encodeURIComponent(id)}` : location.pathname);
+    // Absolute path: a pinned page sets <base href="../">, which a bare
+    // `?rom=` would resolve against.
+    const link = deepLink && id !== PINNED ? `${location.pathname}?rom=${encodeURIComponent(id)}` : location.pathname;
+    history.replaceState(null, '', link);
     syncModeLink();
   } catch (e) {
     showOverlay('NO CARTRIDGE');
@@ -324,7 +356,7 @@ await init();
 await loadLibrary();
 
 const wanted = new URLSearchParams(location.search).get('rom');
-const fallback = library.find((r) => r.default);
+const fallback = library.find((r) => (PINNED ? r.id === PINNED : r.default));
 if (wanted && library.some((r) => r.id === wanted)) {
   $('romSel').value = wanted;
   loadLibraryRom(wanted);

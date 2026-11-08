@@ -517,6 +517,25 @@
       ]
     },
     {
+      "name": "Linux",
+      "roms": [
+        {
+          "id": "linux",
+          "title": "Linux (r2-gba)",
+          "file": "r2-linux.gba",
+          "author": "bokuweb",
+          "license": "r2-gba by bokuweb; embeds a Linux 6.1 kernel + buildroot initramfs (GPL-2.0)",
+          "source": "https://github.com/bokuweb/r2/tree/gba-port/gba",
+          "build": "r2",
+          "size": 3496612,
+          "psram": true,
+          "turbo": true,
+          "hint": "A uname -a · B ls / · L cpuinfo · R free · START uptime · SELECT ps",
+          "note": "bokuweb/r2's RISC-V (rv32ima) interpreter running on the GBA, booting Linux to a shell. Guest RAM lives in the GamePak window, so it needs flash-cart PSRAM emulation (`psram`). Not downloaded by fetch-roms.py: the Pages workflow builds it from bokuweb/r2 (`build`). Served at /linux/ with fast-forward on, since the boot takes several minutes of GBA time."
+        }
+      ]
+    },
+    {
       "name": "Test ROMs",
       "roms": [
         {

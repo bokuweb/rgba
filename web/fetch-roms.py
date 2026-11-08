@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Populate web/roms/ from the manifest in web/roms.json.
 
-Entries with a `fixture` path are copied from this repository; the rest are
+Entries with a `fixture` path are copied from this repository, entries with
+`build` are compiled by the Pages workflow and left alone here; the rest are
 downloaded from the URL in the manifest (optionally extracting `zip_member`
 from a zip) and verified against the pinned `sha256`. Already-present files
 with a matching hash are skipped, so re-running is cheap.
@@ -42,6 +43,12 @@ def main() -> int:
     for group in manifest["groups"]:
         for rom in group["roms"]:
             dest = out / rom["file"]
+            if "build" in rom:
+                # Built from source by the Pages workflow (see pages.yml);
+                # locally, drop the built ROM into the output dir yourself.
+                state = "present" if dest.exists() else "skipped (build it, see pages.yml)"
+                print(f"built    {rom['file']}  {state}")
+                continue
             if "fixture" in rom:
                 shutil.copyfile(ROOT / rom["fixture"], dest)
                 print(f"copied   {rom['file']}  <- {rom['fixture']}")
