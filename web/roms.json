@@ -9,8 +9,8 @@
           "title": "Flappy Enaga",
           "file": "flappy-enaga.gba",
           "fixture": "fixtures/flappy-enaga/flappy-enaga.gba",
-          "author": "Code by Tim Ullrich (flappybird-gba), adapted in this repository",
-          "license": "MIT · art and sound drawn by code in this repository",
+          "author": "Tim Ullrich (code), bokuweb (art and sound)",
+          "license": "MIT",
           "source": "https://github.com/bokuweb/rgba/tree/main/fixtures/flappy-enaga",
           "note": "A shimaenaga flies through stone columns in this one-button game, with all art and sound made from scratch. Press A or B to flap, Start to pause. Loaded by default when the debugger opens.",
           "default": true
