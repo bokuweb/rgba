@@ -6,7 +6,7 @@ use crate::cpu::decoder::arm::*;
 use crate::cpu::instructions::ExecuteResult;
 use crate::types::*;
 
-fn exec_ex_memory_load<F, T>(bus: &T, gpr: &mut [u32; 16], dec: ExtraMemory, load: F) -> Result<ExecuteResult, ()>
+fn exec_ex_memory_load<F, T>(bus: &T, gpr: &mut [u32; 16], dec: ExtraMemory, width: AccessWidth, load: F) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
     F: FnOnce(&mut [u32; 16], u32),
@@ -29,8 +29,7 @@ where
     }
 
     load(gpr, base);
-    let access_type = AccessType::NonSeq(AccessWidth::Word);
-    let load_cycle = bus.compute_cycle(base, access_type);
+    let load_cycle = bus.compute_cycle(base, AccessType::NonSeq(width));
 
     // load cycle + 1I cycle
     let cycle = load_cycle + 1;
@@ -38,10 +37,8 @@ where
     if dec.get_Rd() as usize == PC {
         Ok((cycle, PipelineStatus::Flush))
     } else {
-        // Next prefetch cycle is merged  I-S cycle.
-        // See ARM DDI 0084F 6-14
-        let access_type = AccessType::Seq(AccessWidth::Word);
-        let cycle = cycle + bus.compute_cycle(gpr[PC], access_type);
+        // The next opcode fetch follows a data access, so it is non-sequential.
+        let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));
         Ok((cycle, PipelineStatus::Continue))
     }
 }
@@ -51,7 +48,6 @@ where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
-    let access_type = AccessType::NonSeq(AccessWidth::Word);
 
     let mut base = gpr[dec.get_Rn() as usize];
     let offset = if dec.get_I() { dec.get_imm8() } else { gpr[dec.get_Rm() as usize] };
@@ -66,13 +62,13 @@ where
     // STRH force-aligns the effective address to a halfword boundary on
     // ARM7TDMI: bit 0 of the address is ignored. (gba-tests arm t407)
     bus.write_halfword(base & 0xFFFF_FFFE, (gpr[rd] & 0xFFFF) as HalfWord);
-    let store_cycle = bus.compute_cycle(base, access_type);
+    let store_cycle = bus.compute_cycle(base, AccessType::NonSeq(AccessWidth::HalfWord));
     if !dec.get_P() {
         gpr[dec.get_Rn() as usize] = offset_base;
     } else if dec.get_W() {
         gpr[dec.get_Rn() as usize] = base;
     }
-    let fetch_cycle = bus.compute_cycle(gpr[PC], access_type);
+    let fetch_cycle = bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));
     // Store consume 2N cycle
     Ok((store_cycle + fetch_cycle, PipelineStatus::Continue))
 }
@@ -83,7 +79,7 @@ where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
-    exec_ex_memory_load(bus, gpr, dec, |gpr, base| {
+    exec_ex_memory_load(bus, gpr, dec, AccessWidth::HalfWord, |gpr, base| {
         // t408: Misaligned load halfword (rotated)
         //  - For LDRH at an odd address, the loaded value is the 32-bit value ROR'd by 8 (ARM7TDMI spec).
         //  - Ref: fixtures/gba-tests/arm/halfword_transfer.asm t408
@@ -102,7 +98,7 @@ where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
-    exec_ex_memory_load(bus, gpr, dec, |gpr, base| {
+    exec_ex_memory_load(bus, gpr, dec, AccessWidth::Byte, |gpr, base| {
         gpr[rd] = bus.read_byte(base) as i8 as i32 as u32;
     })
 }
@@ -113,7 +109,7 @@ where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
-    exec_ex_memory_load(bus, gpr, dec, |gpr, base| {
+    exec_ex_memory_load(bus, gpr, dec, AccessWidth::HalfWord, |gpr, base| {
         // t409: Misaligned load signed halfword
         //  - The test requires that an ARM7TDMI LDRSH at an odd address behaves like LDRSB (sign-extending the target byte).
         //  - Ref: fixtures/gba-tests/arm/halfword_transfer.asm t409

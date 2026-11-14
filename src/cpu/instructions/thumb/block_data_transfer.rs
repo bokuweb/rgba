@@ -115,8 +115,8 @@ where
 
     // Consume 1I cycle.
     let cycle = cycle + 1;
-    // consume merged I-S cycle
-    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+    // The next opcode fetch follows a data access, so it is non-sequential.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
 
     (cycle, PipelineStatus::Continue)
 }
@@ -203,8 +203,8 @@ where
     if dec.get_R() {
         (cycle, PipelineStatus::Flush)
     } else {
-        // consume merged I-S cycle
-        let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+        // The next opcode fetch follows a data access, so it is non-sequential.
+        let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
         (cycle, PipelineStatus::Continue)
     }
 }

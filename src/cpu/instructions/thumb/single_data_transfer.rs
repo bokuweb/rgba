@@ -20,8 +20,8 @@ where
 
     gpr[rd] = data;
 
-    // Add merged I + S cycle.
-    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+    // The next opcode fetch follows a data access, so it is non-sequential.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     (cycle, PipelineStatus::Continue)
 }
 
@@ -42,8 +42,8 @@ where
 
     gpr[rd] = data;
 
-    // Add merged I + S cycle.
-    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+    // The next opcode fetch follows a data access, so it is non-sequential.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     (cycle, PipelineStatus::Continue)
 }
 
@@ -60,12 +60,12 @@ where
     let data = bus.read_byte(addr);
 
     // 1N + 1I cycle
-    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
+    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Byte)) + 1;
 
     gpr[rd] = data as u32;
 
-    // Add merged I + S cycle.
-    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+    // The next opcode fetch follows a data access, so it is non-sequential.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     (cycle, PipelineStatus::Continue)
 }
 
@@ -84,8 +84,8 @@ where
 
     gpr[rd] = data;
 
-    // Add merged I + S cycle.
-    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+    // The next opcode fetch follows a data access, so it is non-sequential.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     (cycle, PipelineStatus::Continue)
 }
 
@@ -105,8 +105,8 @@ where
 
     gpr[rd] = data;
 
-    // Add merged I + S cycle.
-    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+    // The next opcode fetch follows a data access, so it is non-sequential.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     (cycle, PipelineStatus::Continue)
 }
 
@@ -125,12 +125,12 @@ where
     let data32 = if (addr & 1) != 0 { raw.rotate_right(8) } else { raw };
 
     // 1N + 1I cycle
-    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
+    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::HalfWord)) + 1;
 
     gpr[rd] = data32;
 
-    // Add merged I + S cycle.
-    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+    // The next opcode fetch follows a data access, so it is non-sequential.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     (cycle, PipelineStatus::Continue)
 }
 
@@ -152,12 +152,12 @@ where
     };
 
     // 1N + 1I cycle
-    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
+    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::HalfWord)) + 1;
 
     gpr[rd] = data as u32;
 
-    // Add merged I + S cycle.
-    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+    // The next opcode fetch follows a data access, so it is non-sequential.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     (cycle, PipelineStatus::Continue)
 }
 
@@ -173,12 +173,12 @@ where
     let data = bus.read_byte(addr) as i8;
 
     // 1N + 1I cycle
-    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
+    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Byte)) + 1;
 
     gpr[rd] = data as u32;
 
-    // Add merged I + S cycle.
-    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+    // The next opcode fetch follows a data access, so it is non-sequential.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     (cycle, PipelineStatus::Continue)
 }
 
@@ -198,12 +198,12 @@ where
     let data32 = if (addr & 1) != 0 { raw.rotate_right(8) } else { raw };
 
     // 1N + 1I cycle
-    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
+    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::HalfWord)) + 1;
 
     gpr[rd] = data32;
 
-    // Add merged I + S cycle.
-    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+    // The next opcode fetch follows a data access, so it is non-sequential.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     // dbg!("ldrh", &gpr);
     (cycle, PipelineStatus::Continue)
 }
@@ -224,10 +224,8 @@ where
 
     bus.write_word(addr, gpr[rd]);
 
-    let access_type = AccessType::NonSeq(AccessWidth::Word);
-    let store_cycle = bus.compute_cycle(addr, access_type);
-    let access_type = AccessType::NonSeq(AccessWidth::HalfWord);
-    let fetch_cycle = bus.compute_cycle(gpr[PC], access_type);
+    let store_cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word));
+    let fetch_cycle = bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     // Store consume 2N cycle
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
 }
@@ -243,10 +241,8 @@ where
     let addr = gpr[SP] + offset.wrapping_shl(2);
 
     bus.write_word(addr, data);
-    let access_type = AccessType::NonSeq(AccessWidth::Word);
-    let store_cycle = bus.compute_cycle(addr, access_type);
-    let access_type = AccessType::NonSeq(AccessWidth::HalfWord);
-    let fetch_cycle = bus.compute_cycle(gpr[PC], access_type);
+    let store_cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word));
+    let fetch_cycle = bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     // dbg!("after str3", &gpr);
     // Store consume 2N cycle
 
@@ -264,9 +260,8 @@ where
     let addr = gpr[rn] + offset.wrapping_shl(1);
     bus.write_halfword(addr, gpr[rd] as u16);
 
-    let access_type = AccessType::NonSeq(AccessWidth::HalfWord);
-    let store_cycle = bus.compute_cycle(addr, access_type);
-    let fetch_cycle = bus.compute_cycle(gpr[PC], access_type);
+    let store_cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::HalfWord));
+    let fetch_cycle = bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     // dbg!("strh");
     // Store consume 2N cycle
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
@@ -283,12 +278,12 @@ where
     let addr = gpr[rn] + offset;
 
     // 1N + 1I cycle
-    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word)) + 1;
+    let cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Byte)) + 1;
 
     gpr[rd] = bus.read_byte(addr) as u32;
 
-    // Add merged I + S cycle.
-    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
+    // The next opcode fetch follows a data access, so it is non-sequential.
+    let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
 
     (cycle, PipelineStatus::Continue)
 }
@@ -304,9 +299,8 @@ where
     let addr = gpr[rn] + offset;
     bus.write_byte(addr, gpr[rd] as u8);
 
-    let access_type = AccessType::NonSeq(AccessWidth::Byte);
-    let store_cycle = bus.compute_cycle(addr, access_type);
-    let fetch_cycle = bus.compute_cycle(gpr[PC], access_type);
+    let store_cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Byte));
+    let fetch_cycle = bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     // dbg!("strB");
     // Store consume 2N cycle
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
@@ -323,9 +317,8 @@ where
     let addr = gpr[rn] + gpr[rm];
     bus.write_byte(addr, gpr[rd] as Byte);
 
-    let access_type = AccessType::NonSeq(AccessWidth::Byte);
-    let store_cycle = bus.compute_cycle(addr, access_type);
-    let fetch_cycle = bus.compute_cycle(gpr[PC], access_type);
+    let store_cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Byte));
+    let fetch_cycle = bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     // dbg!("strB");
     // Store consume 2N cycle
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
@@ -342,9 +335,8 @@ where
     let addr = gpr[rn] + gpr[rm];
     bus.write_halfword(addr, gpr[rd] as HalfWord);
 
-    let access_type = AccessType::NonSeq(AccessWidth::Byte);
-    let store_cycle = bus.compute_cycle(addr, access_type);
-    let fetch_cycle = bus.compute_cycle(gpr[PC], access_type);
+    let store_cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::HalfWord));
+    let fetch_cycle = bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
 }
 
@@ -359,8 +351,7 @@ where
     let addr = gpr[rn] + gpr[rm];
     bus.write_word(addr, gpr[rd] as Word);
 
-    let access_type = AccessType::NonSeq(AccessWidth::Byte);
-    let store_cycle = bus.compute_cycle(addr, access_type);
-    let fetch_cycle = bus.compute_cycle(gpr[PC], access_type);
+    let store_cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word));
+    let fetch_cycle = bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
 }
