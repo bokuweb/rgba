@@ -44,7 +44,13 @@ pub fn exec_thumb_b2(dec: Branch, gpr: &mut [Word; 16], _cpsr: &mut PSR) -> Exec
 pub fn exec_thumb_bl1<T: BusAccessor>(bus: &T, dec: Branch, gpr: &mut [Word; 16]) -> ExecuteResult {
     let offset = dec.get_offset11();
     // dbg!("BL", &gpr);
-    let access_type = AccessType::NonSeq(AccessWidth::HalfWord);
+    // The first half (H=0) is a plain 1S instruction; the second half
+    // branches, and the refill is charged when the pipeline is flushed.
+    let access_type = if dec.get_H11() {
+        AccessType::NonSeq(AccessWidth::HalfWord)
+    } else {
+        AccessType::Seq(AccessWidth::HalfWord)
+    };
     let s_cycle = bus.compute_cycle(gpr[PC], access_type);
     if dec.get_H11() {
         let pc = gpr[PC];

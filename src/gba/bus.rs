@@ -825,6 +825,25 @@ impl BusAccessor for CpuBus {
     }
 
     fn compute_cycle(&self, addr: Word, access_type: AccessType) -> Cycle {
+        // The GamePak latches the address once and then increments it, but the
+        // counter does not carry across a 128KB (0x20000) block. A sequential
+        // CPU access that lands on the first address of a block therefore has
+        // to send the address again, and costs a non-sequential access.
+        let access_type = match access_type {
+            AccessType::Seq(width) if (0x0800_0000..=0x0DFF_FFFF).contains(&addr) && addr.trailing_zeros() >= 17 => {
+                AccessType::NonSeq(width)
+            }
+            other => other,
+        };
+        self.access_cycle(addr, access_type)
+    }
+}
+
+impl CpuBus {
+    /// Wait-state cost of one access, straight from the WAITCNT lookup table.
+    /// DMA uses this directly because it decides S/N at ROM block boundaries
+    /// itself (see `dma_access_type`).
+    fn access_cycle(&self, addr: Word, access_type: AccessType) -> Cycle {
         let page = (addr >> 24) as usize;
         if page > 0xF {
             return 1;
@@ -1318,7 +1337,11 @@ impl CpuBus {
     fn dma_access_type(addr: Word, width: AccessWidth, unit: u32, i: usize) -> AccessType {
         let is_rom = (0x0800_0000..=0x0DFF_FFFF).contains(&addr);
         let rom_boundary = is_rom && ((addr & 0x1_FFFF) + unit) >= 0x2_0000;
-        if i > 0 && rom_boundary {
+        // The first unit of a transfer sends a fresh address on both buses.
+        if i == 0 {
+            return AccessType::NonSeq(width);
+        }
+        if rom_boundary {
             AccessType::NonSeq(width)
         } else {
             AccessType::Seq(width)
@@ -1451,6 +1474,15 @@ impl CpuBus {
             }
         }
 
+        // Starting a transfer costs 2I of internal time, or 4I when both the
+        // source and the destination are in GamePak memory (GBATEK "DMA
+        // Transfer Time": 2N + 2(n-1)S + xI).
+        let is_gamepak = |region: Word| (0x0800_0000..=0x0DFF_FFFF).contains(&region);
+        let startup = if is_gamepak(src_region) && is_gamepak(dst_region) { 4 } else { 2 };
+        if count > 0 {
+            self.advance_clock(startup);
+        }
+
         for i in 0..count {
             let source_addr = src_region | ((src_off as u32) & 0x00FF_FFFF);
             let dest_addr = dst_region | ((dst_off as u32) & 0x00FF_FFFF);
@@ -1466,7 +1498,7 @@ impl CpuBus {
             // pointing at a running timer/counter is sampled at the correct,
             // advancing value. This is what makes the cycle-timed DMA tests
             // observe the right per-transfer deltas.
-            let cost = self.compute_cycle(source_addr, src_at) + self.compute_cycle(dest_addr, dst_at);
+            let cost = self.access_cycle(source_addr, src_at) + self.access_cycle(dest_addr, dst_at);
             self.advance_clock(cost);
 
             if transfer_size == 4 {
@@ -1901,10 +1933,10 @@ mod tests {
     #[test]
     fn dma_rom_boundary_forces_nonsequential() {
         use crate::types::{AccessType, AccessWidth};
-        // First unit is sequential even at a boundary-adjacent ROM address.
+        // The first unit of a transfer is always non-sequential.
         assert!(matches!(
-            CpuBus::dma_access_type(0x0801_FFFC, AccessWidth::Word, 4, 0),
-            AccessType::Seq(_)
+            CpuBus::dma_access_type(0x0800_0000, AccessWidth::Word, 4, 0),
+            AccessType::NonSeq(_)
         ));
         // Later units at a ROM 0x20000-boundary-adjacent address are non-seq.
         assert!(matches!(

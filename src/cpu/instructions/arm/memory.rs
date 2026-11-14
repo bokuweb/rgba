@@ -7,7 +7,7 @@ use crate::cpu::registers::psr::PSR;
 use crate::cpu::{bus::accessor::*, instructions::helpers::read_ldr_data};
 use crate::types::*;
 
-fn exec_memory_store<T, F>(bus: &mut T, gpr: &mut [u32; 16], dec: Memory, cpsr: &PSR, store: F) -> Result<ExecuteResult, ()>
+fn exec_memory_store<T, F>(bus: &mut T, gpr: &mut [u32; 16], dec: Memory, cpsr: &PSR, width: AccessWidth, store: F) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
     F: FnOnce(&mut T, &mut [u32; 16], u32),
@@ -38,20 +38,19 @@ where
     }
 
     store(bus, gpr, base);
-    let access_type = AccessType::NonSeq(AccessWidth::Word);
-    let store_cycle = bus.compute_cycle(base, access_type);
+    let store_cycle = bus.compute_cycle(base, AccessType::NonSeq(width));
 
     if !dec.get_P() {
         gpr[dec.get_Rn() as usize] = offset_base;
     } else if dec.get_W() {
         gpr[dec.get_Rn() as usize] = base;
     }
-    let fetch_cycle = bus.compute_cycle(gpr[PC], access_type);
+    let fetch_cycle = bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));
     // Store consume 2N cycle
     Ok((store_cycle + fetch_cycle, PipelineStatus::Continue))
 }
 
-fn exec_memory_load<T, F>(bus: &T, gpr: &mut [u32; 16], dec: Memory, cpsr: &PSR, load: F) -> Result<ExecuteResult, ()>
+fn exec_memory_load<T, F>(bus: &T, gpr: &mut [u32; 16], dec: Memory, cpsr: &PSR, width: AccessWidth, load: F) -> Result<ExecuteResult, ()>
 where
     T: BusAccessor,
     F: FnOnce(&mut [u32; 16], u32),
@@ -84,13 +83,13 @@ where
     load(gpr, base);
 
     // 1N + 1I cycle
-    let cycle = bus.compute_cycle(base, AccessType::NonSeq(AccessWidth::Word)) + 1;
+    let cycle = bus.compute_cycle(base, AccessType::NonSeq(width)) + 1;
 
     if dec.get_Rd() as usize == PC && dec.get_L() {
         Ok((cycle, PipelineStatus::Flush))
     } else {
-        // Add merged I + S cycle.
-        let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+        // The next opcode fetch follows a data access, so it is non-sequential.
+        let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));
         Ok((cycle, PipelineStatus::Continue))
     }
 }
@@ -102,7 +101,7 @@ where
 {
     let rd = dec.get_Rd() as usize;
     
-    exec_memory_load(bus, gpr, dec, cpsr, |gpr, base| {
+    exec_memory_load(bus, gpr, dec, cpsr, AccessWidth::Word, |gpr, base| {
         let data = read_ldr_data(bus, base);
         gpr[rd] = data;
     })
@@ -114,7 +113,7 @@ where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
-    exec_memory_load(bus, gpr, dec, cpsr, |gpr, base| {
+    exec_memory_load(bus, gpr, dec, cpsr, AccessWidth::Byte, |gpr, base| {
         gpr[rd] = bus.read_byte(base) as Word;
     })
 }
@@ -125,7 +124,7 @@ where
 {
     let rd = dec.get_Rd() as usize;
     
-    exec_memory_store(bus, gpr, dec, cpsr, |bus, gpr, base| {
+    exec_memory_store(bus, gpr, dec, cpsr, AccessWidth::Word, |bus, gpr, base| {
         // t354: Misaligned store
         //  - Per the ARMv4 (ARM7TDMI) spec, when a word store targets an unaligned address,
         //    the low 2 bits of the address are ignored and the write goes to the 4-byte-aligned address.
@@ -146,7 +145,7 @@ where
     T: BusAccessor,
 {
     let rd = dec.get_Rd() as usize;
-    exec_memory_store(bus, gpr, dec, cpsr, |bus, gpr, base| {
+    exec_memory_store(bus, gpr, dec, cpsr, AccessWidth::Byte, |bus, gpr, base| {
         bus.write_byte(base, gpr[rd] as Byte);
     })
 }

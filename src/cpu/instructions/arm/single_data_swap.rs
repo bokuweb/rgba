@@ -1,4 +1,5 @@
 use crate::cpu::bus::accessor::*;
+use crate::cpu::constants::*;
 use crate::cpu::decoder::arm::*;
 use crate::cpu::instructions::{ExecuteResult, PipelineStatus};
 use crate::cpu::instructions::helpers::read_ldr_data;
@@ -21,7 +22,9 @@ where
     let eff_addr = addr & 0xFFFF_FFFC;
     bus.write_word(eff_addr, gpr[rm] as Word);
     gpr[rd] = read_val;
-    Ok((cycle + 1, PipelineStatus::Continue))
+    // 1N read + 1N write + 1I, then a non-sequential opcode fetch.
+    let cycle = cycle + 1 + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));
+    Ok((cycle, PipelineStatus::Continue))
 }
 
 pub fn exec_arm_swpb<T>(bus: &mut T, dec: SingleDataSwap, gpr: &mut [Word; 16]) -> Result<ExecuteResult, ()>
@@ -36,5 +39,7 @@ where
     let data = bus.read_byte(gpr[rn]);
     bus.write_byte(gpr[rn], gpr[rm] as Byte);
     gpr[rd] = data as Word;
-    Ok((cycle + 1, PipelineStatus::Continue))
+    // 1N read + 1N write + 1I, then a non-sequential opcode fetch.
+    let cycle = cycle + 1 + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));
+    Ok((cycle, PipelineStatus::Continue))
 }

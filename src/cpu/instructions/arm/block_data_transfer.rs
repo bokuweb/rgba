@@ -195,8 +195,8 @@ where
     if register_list & 0x8000 != 0 {
         Ok((cycle, PipelineStatus::Flush))
     } else {
-        // consume merged I-S cycle
-        let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::Word));
+        // The next opcode fetch follows a data access, so it is non-sequential.
+        let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::Word));
         Ok((cycle, PipelineStatus::Continue))
     }
 }
