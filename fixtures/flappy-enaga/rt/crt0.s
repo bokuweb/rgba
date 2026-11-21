@@ -5,6 +5,13 @@
 _start:
     b       start_vector
     .space  188             @ header, filled in by tools/fixrom.py
+.ifdef MULTIBOOT
+    @ Multiboot images start at 0x020000C0 (normal/multiplay) or 0x020000E0 (JOY bus).
+    b       start_vector    @ 0xC0
+    .byte   0, 0            @ 0xC4 boot mode, 0xC5 client number (set by the BIOS)
+    .space  26
+    b       start_vector    @ 0xE0
+.endif
 start_vector:
     mov     r0, #0x12       @ IRQ mode
     msr     cpsr_c, r0
