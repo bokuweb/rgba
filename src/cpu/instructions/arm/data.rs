@@ -36,7 +36,6 @@ where
         let rs = dec.get_Rs() as usize;
         let rs = gpr[rs];
         let shift_value = rs & 0xFF;
-        // dbg!("shift", rm, shift_value);
         (
             shift(dec.get_sh().into(), rm, shift_value, cpsr.get_C(), true),
             is_carry_over(dec.get_sh().into(), rm, shift_value, cpsr.get_C(), true),
@@ -99,10 +98,6 @@ where
         }
         
         gpr[rd] = value;
-
-        // Critical debug: detect m_exit 5 execution
-        if rd == 12 && value == 5 {
-        }
     })
 }
 
@@ -135,10 +130,6 @@ where
             }
         }
         gpr[rd] = d;
-
-        // Critical debug: detect m_exit 5 execution
-        if rd == 12 && d == 5 {
-        }
     })
 }
 
@@ -165,17 +156,12 @@ where
                 // (and re-bank registers). No flag update in this case.
                 cpsr.restore(spsr, gpr, bank_gpr, bank_spsr);
             } else {
-                // dbg!("EOR", carry, rd);
                 cpsr.set_N_from(d);
                 cpsr.set_Z_from(d);
                 cpsr.set_C(carry);
             }
         }
         gpr[rd] = d;
-
-        // Critical debug: detect m_exit 5 execution
-        if rd == 12 && d == 5 {
-        }
     })
 }
 
@@ -208,10 +194,6 @@ where
             }
         }
         gpr[rd] = d;
-
-        // Critical debug: detect m_exit 5 execution
-        if rd == 12 && d == 5 {
-        }
     })
 }
 
@@ -246,10 +228,6 @@ where
             }
         }
         gpr[rd] = d;
-
-        // Critical debug: detect m_exit 5 execution
-        if rd == 12 && d == 5 {
-        }
     })
 }
 
@@ -426,10 +404,6 @@ where
             }
         }
         gpr[rd] = d;
-
-        // Critical debug: detect m_exit 5 execution
-        if rd == 12 && d == 5 {
-        }
     })
 }
 
@@ -575,10 +549,6 @@ where
             }
         }
         gpr[rd] = d;
-
-        // Critical debug: detect m_exit 5 execution
-        if rd == 12 && d == 5 {
-        }
     })
 }
 
@@ -609,10 +579,6 @@ where
             }
         }
         gpr[rd] = value;
-
-        // Critical debug: detect m_exit 5 execution
-        if rd == 12 && value == 5 {
-        }
     })
 }
 
@@ -645,10 +611,6 @@ where
             }
         }
         gpr[rd] = d;
-
-        // Critical debug: detect m_exit 5 execution
-        if rd == 12 && d == 5 {
-        }
     })
 }
 
@@ -680,10 +642,6 @@ where
             }
         }
         gpr[rd] = d;
-
-        // Critical debug: detect m_exit 5 execution
-        if rd == 12 && d == 5 {
-        }
     })
 }
 
@@ -713,9 +671,5 @@ where
             }
         }
         gpr[rd] = value;
-
-        // Critical debug: detect m_exit 5 execution
-        if rd == 12 && value == 5 {
-        }
     })
 }

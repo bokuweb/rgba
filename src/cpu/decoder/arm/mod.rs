@@ -175,7 +175,6 @@ fn decode_data_processing(raw: Word) -> Instruction {
     let I = dec.get_I();
     let sh = dec.get_sh();
     let instr = (raw & 0b1111_1111_0000) >> 4;
-    //debug!("data processing cmd = {:x}", cmd);
     match cmd {
         0b0000 => Instruction::AND(DataProcessing(raw)),
         0b0001 => Instruction::EOR(DataProcessing(raw)),
@@ -226,7 +225,6 @@ pub fn decode(raw: Word) -> Instruction {
     //     COND_AL => Condition::AL,
     //     _ => panic!("Unknowm condition {}", cond),
     // };
-    // dbg!(raw);
 
     let instruction_type = match raw {
         // SWI must be detected before other overlapping classes
@@ -288,7 +286,6 @@ pub fn decode(raw: Word) -> Instruction {
         InstructionType::Swi => Instruction::SWI(decode_swi(raw)),
     }
 
-    // debug!("opcode = {:?}", opcode);
     // let dec = BaseDecoder { raw, cond, opcode };
     // match category {
     //     InstructionType::Multiple => Box::new(MultipleDecoder(dec)),

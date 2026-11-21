@@ -29,7 +29,6 @@ pub fn exec_thumb_ldr_reg_offset<T>(bus: &mut T, dec: SingleDataTransfer, gpr: &
 where
     T: BusAccessor,
 {
-    // dbg!("before ldr2", &gpr);
     let rd = dec.get_Rd2_0() as usize;
     let rn = dec.get_Rn() as usize;
     let rm = dec.get_Rm() as usize;
@@ -204,7 +203,6 @@ where
 
     // The next opcode fetch follows a data access, so it is non-sequential.
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
-    // dbg!("ldrh", &gpr);
     (cycle, PipelineStatus::Continue)
 }
 
@@ -217,10 +215,6 @@ where
     let offset = dec.get_off5() as u32;
 
     let addr = gpr[rn] + offset.wrapping_shl(2);
-
-    if addr == 0x0400_0006 {
-        // dbg!("read 0x0400_0006", &gpr);
-    }
 
     bus.write_word(addr, gpr[rd]);
 
@@ -243,7 +237,6 @@ where
     bus.write_word(addr, data);
     let store_cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Word));
     let fetch_cycle = bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
-    // dbg!("after str3", &gpr);
     // Store consume 2N cycle
 
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
@@ -262,7 +255,6 @@ where
 
     let store_cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::HalfWord));
     let fetch_cycle = bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
-    // dbg!("strh");
     // Store consume 2N cycle
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
 }
@@ -301,7 +293,6 @@ where
 
     let store_cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Byte));
     let fetch_cycle = bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
-    // dbg!("strB");
     // Store consume 2N cycle
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
 }
@@ -319,7 +310,6 @@ where
 
     let store_cycle = bus.compute_cycle(addr, AccessType::NonSeq(AccessWidth::Byte));
     let fetch_cycle = bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
-    // dbg!("strB");
     // Store consume 2N cycle
     (store_cycle + fetch_cycle, PipelineStatus::Continue)
 }

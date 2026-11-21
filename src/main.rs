@@ -94,7 +94,6 @@ fn main() {
                     ..
                 } => break 'running,
                 Event::KeyDown { keycode: Some(code), .. } => {
-                    // dbg!("keydown", &code);
                     match code {
                         Keycode::X => key.set_B(io::KeyStatus::ON),
                         Keycode::Z => key.set_A(io::KeyStatus::ON),
@@ -166,7 +165,6 @@ fn main() {
         };
         ::std::thread::sleep(Duration::new(0, wait));
         prev_time = SystemTime::now();
-        // panic!("")
     }
 
     // Flush any pending save before exiting.

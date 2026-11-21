@@ -271,7 +271,6 @@ impl BusAccessor for CpuBus {
     }
 
     fn read_halfword(&self, addr: u32) -> HalfWord {
-        // dbg!(format!("read half word addr = {:x}", addr));
         match addr {
             0x0000_0000..=0x0000_3FFF => self.bios.read_halfword(addr),
             // mGBA debug enable register: reads back 0x1DEA once enabled so the
@@ -422,12 +421,6 @@ impl BusAccessor for CpuBus {
     }
 
     fn write_byte(&mut self, addr: u32, data: Byte) {
-        // debug!("write byte addr = 0x{:x} data = 0x{:x}", addr, data);
-        if addr == 0x0300_0008 {
-            // dbg!(data);
-            // dbg!("h");
-            // panic!();
-        }
         match addr {
             // 0x0000_0000...0x0007_FFFF => self.rom.borrow().read_word(addr),
             0x0200_0000..=0x02FF_FFFF => self.eram.write_byte((addr - 0x0200_0000) & 0x3FFFF, data),
@@ -444,9 +437,6 @@ impl BusAccessor for CpuBus {
                 self.wram.write_byte((addr - 0x0300_0000) & 0x7FFF, data);
             }
             0x0300_0000..=0x03FF_FFFF => {
-                if addr == 0x0300_7dd9 {
-                    // dbg!("write to 0x03007dd9", data);
-                }
                 self.wram.write_byte((addr - 0x0300_0000) & 0x7FFF, data);
             }
             0x0400_0000..=0x0400_005F => {
@@ -533,11 +523,6 @@ impl BusAccessor for CpuBus {
     }
 
     fn write_halfword(&mut self, addr: u32, data: HalfWord) {
-        // debug!("write half word addr = 0x{:x} data = 0x{:x}", addr, data);
-        if addr == 0x0300_0008 {
-            // dbg!(data);
-            // dbg!("h");
-        }
         match addr {
             // I/O Register
             0x0200_0000..=0x02FF_FFFF => self.eram.write_halfword((addr - 0x0200_0000) & 0x3FFFF, data),
@@ -663,12 +648,6 @@ impl BusAccessor for CpuBus {
     }
 
     fn write_word(&mut self, addr: u32, data: Word) {
-        // dbg!(format!("write word addr 0x{:x} data = 0x{:x}", addr, data));
-        if addr == 0x0300_0008 {
-            // dbg!(data);
-            // dbg!("h");
-            // panic!();
-        }
         match addr {
             0x0000_0000..=0x0007_FFFF => {
                 // BIOS area is read-only; ignore writes.
