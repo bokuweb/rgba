@@ -281,16 +281,9 @@ impl ARM {
 
         let instruction_width = if self.cpsr.get_cpu_state() == CpuState::ARM { 4 } else { 2 };
         bus.set_open_bus_context(self.gpr[PC], instruction_width);
-        // let log = format!("{:?}", self.gpr);
-        // dbg!(&self.gpr);
-        if self.gpr[15] == 134_225_604 {
-            // panic!("aa")
-        }
 
         match self.cpsr.get_cpu_state() {
             CpuState::ARM => {
-                // dbg!(&self.gpr);
-
                 let fetched = self.get_arm_executable(bus);
                 let cond: Cond = fetched.wrapping_shr(28).into();
                 let condition_result = self.cpsr.condition_ok(cond);
@@ -306,11 +299,6 @@ impl ARM {
             }
             CpuState::Thumb => {
                 let fetched = self.get_thumb_executable(bus);
-                // dbg!(&self.gpr);
-
-                // if self.gpr[15] == 134219062 {
-                //    dbg!("hello");
-                // }
                 let instruction = thumb::decode(fetched);
                 let cycle = cycle + self.execute_thumb(instruction, bus, started);
                 Ok(cycle)

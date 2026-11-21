@@ -35,7 +35,6 @@ pub fn exec_thumb_add2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     // cpsr.set_V_from(gpr[rn_rd], d as u32);
     cpsr.set_V(v);
     gpr[rn_rd] = d as u32;
-    // dbg!("ADD2", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
     (s, PipelineStatus::Continue)
 }
@@ -48,7 +47,6 @@ pub fn exec_thumb_add3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     let (_, v) = (gpr[dec.get_Rn5_3() as usize] as i32).overflowing_add(gpr[dec.get_Rm8_6() as usize] as i32);
     cpsr.set_V(v);
     gpr[dec.get_Rd2_0() as usize] = d as u32;
-    // dbg!("ADd3", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
     (s, PipelineStatus::Continue)
 }
@@ -85,12 +83,9 @@ pub fn exec_thumb_add_relative_address<T: BusAccessor>(
 pub fn exec_thumb_add7<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], _cpsr: &mut PSR) -> ExecuteResult {
     let imm = dec.get_imm7() as i8;
     let imm = if dec.get_A() { -imm } else { imm };
-    // dbg!(imm);
     let imm = (imm as i32).wrapping_shl(2);
-    // dbg!(imm);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
     gpr[SP] = (gpr[SP] as i64 + imm as i64) as u32;
-    // dbg!(&gpr, imm);
     (s, PipelineStatus::Continue)
 }
 
@@ -126,7 +121,6 @@ pub fn exec_thumb_sub2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
 }
 
 pub fn exec_thumb_sub3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
-    // dbg!(format!("{:x}", dec.0));
     let rn = dec.get_Rn5_3() as usize;
     let rm = dec.get_Rm8_6() as usize;
     let rd = dec.get_Rd2_0() as usize;
@@ -138,7 +132,6 @@ pub fn exec_thumb_sub3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     cpsr.set_V(v);
     // cpsr.set_V_from(gpr[rd], d as u32);
     gpr[rd] = d as u32;
-    // dbg!("SUB3", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
     (s, PipelineStatus::Continue)
 }
@@ -180,7 +173,6 @@ pub fn exec_thumb1_asr<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     }
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
-    // dbg!("ASR1", &gpr, cpsr.get_C(), cpsr.get_N(), cpsr.get_Z(), cpsr.get_V());
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
     (s, PipelineStatus::Continue)
 }
@@ -293,9 +285,6 @@ pub fn exec_thumb_sbc<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
 }
 
 pub fn exec_thumb4_ror<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [Word; 16], cpsr: &mut PSR) -> ExecuteResult {
-    if gpr[15] == 134_234_196 {
-        // panic!()
-    }
     let rd = dec.get_Rd2_0() as usize;
     let sh = gpr[dec.get_Rs() as usize] & 0xFF;
     if sh != 0 {
@@ -347,7 +336,6 @@ pub fn exec_thumb_cmp1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     let (_, v) = (gpr[dec.get_Rn10_8() as usize] as i32).overflowing_sub(dec.get_imm8() as i32);
     cpsr.set_V(v);
     // cpsr.set_V_from(gpr[dec.get_Rd10_8() as usize], d as u32);
-    // dbg!("CMP1", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
     (s, PipelineStatus::Continue)
 }
@@ -361,7 +349,6 @@ pub fn exec_thumb_cmp2<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     let (_, v) = (gpr[dec.get_Rd2_0() as usize] as i32).overflowing_sub(gpr[dec.get_Rm5_3() as usize] as i32);
     cpsr.set_V(v);
     // cpsr.set_V_from(gpr[dec.get_Rd2_0() as usize], d as u32);
-    // dbg!("CMP2", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
     (s, PipelineStatus::Continue)
 }
@@ -420,7 +407,6 @@ pub fn exec_thumb_orr<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
     cpsr.set_Z_from(d);
     // Consume 1S
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
-    // dbg!("orr", &gpr);
     (s, PipelineStatus::Continue)
 }
 
@@ -433,7 +419,6 @@ pub fn exec_thumb_mul<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
     gpr[rd] = d as u32;
     // MUL consume (m)I + S
     let cycle = compute_multiple_cycle(gpr[rm]) + bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
-    // dbg!("MUL", &gpr);
     (cycle, PipelineStatus::Continue)
 }
 
@@ -444,7 +429,6 @@ pub fn exec_thumb_mvn<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
     cpsr.set_Z_from(d);
     // Consume 1S
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
-    // dbg!("mvn", &gpr);
     (s, PipelineStatus::Continue)
 }
 
@@ -453,7 +437,6 @@ pub fn exec_thumb_bic<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [W
     gpr[dec.get_Rd2_0() as usize] = d;
     cpsr.set_N_from(d);
     cpsr.set_Z_from(d);
-    // dbg!("bic", &gpr);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
     (s, PipelineStatus::Continue)
 }
@@ -495,7 +478,6 @@ where
     }
     cpsr.set_N_from(gpr[rd]);
     cpsr.set_Z_from(gpr[rd]);
-    // dbg!("LSR1", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
     (s, PipelineStatus::Continue)
 }
@@ -506,7 +488,6 @@ pub fn exec_thumb_mov1<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     cpsr.set_N_from(imm);
     cpsr.set_Z_from(imm);
     let s = bus.compute_cycle(gpr[PC], AccessType::Seq(AccessWidth::HalfWord));
-    // dbg!("mov1", &gpr);
     (s, PipelineStatus::Continue)
 }
 
@@ -517,7 +498,6 @@ pub fn exec_thumb_mov3<T: BusAccessor>(bus: &T, dec: DataProcessing, gpr: &mut [
     // let rd = dec.get_Rd_7_2_0() as usize;
 
     gpr[rd] = gpr[rs];
-    // dbg!("MOV3", &gpr, cpsr.get_C(), cpsr.get_V(), cpsr.get_N(), cpsr.get_Z());
 
     if rd == PC {
         gpr[PC] &= 0xFFFF_FFFE;

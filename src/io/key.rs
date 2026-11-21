@@ -107,7 +107,6 @@ impl Key {
     }
 
     pub(crate) const fn read(&self) -> HalfWord {
-        // dbg!("----", self.0);
         self.0
     }
 }

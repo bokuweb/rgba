@@ -482,27 +482,22 @@ impl LCDController {
             0x0020 => {
                 // BG2PA - BG2 Rotation/Scaling Parameter A (dx) (Write Only)
                 self.bg2pa = data;
-                // println!("BG2PA write: 0x{:04x}", data);
             }
             0x0022 => {
                 // BG2PB - BG2 Rotation/Scaling Parameter B (dmx) (Write Only)
                 self.bg2pb = data;
-                // println!("BG2PB write: 0x{:04x}", data);
             }
             0x0024 => {
                 // BG2PC - BG2 Rotation/Scaling Parameter C (dy) (Write Only)
                 self.bg2pc = data;
-                // println!("BG2PC write: 0x{:04x}", data);
             }
             0x0026 => {
                 // BG2PD - BG2 Rotation/Scaling Parameter D (dmy) (Write Only)
                 self.bg2pd = data;
-                // println!("BG2PD write: 0x{:04x}", data);
             }
             0x0028 => {
                 // BG2X_L - BG2 Reference Point X-Coordinate, lower 16 bit (Write Only)
                 self.bg2x = (self.bg2x & 0xFFFF_0000) | (data as Word);
-                // println!("BG2X_L write: 0x{:04x}, BG2X now: 0x{:08x}", data, self.bg2x);
             }
             0x002A => {
                 // BG2X_H - BG2 Reference Point X-Coordinate, upper 12 bit (Write Only)
@@ -511,12 +506,10 @@ impl LCDController {
                 if (self.bg2x & 0x0800_0000) != 0 {
                     self.bg2x |= 0xF000_0000;
                 }
-                // println!("BG2X_H write: 0x{:04x}, BG2X now: 0x{:08x}", data, self.bg2x);
             }
             0x002C => {
                 // BG2Y_L - BG2 Reference Point Y-Coordinate, lower 16 bit (Write Only)
                 self.bg2y = (self.bg2y & 0xFFFF_0000) | (data as Word);
-                // println!("BG2Y_L write: 0x{:04x}, BG2Y now: 0x{:08x}", data, self.bg2y);
             }
             0x002E => {
                 // BG2Y_H - BG2 Reference Point Y-Coordinate, upper 12 bit (Write Only)
@@ -525,32 +518,26 @@ impl LCDController {
                 if (self.bg2y & 0x0800_0000) != 0 {
                     self.bg2y |= 0xF000_0000;
                 }
-                // println!("BG2Y_H write: 0x{:04x}, BG2Y now: 0x{:08x}", data, self.bg2y);
             }
             0x0030 => {
                 // BG3PA - BG3 Rotation/Scaling Parameter A (dx) (Write Only)
                 self.bg3pa = data;
-                // println!("BG3PA write: 0x{:04x}", data);
             }
             0x0032 => {
                 // BG3PB - BG3 Rotation/Scaling Parameter B (dmx) (Write Only)
                 self.bg3pb = data;
-                // println!("BG3PB write: 0x{:04x}", data);
             }
             0x0034 => {
                 // BG3PC - BG3 Rotation/Scaling Parameter C (dy) (Write Only)
                 self.bg3pc = data;
-                // println!("BG3PC write: 0x{:04x}", data);
             }
             0x0036 => {
                 // BG3PD - BG3 Rotation/Scaling Parameter D (dmy) (Write Only)
                 self.bg3pd = data;
-                // println!("BG3PD write: 0x{:04x}", data);
             }
             0x0038 => {
                 // BG3X_L - BG3 Reference Point X-Coordinate, lower 16 bit (Write Only)
                 self.bg3x = (self.bg3x & 0xFFFF_0000) | (data as Word);
-                // println!("BG3X_L write: 0x{:04x}, BG3X now: 0x{:08x}", data, self.bg3x);
             }
             0x003A => {
                 // BG3X_H - BG3 Reference Point X-Coordinate, upper 12 bit (Write Only)
@@ -559,12 +546,10 @@ impl LCDController {
                 if (self.bg3x & 0x0800_0000) != 0 {
                     self.bg3x |= 0xF000_0000;
                 }
-                // println!("BG3X_H write: 0x{:04x}, BG3X now: 0x{:08x}", data, self.bg3x);
             }
             0x003C => {
                 // BG3Y_L - BG3 Reference Point Y-Coordinate, lower 16 bit (Write Only)
                 self.bg3y = (self.bg3y & 0xFFFF_0000) | (data as Word);
-                // println!("BG3Y_L write: 0x{:04x}, BG3Y now: 0x{:08x}", data, self.bg3y);
             }
             0x003E => {
                 // BG3Y_H - BG3 Reference Point Y-Coordinate, upper 12 bit (Write Only)
@@ -573,35 +558,30 @@ impl LCDController {
                 if (self.bg3y & 0x0800_0000) != 0 {
                     self.bg3y |= 0xF000_0000;
                 }
-                // println!("BG3Y_H write: 0x{:04x}, BG3Y now: 0x{:08x}", data, self.bg3y);
             }
             0x0040 => {
                 // WIN0H - Window 0 Horizontal Dimensions (Write Only)
                 self.win0h = data;
                 let _x1 = (data >> 8) & 0xFF; // Bit 8-15: X1, Leftmost coordinate
                 let _x2 = data & 0xFF; // Bit 0-7: X2, Rightmost coordinate + 1
-                                      // println!("WIN0H write: 0x{:04x} (X1:{}, X2:{})", data, x1, x2);
             }
             0x0042 => {
                 // WIN1H - Window 1 Horizontal Dimensions (Write Only)
                 self.win1h = data;
                 let _x1 = (data >> 8) & 0xFF; // Bit 8-15: X1, Leftmost coordinate
                 let _x2 = data & 0xFF; // Bit 0-7: X2, Rightmost coordinate + 1
-                                      // println!("WIN1H write: 0x{:04x} (X1:{}, X2:{})", data, x1, x2);
             }
             0x0044 => {
                 // WIN0V - Window 0 Vertical Dimensions (Write Only)
                 self.win0v = data;
                 let _y1 = (data >> 8) & 0xFF; // Bit 8-15: Y1, Top-most coordinate
                 let _y2 = data & 0xFF; // Bit 0-7: Y2, Bottom-most coordinate + 1
-                                      // println!("WIN0V write: 0x{:04x} (Y1:{}, Y2:{})", data, y1, y2);
             }
             0x0046 => {
                 // WIN1V - Window 1 Vertical Dimensions (Write Only)
                 self.win1v = data;
                 let _y1 = (data >> 8) & 0xFF; // Bit 8-15: Y1, Top-most coordinate
                 let _y2 = data & 0xFF; // Bit 0-7: Y2, Bottom-most coordinate + 1
-                                      // println!("WIN1V write: 0x{:04x} (Y1:{}, Y2:{})", data, y1, y2);
             }
             0x0048 => {
                 // WININ - Control of Inside of Window(s) (Read/Write)
@@ -612,8 +592,6 @@ impl LCDController {
                 let _win1_bg0_3 = (data & 0x0F00) >> 8; // Bit 8-11: Window 1 BG0-BG3 Enable
                 let _win1_obj = (data & 0x1000) != 0; // Bit 12: Window 1 OBJ Enable
                 let _win1_effect = (data & 0x2000) != 0; // Bit 13: Window 1 Color Special Effect
-                                                        // println!("WININ write: 0x{:04x} (Win0: BG:{:04b} OBJ:{} FX:{}, Win1: BG:{:04b} OBJ:{} FX:{})",
-                                                        //     data, win0_bg0_3, win0_obj, win0_effect, win1_bg0_3, win1_obj, win1_effect);
             }
             0x004A => {
                 // WINOUT - Control of Outside of Windows & Inside of OBJ Window (Read/Write)
@@ -624,8 +602,6 @@ impl LCDController {
                 let _objwin_bg0_3 = (data & 0x0F00) >> 8; // Bit 8-11: OBJ Window BG0-BG3 Enable
                 let _objwin_obj = (data & 0x1000) != 0; // Bit 12: OBJ Window OBJ Enable
                 let _objwin_effect = (data & 0x2000) != 0; // Bit 13: OBJ Window Color Special Effect
-                                                          // println!("WINOUT write: 0x{:04x} (Out: BG:{:04b} OBJ:{} FX:{}, ObjWin: BG:{:04b} OBJ:{} FX:{})",
-                                                          //     data, out_bg0_3, out_obj, out_effect, objwin_bg0_3, objwin_obj, objwin_effect);
             }
             0x004C => {
                 // MOSAIC - Mosaic Size (Write Only)
@@ -645,9 +621,6 @@ impl LCDController {
                     3 => "Brightness Decrease",
                     _ => "Unknown",
                 };
-
-                // println!("BLDCNT write: 0x{:04x} (1st:{:06b}, Effect:{}, 2nd:{:06b})",
-                //     data, first_target, effect_name, second_target);
             }
             0x0052 => {
                 // BLDALPHA - Alpha Blending Coefficients (Read/Write)
@@ -658,9 +631,6 @@ impl LCDController {
                 // Clamp coefficients to valid range (0-16)
                 let _eva_clamped = if eva > 16 { 16 } else { eva };
                 let _evb_clamped = if evb > 16 { 16 } else { evb };
-
-                // println!("BLDALPHA write: 0x{:04x} (EVA:{}/{}, EVB:{}/{})",
-                //     data, eva, eva_clamped, evb, evb_clamped);
             }
             0x0054 => {
                 // BLDY - Brightness (Fade-In/Out) Coefficient (Write Only)
@@ -669,8 +639,6 @@ impl LCDController {
 
                 // Clamp coefficient to valid range (0-16)
                 let _evy_clamped = if evy > 16 { 16 } else { evy };
-
-                // println!("BLDY write: 0x{:04x} (EVY:{}/{})", data, evy, evy_clamped);
             }
             _ => {
                 // Unhandled / unused LCD register: ignore the write instead of

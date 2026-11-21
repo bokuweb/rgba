@@ -32,7 +32,6 @@ use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-
 // Visible     240 dots,  57.221 us,    960 cycles - 78% of h-time
 // H-Blanking   68 dots,  16.212 us,    272 cycles - 22% of h-time
 // Total       308 dots,  73.433 us,   1232 cycles - ca. 13.620 kHz
@@ -62,7 +61,6 @@ impl GBA {
     pub fn new() -> Self {
         let bin_path = env::args().nth(1).expect("Specify bin filename to build.");
         let bin = Self::load_bin(bin_path.clone()).expect("faild to read bin");
-        // debug!("read bin data = {:?}", bin);
         let bios = Rom::new(0x4000, &include_bytes!("../../bios/bios.bin")[..]);
         let rom = Rom::new(0x80000, &bin);
         let wram = Ram::new(vec![0; 0x8000]);
@@ -395,7 +393,6 @@ impl GBA {
     }
 
     pub fn update_key(&mut self, key: io::Key) {
-        // dbg!("update_key", key);
         self.bus.update_key(key);
     }
 

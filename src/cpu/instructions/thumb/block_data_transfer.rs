@@ -111,8 +111,6 @@ where
         gpr[rn_idx] = base;
     }
 
-    
-
     // Consume 1I cycle.
     let cycle = cycle + 1;
     // The next opcode fetch follows a data access, so it is non-sequential.
@@ -156,7 +154,6 @@ where
     gpr[SP] = addr + 4;
     // Consume 1N cycle to next prefetch
     let cycle = cycle + bus.compute_cycle(gpr[PC], AccessType::NonSeq(AccessWidth::HalfWord));
-    // dbg!(&gpr, "after push");
     (cycle, PipelineStatus::Continue)
 }
 
@@ -169,8 +166,6 @@ where
 
     let mut addr = gpr[SP];
     let register_list = dec.get_register_list();
-
-    // dbg!("befpre pop", &gpr);
 
     for i in 0..0x8 {
         if register_list & (1 << i) != 0 {
@@ -195,7 +190,6 @@ where
     }
 
     gpr[SP] = addr;
-    // dbg!("after pop", &gpr);
 
     // Consume 1I cycle.
     let cycle = cycle + 1;
