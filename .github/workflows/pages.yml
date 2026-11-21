@@ -45,7 +45,7 @@ jobs:
         with:
           repository: bokuweb/r2
           # gba-port branch; pinned so the deployed ROM matches roms.json.
-          ref: 2907abd3b34bb4753a2dc3a2c9afbb3f27109316
+          ref: 42c996436f849c2f45e7f51041f0488e0aafda97
           path: r2
       - name: build Linux ROM (r2-gba)
         # r2/gba/rust-toolchain.toml selects nightly + rust-src (build-std);
