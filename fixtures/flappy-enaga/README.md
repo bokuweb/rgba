@@ -19,3 +19,5 @@ Changes from upstream:
 ```
 
 This needs Homebrew's `llvm@21` and `lld@21` and Python 3. Set `LLVM` and `LLD` to use other install paths. The ROM is committed, so the Pages build does not need this toolchain. The boot logo in the cartridge header is copied from `../hello/hello.gba`.
+
+The build also writes `flappy-enaga_mb.gba`, a multiboot image linked at `0x02000000` (EWRAM) with entry points at `0xC0` and `0xE0`. Send it to a GBA over a link cable with a multiboot sender, for example a PC-to-GBA USB cable's tool. The GBA must be turned on with no cartridge inserted. It uses [`rt/gba_mb.ld`](rt/gba_mb.ld) and `rt/crt0.s` assembled with `MULTIBOOT` defined.
