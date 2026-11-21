@@ -1,0 +1,26 @@
+[package]
+name = "flappy-enaga-rs"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+# Not part of the emulator's workspace: this crate only builds for the GBA.
+[workspace]
+
+[[bin]]
+name = "flappy-enaga-rs"
+path = "src/main.rs"
+test = false
+bench = false
+
+[profile.dev]
+panic = "abort"
+opt-level = 1
+
+[profile.release]
+panic = "abort"
+opt-level = 2
+lto = true
+codegen-units = 1
+debug = false

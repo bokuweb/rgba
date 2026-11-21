@@ -461,6 +461,45 @@ mod repro {
         }
     }
 
+    /// The Rust port of Flappy Enaga should play exactly like the C original:
+    /// the same input gives the same picture every frame after the first.
+    /// Flapping every 36 frames runs through the title, a pause, points,
+    /// deaths and later games. Sound is left out: the FIFO DMA reads up to 32
+    /// samples into the buffer being mixed, so how much of a new sound makes
+    /// it in depends on how fast each build mixes.
+    #[test]
+    #[ignore = "slow (minutes unoptimized); run with cargo test --release -- --ignored flappy_enaga"]
+    fn flappy_enaga_rust_port_matches_c() {
+        use crate::cpu::bus::accessor::BusAccessor;
+        let mut c = GBA::from_rom(include_bytes!("../../fixtures/flappy-enaga/flappy-enaga.gba"));
+        let mut rs =
+            GBA::from_rom(include_bytes!("../../fixtures/flappy-enaga-rs/flappy-enaga-rs.gba"));
+        let (mut scored, mut heard) = (false, false);
+        for fr in 0..1300u32 {
+            let mut key = Key::new();
+            if fr >= 60 && (fr - 60) % 36 == 0 {
+                key.set_A(KeyStatus::ON);
+            }
+            if matches!(fr, 100 | 130) {
+                key.set_START(KeyStatus::ON);
+            }
+            c.update_key(key);
+            rs.update_key(key);
+            let (a, b) = (c.frame(false), rs.frame(false));
+            c.take_audio();
+            heard |= rs.take_audio().iter().any(|&s| s != 0);
+            // Frame 0 catches the setup half done, and the two set up at
+            // different speeds.
+            if fr > 0 {
+                assert!(a == b, "frame {} differs", fr);
+            }
+            // Object 2 is the score's last digit; tile 304 is a 1.
+            scored |= c.bus.read_halfword(0x0700_0014) & 0x3FF == 304;
+        }
+        assert!(scored, "the input never scored a point");
+        assert!(heard, "the Rust build made no sound");
+    }
+
     #[test]
     fn live_point_shows_changing_pc_and_keeps_frame_rate() {
         let bin = include_bytes!("../../fixtures/flappy-enaga/flappy-enaga.gba");
