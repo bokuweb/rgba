@@ -201,7 +201,7 @@ impl BusAccessor for CpuBus {
         self.cpu_halted.get()
     }
     fn has_pending_interrupt_flags(&self) -> bool {
-        self.interrupt_controller.borrow().read_if() != 0
+        self.interrupt_controller.borrow().should_wake_from_halt()
     }
     fn read_bios_if(&self) -> HalfWord {
         self.interrupt_controller.borrow().read_bios_if_work()
