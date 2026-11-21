@@ -537,7 +537,7 @@
           "license": "r2-gba by bokuweb; embeds a Linux 6.1 kernel + buildroot initramfs (GPL-2.0)",
           "source": "https://github.com/bokuweb/r2/tree/gba-port/gba",
           "build": "r2",
-          "size": 3496612,
+          "size": 3497128,
           "psram": true,
           "turbo": true,
           "hint": "A uname -a · B ls / · L cpuinfo · R free · START uptime · SELECT ps",
