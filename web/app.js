@@ -483,14 +483,15 @@ await loadLibrary();
 console.log('rgba debugger ready — load a .gba to begin');
 
 // Deep link: ?rom=<id> picks a library ROM on load (e.g. ?rom=dungeon-master).
-// Without one, the manifest's `default: true` entry (Flappy Enaga) is loaded
-// and started so the page never opens on an empty screen.
+// Without one, the manifest's `default: true` entry (Flappy Enaga) is loaded.
+// Either way the ROM starts running so the page never opens on a still screen.
 const wanted = new URLSearchParams(location.search).get('rom');
 const fallback = library.find((r) => r.default);
+const autorun = () => { if (gba) setRunning(true); };
 if (wanted && library.some((r) => r.id === wanted)) {
   $('romSel').value = wanted;
-  loadLibraryRom(wanted);
+  loadLibraryRom(wanted).then(autorun);
 } else if (fallback) {
   $('romSel').value = fallback.id;
-  loadLibraryRom(fallback.id, { deepLink: false }).then(() => { if (gba) setRunning(true); });
+  loadLibraryRom(fallback.id, { deepLink: false }).then(autorun);
 }
