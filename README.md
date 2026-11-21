@@ -188,6 +188,7 @@ entries archive with no stated license, so it is not open source.
 | ROM | Author | Event | License |
 |-----|--------|-------|---------|
 | [Flappy Enaga](fixtures/flappy-enaga) (loaded by default) | Tim Ullrich (code), this repository (art, sound) | — | MIT |
+| [Flappy Enaga (Rust)](fixtures/flappy-enaga-rs) | Tim Ullrich (original code), this repository (Rust port, art, sound) | — | MIT |
 | [Sleepyheads](https://vhaugan.itch.io/sleepyheads-advance) | Victor Haugan (VHaugan) | GBA Jam 2026 | No license stated: free download, not open source; jam logo CC BY-NC |
 | [Flappy Goose](https://github.com/mmailhot/FlappyGoose) | Marc Mailhot | — | MIT |
 | [Dungeon Master](https://github.com/Maksasj/dungeon_master) | Maksasj | GBA Jam 2022 | MIT |

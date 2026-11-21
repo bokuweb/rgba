@@ -16,6 +16,16 @@
           "default": true
         },
         {
+          "id": "flappy-enaga-rs",
+          "title": "Flappy Enaga (Rust)",
+          "file": "flappy-enaga-rs.gba",
+          "fixture": "fixtures/flappy-enaga-rs/flappy-enaga-rs.gba",
+          "author": "Tim Ullrich (original code), bokuweb (Rust port, art and sound)",
+          "license": "MIT",
+          "source": "https://github.com/bokuweb/rgba/tree/main/fixtures/flappy-enaga-rs",
+          "note": "Flappy Enaga rewritten in no_std Rust. It plays and looks the same as the C build, so the two are handy for comparing compiler output in the debugger. Press A or B to flap, Start to pause."
+        },
+        {
           "id": "sleepyheads",
           "title": "Sleepyheads",
           "file": "sleepyheads.gba",

@@ -1,0 +1,8 @@
+# thumbv4t-none-eabi (the GBA's ARM7TDMI) ships no prebuilt core library, so
+# core is built from source. This needs a nightly toolchain with rust-src.
+[build]
+target = "thumbv4t-none-eabi"
+
+[unstable]
+build-std = ["core"]
+build-std-features = ["compiler-builtins-mem"]
