@@ -5,6 +5,8 @@ pub trait BusAccessor {
     fn set_open_bus_context(&mut self, _pc: Word, _instruction_width: Word) {}
     fn set_cpu_halted(&mut self, _halted: bool) {}
     fn is_cpu_halted(&self) -> bool { false }
+    /// Halt wake-up condition: some interrupt is both enabled in IE and
+    /// requested in IF. IME and CPSR.I do not matter here.
     fn has_pending_interrupt_flags(&self) -> bool { false }
     /// BIOS interrupt-check flags (0x03007FF8), maintained by the game's IRQ
     /// handler and polled by IntrWait / VBlankIntrWait.

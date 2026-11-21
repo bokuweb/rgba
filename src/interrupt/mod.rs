@@ -101,6 +101,13 @@ impl InterruptController {
         ime_enabled && interrupts_pending
     }
 
+    /// Whether a halted CPU wakes up: per GBATEK, Halt ends once `IE & IF` is
+    /// non-zero, regardless of IME and CPSR.I. A flag raised in IF for an
+    /// interrupt that is disabled in IE must not wake the CPU.
+    pub const fn should_wake_from_halt(&self) -> bool {
+        (self.ie & self.if_flags) != 0
+    }
+
     /// Get the highest priority interrupt that should be serviced - per GBATek spec
     pub fn get_pending_interrupt(&self) -> Option<InterruptType> {
         if !self.should_service_interrupt() {
@@ -190,6 +197,19 @@ mod tests {
         ic.write_if(0xFFFF); // clear all IF
         ic.request_interrupt(InterruptType::Timer0);
         assert!(!ic.should_service_interrupt(), "Timer0 not enabled in IE");
+    }
+
+    #[test]
+    fn halt_wakes_only_on_enabled_interrupts_regardless_of_ime() {
+        let mut ic = InterruptController::new();
+        // Requested but disabled in IE: stays halted.
+        ic.request_interrupt(InterruptType::Timer0);
+        assert!(!ic.should_wake_from_halt());
+
+        // Enabled in IE: wakes even with IME off.
+        ic.write_ie(1 << (InterruptType::Timer0 as u16));
+        assert_eq!(ic.read_ime(), 0);
+        assert!(ic.should_wake_from_halt());
     }
 
     #[test]
