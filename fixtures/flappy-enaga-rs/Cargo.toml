@@ -8,6 +8,10 @@ publish = false
 # Not part of the emulator's workspace: this crate only builds for the GBA.
 [workspace]
 
+[features]
+# Link at 0x02000000 (EWRAM) for sending over a link cable. See build.sh.
+multiboot = []
+
 [[bin]]
 name = "flappy-enaga-rs"
 path = "src/main.rs"

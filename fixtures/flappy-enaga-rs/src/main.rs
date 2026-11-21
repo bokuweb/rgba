@@ -21,8 +21,15 @@ mod assets {
 use assets::*;
 
 // Cartridge header, stacks, .iwram/.data copy and .bss clear, shared with the
-// C version. It ends by calling `main`.
+// C version. It ends by calling `main`. The `multiboot` feature adds the entry
+// branches a link-cable (multiboot) image needs at 0xC0 and 0xE0.
+#[cfg(not(feature = "multiboot"))]
 core::arch::global_asm!(include_str!("../../flappy-enaga/rt/crt0.s"), options(raw));
+#[cfg(feature = "multiboot")]
+core::arch::global_asm!(
+    concat!(".set MULTIBOOT, 1\n", include_str!("../../flappy-enaga/rt/crt0.s")),
+    options(raw)
+);
 
 // Player (positions and velocity are 20.12 fixed point)
 const PLAYER_MAX_VELOCITY: i32 = 3 << 12;

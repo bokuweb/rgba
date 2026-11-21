@@ -29,4 +29,6 @@ The interrupt handler is built as ARM code (`#[instruction_set(arm::a32)]`) and 
 
 This needs a nightly toolchain with the `rust-src` and `llvm-tools` components, plus Python 3. `thumbv4t-none-eabi` has no prebuilt `core`, so [`.cargo/config.toml`](.cargo/config.toml) builds it from source with `build-std`. Set `TOOLCHAIN` to use a nightly other than `nightly`. The script turns the ELF into a raw ROM image with `llvm-objcopy`, then fills in the cartridge header with `../flappy-enaga/tools/fixrom.py`. The ROM is committed, so the Pages build does not need this toolchain.
 
+The script also builds `flappy-enaga-rs_mb.gba` with the `multiboot` feature. That image is linked at `0x02000000` (EWRAM) with [`../flappy-enaga/rt/gba_mb.ld`](../flappy-enaga/rt/gba_mb.ld), and the shared `crt0.s` adds the multiboot entry points. Send it to a GBA that has no cartridge inserted over a PC-to-GBA link cable, the same way as the C version's `flappy-enaga_mb.gba`.
+
 The code is adapted from Tim Ullrich's [flappybird-gba](https://github.com/tullrich/flappybird-gba) (MIT, see [`LICENSE.txt`](LICENSE.txt)), like the C version.

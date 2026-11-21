@@ -18,7 +18,9 @@ fn main() {
         .expect("python3 is needed to generate the assets");
     assert!(status.success(), "gen_assets.py failed");
 
-    let script = c_dir.join("rt/gba.ld");
+    // The `multiboot` feature links into EWRAM instead of the cartridge ROM.
+    let ld = if std::env::var_os("CARGO_FEATURE_MULTIBOOT").is_some() { "rt/gba_mb.ld" } else { "rt/gba.ld" };
+    let script = c_dir.join(ld);
     println!("cargo:rustc-link-arg=-T{}", script.display());
     println!("cargo:rerun-if-changed={}", generator.display());
     println!("cargo:rerun-if-changed={}", script.display());
