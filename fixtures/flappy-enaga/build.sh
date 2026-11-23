@@ -32,6 +32,6 @@ python3 tools/fixrom.py flappy-enaga.gba ../hello/hello.gba
 # Multiboot image, linked at 0x02000000 (EWRAM, at most 256 KiB).
 "$LLD/ld.lld" -T rt/gba_mb.ld -o build/flappy-enaga_mb.elf $objs build/crt0_mb.o
 "$LLVM/llvm-objcopy" -O binary build/flappy-enaga_mb.elf flappy-enaga_mb.gba
-python3 tools/fixrom.py flappy-enaga_mb.gba ../hello/hello.gba
+python3 tools/fixrom.py flappy-enaga_mb.gba ../hello/hello.gba --multiboot
 
 ls -l flappy-enaga.gba flappy-enaga_mb.gba

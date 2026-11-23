@@ -16,6 +16,6 @@ python3 ../flappy-enaga/tools/fixrom.py flappy-enaga-rs.gba ../hello/hello.gba
 
 cargo +"$TOOLCHAIN" build --release --features multiboot
 "$OBJCOPY" -O binary "$ELF" flappy-enaga-rs_mb.gba
-python3 ../flappy-enaga/tools/fixrom.py flappy-enaga-rs_mb.gba ../hello/hello.gba
+python3 ../flappy-enaga/tools/fixrom.py flappy-enaga-rs_mb.gba ../hello/hello.gba --multiboot
 
 ls -l flappy-enaga-rs.gba flappy-enaga-rs_mb.gba
