@@ -497,6 +497,25 @@ mod repro {
         assert!(heard, "the Rust build made no sound");
     }
 
+    /// Multiboot senders move the image in 16-byte blocks and can reject other
+    /// sizes before sending anything, so the link-cable images must be padded.
+    #[test]
+    fn flappy_enaga_multiboot_images_are_16_byte_aligned() {
+        let images: [(&str, &[u8]); 2] = [
+            ("flappy-enaga_mb.gba", include_bytes!("../../fixtures/flappy-enaga/flappy-enaga_mb.gba")),
+            (
+                "flappy-enaga-rs_mb.gba",
+                include_bytes!("../../fixtures/flappy-enaga-rs/flappy-enaga-rs_mb.gba"),
+            ),
+        ];
+        for (name, bin) in images {
+            assert_eq!(bin.len() % 16, 0, "{name} is {} bytes", bin.len());
+            assert!(bin.len() <= 0x4_0000, "{name} does not fit in EWRAM");
+            // Entry branch at 0xC0, where the BIOS starts a multiboot image.
+            assert_eq!(bin[0xC3], 0xEA, "{name} has no branch at 0xC0");
+        }
+    }
+
     #[test]
     fn live_point_shows_changing_pc_and_keeps_frame_rate() {
         let bin = include_bytes!("../../fixtures/flappy-enaga/flappy-enaga.gba");
