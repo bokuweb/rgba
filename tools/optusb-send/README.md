@@ -2,7 +2,7 @@
 
 Sends a multiboot image to a Game Boy Advance through Optimize's **GBA BOOT CABLE USB** (USB ID `0BFE:3000`). Around 2003 this cable was bundled with Japanese GBA programming books. The protocol follows SegaraRai's [optusbx](https://github.com/SegaraRai/optusbx), a rewrite of optusb. The cable runs the multiboot handshake with the GBA itself. The PC checks that the GBA is ready, then streams the image.
 
-Flappy Enaga's [`flappy-enaga_mb.gba`](../../fixtures/flappy-enaga) has booted on a real GBA with this script on macOS.
+Flappy Enaga's multiboot images have booted on a real GBA with this script on macOS. Both the C build ([`flappy-enaga_mb.gba`](../../fixtures/flappy-enaga)) and the Rust build ([`flappy-enaga-rs_mb.gba`](../../fixtures/flappy-enaga-rs)) work.
 
 ## Usage
 
